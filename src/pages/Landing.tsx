@@ -48,7 +48,7 @@ const Landing: React.FC = () => {
             <span className="inline-block py-1 px-3 rounded-full bg-white/10 border border-white/10 text-primary text-xs font-bold tracking-wider mb-6">
               AVAILABLE NOW
             </span>
-            <h1 className="text-5xl md:text-7xl font-bold mb-6 tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
+            <h1 className="text-5xl md:text-7xl font-bold mb-6 tracking-tight bg-linear-to-r from-white to-gray-400 bg-clip-text text-transparent">
               Cinema in Your Pocket.<br />
               And on Your Wall.
             </h1>
@@ -84,7 +84,7 @@ const Landing: React.FC = () => {
             transition={{ duration: 0.8, delay: 0.2 }}
             className="relative mx-auto max-w-5xl"
           >
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-10" />
+            <div className="absolute inset-0 bg-linear-to-t from-black via-transparent to-transparent z-10" />
             <div 
               className={`rounded-xl overflow-hidden border border-white/10 shadow-2xl shadow-primary/10 bg-[#0f0f0f] aspect-video flex relative group select-none ${!isPlaying ? 'cursor-pointer' : ''}`}
               onClick={() => !isPlaying && setIsPlaying(true)}
@@ -130,15 +130,15 @@ const Landing: React.FC = () => {
                   {/* Main Content */}
                   <div className="flex-1 flex flex-col relative">
                      {/* Hero Section with Gradient */}
-                     <div className="h-[65%] w-full bg-gradient-to-br from-indigo-900/20 via-purple-900/20 to-black relative p-6 md:p-8 flex flex-col justify-end">
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f0f] via-[#0f0f0f]/20 to-transparent" />
+                     <div className="h-[65%] w-full bg-linear-to-br from-indigo-900/20 via-purple-900/20 to-black relative p-6 md:p-8 flex flex-col justify-end">
+                        <div className="absolute inset-0 bg-linear-to-t from-[#0f0f0f] via-[#0f0f0f]/20 to-transparent" />
                         
                         <div className="relative z-10 max-w-lg">
                           <div className="w-20 h-5 md:w-24 md:h-6 bg-primary/80 rounded mb-3 md:mb-4 backdrop-blur-sm" />
                           <div className="h-8 md:h-12 w-3/4 bg-white/10 rounded-lg mb-3 md:mb-4 backdrop-blur-md" />
                           <div className="flex gap-3">
                             <div className="px-4 md:px-6 py-2 bg-white text-black rounded-lg font-bold text-xs md:text-sm flex items-center gap-2">
-                              <div className="w-0 h-0 border-t-[4px] md:border-t-[5px] border-t-transparent border-l-[6px] md:border-l-[8px] border-l-black border-b-[4px] md:border-b-[5px] border-b-transparent" />
+                              <div className="w-0 h-0 border-t-4 md:border-t-[5px] border-t-transparent border-l-[6px] md:border-l-8 border-l-black border-b-4 md:border-b-[5px] border-b-transparent" />
                               Play
                             </div>
                             <div className="px-4 md:px-6 py-2 bg-white/10 text-white rounded-lg font-bold text-xs md:text-sm backdrop-blur-md">More Info</div>
@@ -152,7 +152,7 @@ const Landing: React.FC = () => {
                         <div className="flex gap-3 md:gap-4 overflow-hidden">
                            {[1,2,3,4].map(i => (
                               <div key={i} className="w-32 md:w-48 aspect-video rounded-lg bg-white/5 border border-white/5 relative overflow-hidden group/card">
-                                 <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent" />
+                                 <div className="absolute inset-0 bg-linear-to-br from-white/5 to-transparent" />
                                  <div className="absolute bottom-2 left-2 right-2 h-1 bg-white/10 rounded-full overflow-hidden">
                                     <div className="h-full bg-primary w-2/3" />
                                  </div>
@@ -176,7 +176,7 @@ const Landing: React.FC = () => {
       </main>
 
       {/* Features Grid */}
-      <section className="relative z-10 py-24 bg-gradient-to-b from-black to-gray-900/20">
+      <section className="relative z-10 py-24 bg-linear-to-b from-black to-gray-900/20">
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid md:grid-cols-3 gap-8">
             <FeatureCard 

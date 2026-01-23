@@ -2,16 +2,21 @@ import React from 'react';
 import { Minus, Square, X } from 'lucide-react';
 
 const TitleBar: React.FC = () => {
+  // Only render if ipcRenderer is available (Electron)
+  if (!window.ipcRenderer) {
+    return null;
+  }
+
   const handleMinimize = () => {
-    window.ipcRenderer.send('window-minimize');
+    window.ipcRenderer?.send('window-minimize');
   };
 
   const handleMaximize = () => {
-    window.ipcRenderer.send('window-maximize');
+    window.ipcRenderer?.send('window-maximize');
   };
 
   const handleClose = () => {
-    window.ipcRenderer.send('window-close');
+    window.ipcRenderer?.send('window-close');
   };
 
   const dragStyle: React.CSSProperties & { WebkitAppRegion?: string } = { WebkitAppRegion: 'drag' };

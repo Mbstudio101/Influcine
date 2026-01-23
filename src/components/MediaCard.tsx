@@ -49,8 +49,8 @@ const MediaCard: React.FC<MediaCardProps> = ({ media }) => {
 
   return (
     <Focusable
-      className="relative aspect-2/3 rounded-xl overflow-hidden bg-surface group cursor-pointer shadow-lg ring-1 ring-white/5 transition-transform duration-300 hover:scale-105 hover:z-10 hover:shadow-[0_20px_25px_-5px_rgb(0_0_0_/_0.5),_0_0_20px_rgba(124,58,237,0.3)]"
-      activeClassName="ring-4 ring-primary scale-105 z-10 shadow-[0_20px_25px_-5px_rgb(0_0_0_/_0.5),_0_0_20px_rgba(124,58,237,0.3)]"
+      className="relative aspect-2/3 rounded-xl overflow-hidden bg-surface group cursor-pointer shadow-lg ring-1 ring-white/5 transition-transform duration-300 hover:scale-105 hover:z-10 hover:shadow-[0_20px_25px_-5px_rgb(0_0_0/0.5),0_0_20px_rgba(124,58,237,0.3)]"
+      activeClassName="ring-4 ring-primary scale-105 z-10 shadow-[0_20px_25px_-5px_rgb(0_0_0/0.5),0_0_20px_rgba(124,58,237,0.3)]"
       onClick={() => navigate(`/details/${mediaType}/${media.id}`)}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}

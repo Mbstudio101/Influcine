@@ -33,6 +33,12 @@ body {
   min-height: 100vh;
   background-color: var(--color-background);
   overflow: hidden; /* Prevent body scroll, handle in layout */
+  overscroll-behavior: none; /* Prevent bounce effects */
+}
+
+/* TV Specific: Remove default browser focus outline */
+*:focus {
+  outline: none !important;
 }
 
 #root {

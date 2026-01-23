@@ -14,6 +14,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
+import Focusable from './Focusable';
 
 interface InflucinePlayerProps {
   src: string;
@@ -241,22 +242,26 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       <div className={`absolute top-0 left-0 right-0 h-32 bg-linear-to-b from-black/80 to-transparent transition-opacity duration-300 z-20 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
         <div className="p-6 flex items-center gap-4">
           {onBack && (
-            <button 
+            <Focusable 
+              as="button"
               onClick={onBack}
               className="p-2 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-white transition-all hover:scale-110"
+              activeClassName="ring-2 ring-primary scale-110 bg-primary"
             >
               <ArrowLeft size={24} />
-            </button>
+            </Focusable>
           )}
           <h1 className="text-xl font-bold text-white drop-shadow-md">{title}</h1>
           
           {onNext && (
-            <button 
+            <Focusable 
+              as="button"
               onClick={onNext}
               className="ml-auto px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg font-bold text-sm transition-colors"
+              activeClassName="ring-2 ring-white scale-105"
             >
               Next Episode
-            </button>
+            </Focusable>
           )}
         </div>
       </div>
@@ -306,24 +311,27 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
         {/* Buttons Row */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <button 
+            <Focusable 
+              as="button"
               onClick={togglePlay}
               className="w-12 h-12 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-white transition-all hover:scale-110"
+              activeClassName="ring-2 ring-primary scale-110 bg-primary"
+              autoFocus
             >
               {isPlaying ? <Pause fill="currentColor" size={20} /> : <Play fill="currentColor" size={20} className="ml-1" />}
-            </button>
+            </Focusable>
 
-            <button onClick={() => { if (videoRef.current) videoRef.current.currentTime -= 10; }} className="text-white/70 hover:text-white transition-colors">
+            <Focusable as="button" onClick={() => { if (videoRef.current) videoRef.current.currentTime -= 10; }} className="text-white/70 hover:text-white transition-colors" activeClassName="text-white scale-125 ring-2 ring-white/50 rounded-full p-1">
               <SkipBack size={24} />
-            </button>
-            <button onClick={() => { if (videoRef.current) videoRef.current.currentTime += 10; }} className="text-white/70 hover:text-white transition-colors">
+            </Focusable>
+            <Focusable as="button" onClick={() => { if (videoRef.current) videoRef.current.currentTime += 10; }} className="text-white/70 hover:text-white transition-colors" activeClassName="text-white scale-125 ring-2 ring-white/50 rounded-full p-1">
               <SkipForward size={24} />
-            </button>
+            </Focusable>
 
             <div className="group/volume flex items-center gap-2 ml-2">
-              <button onClick={toggleMute} className="text-white hover:text-primary transition-colors">
+              <Focusable as="button" onClick={toggleMute} className="text-white hover:text-primary transition-colors" activeClassName="text-primary scale-125 ring-2 ring-primary/50 rounded-full p-1">
                 {isMuted || volume === 0 ? <VolumeX size={24} /> : <Volume2 size={24} />}
-              </button>
+              </Focusable>
               <div className="w-0 overflow-hidden group-hover/volume:w-24 transition-all duration-300">
                 <input
                   type="range"
@@ -345,12 +353,14 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
           <div className="flex items-center gap-4">
             {/* Settings Menu */}
             <div className="relative">
-              <button 
+              <Focusable 
+                as="button"
                 onClick={() => setShowSettings(!showSettings)}
                 className={`p-2 rounded-full transition-all ${showSettings ? 'bg-white/20 rotate-90 text-white' : 'hover:bg-white/10 text-white/70 hover:text-white'}`}
+                activeClassName="ring-2 ring-primary bg-white/20 text-white"
               >
                 <Settings size={24} />
-              </button>
+              </Focusable>
               
               <AnimatePresence>
                 {showSettings && (
@@ -363,14 +373,16 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Playback Speed</h3>
                     <div className="space-y-1">
                       {[0.5, 1, 1.25, 1.5, 2].map(speed => (
-                        <button
+                        <Focusable
+                          as="button"
                           key={speed}
                           onClick={() => changeSpeed(speed)}
                           className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/10 transition-colors text-sm font-medium"
+                          activeClassName="bg-primary text-white"
                         >
                           <span className="text-white">{speed === 1 ? 'Normal' : `${speed}x`}</span>
                           {playbackSpeed === speed && <Check size={16} className="text-primary" />}
-                        </button>
+                        </Focusable>
                       ))}
                     </div>
                   </motion.div>
@@ -378,12 +390,14 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
               </AnimatePresence>
             </div>
 
-            <button 
+            <Focusable 
+              as="button"
               onClick={toggleFullscreen}
               className="text-white/70 hover:text-white transition-colors hover:scale-110"
+              activeClassName="text-white scale-125 ring-2 ring-white/50 rounded-full p-1"
             >
               {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
-            </button>
+            </Focusable>
           </div>
         </div>
       </div>

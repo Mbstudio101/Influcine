@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { getTrending } from '../services/tmdb';
 import { Media } from '../types';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Star, ChevronRight, Hash, Crown } from 'lucide-react';
 import { getImageUrl } from '../services/tmdb';
 import { useAuth } from '../context/useAuth';
 import { Avatar } from './Avatars';
+import Focusable from './Focusable';
 
 const GENRES = [
   { id: 28, name: 'Action' },
@@ -28,6 +29,7 @@ const GENRES = [
 const RightSidebar: React.FC = () => {
   const { profile } = useAuth();
   const [trending, setTrending] = useState<Media[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchTrending = async () => {
@@ -65,17 +67,18 @@ const RightSidebar: React.FC = () => {
         </div>
         <div className="flex flex-wrap gap-2">
           {GENRES.slice(0, 8).map(genre => (
-            <Link 
+            <Focusable 
               key={genre.id} 
-              to={`/genre/${genre.id}`}
-              className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-xs text-gray-300 hover:bg-primary hover:text-white hover:border-primary transition-all duration-300"
+              onClick={() => navigate(`/genre/${genre.id}`)}
+              className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-xs text-gray-300 hover:bg-primary hover:text-white hover:border-primary transition-all duration-300 cursor-pointer"
+              activeClassName="ring-2 ring-primary bg-primary text-white scale-105 z-10"
             >
               {genre.name}
-            </Link>
+            </Focusable>
           ))}
-          <button className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-xs text-gray-300 hover:bg-white/10 transition-all flex items-center gap-1">
+          <Focusable className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-xs text-gray-300 hover:bg-white/10 transition-all flex items-center gap-1 cursor-pointer">
              <Hash size={10} /> More
-          </button>
+          </Focusable>
         </div>
       </div>
 
@@ -90,7 +93,12 @@ const RightSidebar: React.FC = () => {
         
         <div className="space-y-4">
           {trending.map((item, index) => (
-            <Link key={item.id} to={`/details/${item.media_type}/${item.id}`} className="flex gap-3 group">
+            <Focusable 
+              key={item.id} 
+              onClick={() => navigate(`/details/${item.media_type}/${item.id}`)}
+              className="flex gap-3 group cursor-pointer p-1 rounded-lg hover:bg-white/5 transition-colors"
+              activeClassName="ring-2 ring-primary bg-white/10"
+            >
               <div className="relative w-16 h-24 shrink-0 rounded-lg overflow-hidden">
                 <img 
                   src={getImageUrl(item.poster_path)} 
@@ -116,7 +124,7 @@ const RightSidebar: React.FC = () => {
                   {item.overview}
                 </div>
               </div>
-            </Link>
+            </Focusable>
           ))}
         </div>
       </div>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Play, Clock, ChevronDown, ImageOff } from 'lucide-react';
 import { getSeasonDetails, getImageUrl } from '../services/tmdb';
+import Focusable from './Focusable';
 
 interface Episode {
   id: number;
@@ -153,7 +154,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                   const isCurrent = selectedSeason === currentSeason && ep.episode_number === currentEpisode;
                   
                   return (
-                    <motion.div
+                    <Focusable
+                      as={motion.div}
                       key={ep.id}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -164,6 +166,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                           ? 'bg-primary/10 border-primary/50 shadow-[0_0_20px_rgba(124,58,237,0.2)]' 
                           : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20'
                       }`}
+                      activeClassName="ring-2 ring-primary scale-[1.02] z-10 bg-white/10"
                     >
                       <div className="flex gap-4 p-3">
                         {/* Thumbnail */}
@@ -214,7 +217,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                           </p>
                         </div>
                       </div>
-                    </motion.div>
+                    </Focusable>
                   );
                 })
               )}

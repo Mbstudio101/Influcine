@@ -2,10 +2,10 @@ import React from 'react';
 import { Media } from '../types';
 import { getImageUrl } from '../services/tmdb';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { Play, Plus, Check, Star } from 'lucide-react';
 import { db } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
+import Focusable from './Focusable';
 
 interface MediaCardProps {
   media: Media;
@@ -26,6 +26,7 @@ const MediaCard: React.FC<MediaCardProps> = ({ media }) => {
   const savedIds = new Set(savedItems?.map(i => i.id));
   const isSaved = savedIds.has(media.id);
   const navigate = useNavigate();
+  const [isFocused, setIsFocused] = React.useState(false);
   
   const mediaType = media.media_type || (media.title ? 'movie' : 'tv');
   
@@ -47,11 +48,12 @@ const MediaCard: React.FC<MediaCardProps> = ({ media }) => {
   };
 
   return (
-    <motion.div
-      className="relative aspect-2/3 rounded-xl overflow-hidden bg-surface group cursor-pointer shadow-lg ring-1 ring-white/5"
-      whileHover={{ scale: 1.05, zIndex: 10, boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.5), 0 0 20px rgba(124,58,237,0.3)" }}
-      transition={{ duration: 0.3 }}
+    <Focusable
+      className="relative aspect-2/3 rounded-xl overflow-hidden bg-surface group cursor-pointer shadow-lg ring-1 ring-white/5 transition-transform duration-300 hover:scale-105 hover:z-10 hover:shadow-[0_20px_25px_-5px_rgb(0_0_0_/_0.5),_0_0_20px_rgba(124,58,237,0.3)]"
+      activeClassName="ring-4 ring-primary scale-105 z-10 shadow-[0_20px_25px_-5px_rgb(0_0_0_/_0.5),_0_0_20px_rgba(124,58,237,0.3)]"
       onClick={() => navigate(`/details/${mediaType}/${media.id}`)}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
     >
       <div className="block w-full h-full relative">
         <img
@@ -79,7 +81,7 @@ const MediaCard: React.FC<MediaCardProps> = ({ media }) => {
         )}
         
         {/* Hover Overlay */}
-        <div className="absolute inset-0 bg-linear-to-t from-black via-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+        <div className={`absolute inset-0 bg-linear-to-t from-black via-black/80 to-transparent transition-opacity duration-300 flex flex-col justify-end p-4 ${isFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
           <h3 className="text-white font-bold text-lg line-clamp-2 leading-tight mb-1 drop-shadow-md">
             {media.title || media.name}
           </h3>
@@ -115,7 +117,7 @@ const MediaCard: React.FC<MediaCardProps> = ({ media }) => {
           </div>
         </div>
       </div>
-    </motion.div>
+    </Focusable>
   );
 };
 

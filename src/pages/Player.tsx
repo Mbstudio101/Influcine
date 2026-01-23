@@ -7,6 +7,7 @@ import EpisodeSelector from '../components/EpisodeSelector';
 import InflucinePlayer from '../components/InflucinePlayer';
 import { db } from '../db';
 import { useSettings } from '../context/SettingsContext';
+import Focusable from '../components/Focusable';
 
 const Player: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
@@ -128,15 +129,20 @@ const Player: React.FC = () => {
 
   useEffect(() => {
     let timeout: NodeJS.Timeout;
-    const handleMouseMove = () => {
+    const show = () => {
       setShowControls(true);
       clearTimeout(timeout);
       timeout = setTimeout(() => setShowControls(false), 3000);
     };
 
+    const handleMouseMove = () => show();
+    const handleKeyDown = () => show();
+
     window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('keydown', handleKeyDown);
       clearTimeout(timeout);
     };
   }, []);
@@ -187,29 +193,33 @@ const Player: React.FC = () => {
       >
         <div className="flex items-center justify-between pointer-events-auto">
           <div className="flex items-center gap-4">
-            <button
+            <Focusable
               onClick={() => navigate(-1)}
-              className="flex items-center gap-2 text-white/80 hover:text-white transition-colors group/btn"
+              className="flex items-center gap-2 text-white/80 hover:text-white transition-colors group/btn cursor-pointer"
+              activeClassName="ring-2 ring-primary rounded-lg bg-white/10 p-1"
+              autoFocus
             >
               <div className="p-2 rounded-full bg-white/10 backdrop-blur-md group-hover/btn:bg-primary transition-all">
                 <ArrowLeft size={24} />
               </div>
               <span className="font-medium text-lg tracking-wide">Back to Browse</span>
-            </button>
+            </Focusable>
 
-            <button
+            <Focusable
               onClick={() => setIsNativePlayer(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 hover:bg-primary/20 backdrop-blur-md border border-white/10 transition-all group/native"
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 hover:bg-primary/20 backdrop-blur-md border border-white/10 transition-all group/native cursor-pointer"
+              activeClassName="ring-2 ring-primary scale-105"
             >
               <PlayCircle size={20} className="text-primary group-hover/native:text-white transition-colors" />
               <span className="text-sm font-bold text-white/90">Try Native Player (4K Demo)</span>
-            </button>
+            </Focusable>
           </div>
 
           {type === 'tv' && details && (
-            <button
+            <Focusable
               onClick={() => setIsEpisodeSelectorOpen(true)}
-              className="flex items-center gap-3 bg-white/10 hover:bg-white/20 backdrop-blur-md px-6 py-3 rounded-full border border-white/10 transition-all hover:scale-105 group/ep"
+              className="flex items-center gap-3 bg-white/10 hover:bg-white/20 backdrop-blur-md px-6 py-3 rounded-full border border-white/10 transition-all hover:scale-105 group/ep cursor-pointer"
+              activeClassName="ring-2 ring-primary scale-105"
             >
               <div className="flex flex-col items-end leading-none">
                 <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Playing</span>
@@ -218,7 +228,7 @@ const Player: React.FC = () => {
               <div className="w-px h-8 bg-white/10 mx-1" />
               <Layers size={20} className="text-primary group-hover/ep:text-white transition-colors" />
               <span className="font-bold">Episodes</span>
-            </button>
+            </Focusable>
           )}
         </div>
       </div>
@@ -237,13 +247,14 @@ const Player: React.FC = () => {
       {/* Next Episode Button (Floating) - Optional quick access */}
       {type === 'tv' && showControls && !isEpisodeSelectorOpen && (
         <div className="absolute bottom-10 right-10 z-40 animate-in fade-in slide-in-from-bottom-10 duration-500">
-          <button 
+          <Focusable 
             onClick={() => setEpisode(e => e + 1)}
-            className="group flex items-center gap-3 bg-primary/90 hover:bg-primary text-white px-6 py-4 rounded-2xl shadow-[0_0_30px_rgba(124,58,237,0.4)] hover:shadow-[0_0_40px_rgba(124,58,237,0.6)] backdrop-blur-md transition-all hover:scale-105"
+            className="group flex items-center gap-3 bg-primary/90 hover:bg-primary text-white px-6 py-4 rounded-2xl shadow-[0_0_30px_rgba(124,58,237,0.4)] hover:shadow-[0_0_40px_rgba(124,58,237,0.6)] backdrop-blur-md transition-all hover:scale-105 cursor-pointer"
+            activeClassName="ring-4 ring-white scale-110"
           >
             <span className="font-bold text-lg">Next Episode</span>
             <ChevronRight size={24} className="group-hover:translate-x-1 transition-transform" />
-          </button>
+          </Focusable>
         </div>
       )}
 

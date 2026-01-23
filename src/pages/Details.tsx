@@ -6,6 +6,7 @@ import { Play, Plus, Check, Star, ArrowLeft, X, Youtube } from 'lucide-react';
 import { db } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import ContentRow from '../components/ContentRow';
+import Focusable from '../components/Focusable';
 
 const Details: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
@@ -66,22 +67,28 @@ const Details: React.FC = () => {
   return (
     <div className="h-full overflow-y-auto pb-20 relative scrollbar-hide">
        {/* Back Button */}
-       <button 
+       <Focusable
+        as="button"
         onClick={() => navigate(-1)} 
         className="absolute top-16 left-6 z-50 p-2 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-primary transition-colors"
+        activeClassName="ring-2 ring-primary bg-primary"
+        autoFocus
       >
         <ArrowLeft size={24} />
-      </button>
+      </Focusable>
 
       {/* Trailer Modal */}
       {showTrailer && trailer && (
         <div className="fixed inset-0 z-100 bg-black/90 flex items-center justify-center p-4">
-          <button 
+          <Focusable
+            as="button"
             onClick={() => setShowTrailer(false)}
             className="absolute top-4 right-4 p-2 bg-white/10 rounded-full hover:bg-white/20 text-white"
+            activeClassName="ring-2 ring-primary bg-white/20"
+            autoFocus
           >
             <X size={24} />
-          </button>
+          </Focusable>
           <div className="w-full max-w-5xl aspect-video rounded-xl overflow-hidden shadow-2xl">
             <iframe
               width="100%"

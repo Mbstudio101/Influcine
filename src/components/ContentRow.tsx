@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Media } from '../types';
 import MediaCard from './MediaCard';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import Focusable from './Focusable';
 
 interface ContentRowProps {
   title: string;
@@ -67,20 +68,22 @@ const ContentRow: React.FC<ContentRowProps> = ({ title, fetcher, cardSize = 'med
   return (
     <div className="mb-10 group/row relative px-10">
       <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2 group/title cursor-pointer">
-        <span className="bg-linear-to-r from-white to-white/70 bg-clip-text text-transparent group-hover/title:from-primary group-hover/title:to-purple-500 transition-all duration-300">
+        <Focusable as="span" className="bg-linear-to-r from-white to-white/70 bg-clip-text text-transparent group-hover/title:from-primary group-hover/title:to-purple-500 transition-all duration-300">
           {title}
-        </span>
+        </Focusable>
         <ChevronRight size={20} className="text-primary opacity-0 -translate-x-2 group-hover/title:opacity-100 group-hover/title:translate-x-0 transition-all duration-300" />
       </h2>
       
       <div className="relative">
         {showLeftArrow && (
-          <button
+          <Focusable
+            as="button"
             onClick={() => scroll('left')}
             className="absolute -left-5 top-1/2 -translate-y-1/2 z-30 w-12 h-12 bg-black/40 hover:bg-primary/90 flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-all duration-300 backdrop-blur-md rounded-full shadow-lg hover:scale-110 border border-white/10"
+            activeClassName="ring-2 ring-primary opacity-100 scale-110 bg-primary"
           >
             <ChevronLeft size={24} className="text-white" />
-          </button>
+          </Focusable>
         )}
 
         <div
@@ -97,12 +100,14 @@ const ContentRow: React.FC<ContentRowProps> = ({ title, fetcher, cardSize = 'med
         </div>
 
         {showRightArrow && (
-          <button
+          <Focusable
+            as="button"
             onClick={() => scroll('right')}
             className="absolute -right-5 top-1/2 -translate-y-1/2 z-30 w-12 h-12 bg-black/40 hover:bg-primary/90 flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-all duration-300 backdrop-blur-md rounded-full shadow-lg hover:scale-110 border border-white/10"
+            activeClassName="ring-2 ring-primary opacity-100 scale-110 bg-primary"
           >
             <ChevronRight size={24} className="text-white" />
-          </button>
+          </Focusable>
         )}
       </div>
     </div>

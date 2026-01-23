@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { searchMulti, getImageUrl } from '../services/tmdb';
 import { Media } from '../types';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Search as SearchIcon, Play } from 'lucide-react';
+import Focusable from '../components/Focusable';
 
 const Search: React.FC = () => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Media[]>([]);
   const [loading, setLoading] = useState(false);
-  
-  // I'll implement debounce logic inline for now to save a file creation, or I can create the hook. 
-  // Let's create the hook properly next.
+  const navigate = useNavigate();
   
   useEffect(() => {
     const search = async () => {
@@ -38,13 +37,15 @@ const Search: React.FC = () => {
       <div className="max-w-3xl mx-auto mb-10">
         <div className="relative">
           <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-textSecondary" size={24} />
-          <input
+          <Focusable
+            as="input"
             type="text"
             placeholder="Search for movies and TV shows..."
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
             className="w-full bg-surface text-white pl-14 pr-6 py-4 rounded-full text-lg focus:outline-none focus:ring-2 focus:ring-primary placeholder-textSecondary"
             autoFocus
+            activeClassName="ring-2 ring-primary"
           />
         </div>
       </div>
@@ -54,10 +55,11 @@ const Search: React.FC = () => {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {results.map((item) => (
-            <Link
+            <Focusable
               key={item.id}
-              to={`/watch/${item.media_type}/${item.id}`}
-              className="group relative aspect-2/3 rounded-md overflow-hidden bg-surface transition-transform hover:scale-105 duration-300"
+              onClick={() => navigate(`/watch/${item.media_type}/${item.id}`)}
+              className="group relative aspect-2/3 rounded-md overflow-hidden bg-surface transition-transform hover:scale-105 duration-300 cursor-pointer"
+              activeClassName="ring-4 ring-primary scale-105 z-10"
             >
               <img
                 src={getImageUrl(item.poster_path)}
@@ -71,7 +73,7 @@ const Search: React.FC = () => {
                 <p className="text-sm font-medium truncate">{item.title || item.name}</p>
                 <p className="text-xs text-gray-400 capitalize">{item.media_type}</p>
               </div>
-            </Link>
+            </Focusable>
           ))}
         </div>
       )}

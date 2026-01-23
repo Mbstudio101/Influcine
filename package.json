@@ -1,15 +1,19 @@
 {
   "name": "influcine",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Influcine - Your Personal Streaming Companion",
+  "author": "Marvens",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && electron-builder",
+    "build:web": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/core": "^8.0.1",
     "axios": "^1.13.2",
     "clsx": "^2.1.1",
     "dexie": "^4.2.1",
@@ -22,6 +26,9 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.0.1",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.4.5",
     "@tailwindcss/postcss": "^4.1.18",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",

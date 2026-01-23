@@ -1,16 +1,19 @@
 import React from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Home, Search, User, Settings, Library, LogOut, Users } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import clsx from 'clsx';
 import TitleBar from './TitleBar';
 import Logo from './Logo';
+import Focusable from './Focusable';
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
 const NavItem = ({ to, icon: Icon, label, active, onClick }: { to?: string; icon: React.ElementType; label: string; active: boolean; onClick?: () => void }) => {
+  const navigate = useNavigate();
+  
   const content = (
     <>
       {active && (
@@ -24,22 +27,23 @@ const NavItem = ({ to, icon: Icon, label, active, onClick }: { to?: string; icon
   );
 
   const className = clsx(
-    'flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 group/item relative overflow-hidden w-full text-left',
+    'flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 group/item relative overflow-hidden w-full text-left cursor-pointer',
     active ? 'bg-primary/20 text-white' : 'text-textSecondary hover:text-white hover:bg-white/10'
   );
 
-  if (to) {
-    return (
-      <Link to={to} className={className}>
-        {content}
-      </Link>
-    );
-  }
+  const handleInteract = () => {
+    if (onClick) onClick();
+    if (to) navigate(to);
+  };
 
   return (
-    <button onClick={onClick} className={className}>
+    <Focusable 
+      onClick={handleInteract} 
+      className={className}
+      activeClassName="ring-2 ring-primary bg-white/10 z-10"
+    >
       {content}
-    </button>
+    </Focusable>
   );
 };
 

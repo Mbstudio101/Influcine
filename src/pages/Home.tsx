@@ -2,16 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { getTrending, getImageUrl, getMoviesByCategory, getTVShowsByCategory } from '../services/tmdb';
 import { getPersonalizedRecommendations, RecommendationResult } from '../services/recommendations';
 import { Media } from '../types';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Play, Plus, Check } from 'lucide-react';
 import { db } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import ContentRow from '../components/ContentRow';
 import RightSidebar from '../components/RightSidebar';
+import Focusable from '../components/Focusable';
 
 const Home: React.FC = () => {
   const [featured, setFeatured] = useState<Media | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationResult[]>([]);
+  const navigate = useNavigate();
   
   // Get list of saved IDs to show checkmark
   const savedItems = useLiveQuery(() => db.watchlist.toArray());
@@ -69,12 +71,13 @@ const Home: React.FC = () => {
         {/* Brand/Category Quick Links (Optional, inspired by image) */}
         <div className="flex gap-4 px-10 pt-20 pb-4 overflow-x-auto scrollbar-hide">
           {['All', 'Movies', 'TV Shows', 'Anime', 'Documentary'].map((cat, i) => (
-            <button 
+            <Focusable 
               key={cat} 
-              className={`px-6 py-2 rounded-full text-sm font-bold border transition-all ${i === 0 ? 'bg-white text-black border-white' : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30 hover:text-white'}`}
+              className={`px-6 py-2 rounded-full text-sm font-bold border transition-all cursor-pointer ${i === 0 ? 'bg-white text-black border-white' : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30 hover:text-white'}`}
+              activeClassName="ring-2 ring-primary scale-105 bg-white text-black"
             >
               {cat}
-            </button>
+            </Focusable>
           ))}
         </div>
 
@@ -103,20 +106,22 @@ const Home: React.FC = () => {
                 {featured.overview}
               </p>
               <div className="flex gap-4">
-                <Link
-                  to={`/watch/${featured.media_type}/${featured.id}`}
-                  className="bg-primary hover:bg-primary-hover text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all hover:scale-105 shadow-[0_0_20px_rgba(124,58,237,0.3)]"
+                <Focusable
+                  onClick={() => navigate(`/watch/${featured.media_type}/${featured.id}`)}
+                  className="bg-primary hover:bg-primary-hover text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all hover:scale-105 shadow-[0_0_20px_rgba(124,58,237,0.3)] cursor-pointer"
+                  activeClassName="ring-4 ring-white scale-110 z-20"
                 >
                   <Play fill="currentColor" size={20} />
                   Watch Now
-                </Link>
-                <button 
+                </Focusable>
+                <Focusable 
                   onClick={() => handleSave(featured)}
-                  className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all backdrop-blur-md border border-white/10 hover:scale-105"
+                  className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all backdrop-blur-md border border-white/10 hover:scale-105 cursor-pointer"
+                  activeClassName="ring-4 ring-white scale-110 z-20"
                 >
                   {savedIds.has(featured.id) ? <Check size={20} /> : <Plus size={20} />}
                   {savedIds.has(featured.id) ? 'Saved' : 'Add List'}
-                </button>
+                </Focusable>
               </div>
             </div>
           </div>

@@ -5,6 +5,8 @@ import { Avatar, AVATARS } from '../components/Avatars';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, X, Check } from 'lucide-react';
 
+import Focusable from '../components/Focusable';
+
 const ProfileSelection: React.FC = () => {
   const { profiles, switchProfile, addProfile } = useAuth();
   const navigate = useNavigate();
@@ -21,8 +23,8 @@ const ProfileSelection: React.FC = () => {
     }
   };
 
-  const handleAddProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddProfile = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!newProfileName.trim()) return;
 
     try {
@@ -53,12 +55,14 @@ const ProfileSelection: React.FC = () => {
             
             <div className="flex flex-wrap items-center justify-center gap-8 md:gap-12">
               {profiles.map((profile) => (
-                <motion.div
+                <Focusable
+                  as={motion.div}
                   key={profile.id}
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.95 }}
-                  className="group cursor-pointer flex flex-col items-center gap-4"
+                  className="group cursor-pointer flex flex-col items-center gap-4 outline-none"
                   onClick={() => profile.id && handleSelect(profile.id)}
+                  activeClassName="ring-4 ring-primary rounded-xl scale-110"
                 >
                   <div className="w-32 h-32 md:w-40 md:h-40 rounded-full p-1 bg-linear-to-br from-white/10 to-white/5 border-2 border-transparent group-hover:border-white transition-all overflow-hidden relative shadow-2xl">
                     <Avatar id={profile.avatarId} />
@@ -67,15 +71,17 @@ const ProfileSelection: React.FC = () => {
                   <span className="text-gray-400 text-xl font-medium group-hover:text-white transition-colors">
                     {profile.name}
                   </span>
-                </motion.div>
+                </Focusable>
               ))}
 
               {profiles.length < 5 && (
-                <motion.div
+                <Focusable
+                  as={motion.div}
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.95 }}
-                  className="group cursor-pointer flex flex-col items-center gap-4"
+                  className="group cursor-pointer flex flex-col items-center gap-4 outline-none"
                   onClick={() => setIsAdding(true)}
+                  activeClassName="ring-4 ring-primary rounded-xl scale-110"
                 >
                   <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-white/5 border-2 border-white/20 group-hover:border-white flex items-center justify-center transition-all shadow-2xl">
                     <Plus size={48} className="text-gray-400 group-hover:text-white transition-colors" />
@@ -83,7 +89,7 @@ const ProfileSelection: React.FC = () => {
                   <span className="text-gray-400 text-xl font-medium group-hover:text-white transition-colors">
                     Add Profile
                   </span>
-                </motion.div>
+                </Focusable>
               )}
             </div>
           </motion.div>
@@ -98,27 +104,31 @@ const ProfileSelection: React.FC = () => {
             <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-2xl shadow-2xl">
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-3xl font-bold text-white">Add Profile</h2>
-                <button 
+                <Focusable 
+                  as="button"
                   onClick={() => setIsAdding(false)}
-                  className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+                  className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors outline-none"
+                  activeClassName="ring-2 ring-primary bg-primary"
                 >
                   <X size={24} />
-                </button>
+                </Focusable>
               </div>
 
               <form onSubmit={handleAddProfile} className="space-y-8">
                 <div className="flex flex-col md:flex-row gap-8 items-start">
                   <div className="space-y-4">
                     <label className="text-sm font-medium text-gray-400 block">Choose Avatar</label>
-                    <div className="grid grid-cols-4 gap-4 max-h-[300px] overflow-y-auto pr-2 scrollbar-hide">
+                    <div className="grid grid-cols-4 gap-4 max-h-[300px] overflow-y-auto pr-2 scrollbar-hide p-1">
                       {AVATARS.map((avatar) => (
-                        <div
+                        <Focusable
+                          as="div"
                           key={avatar.id}
                           onClick={() => setSelectedAvatar(avatar.id)}
                           className={`
-                            relative cursor-pointer rounded-full overflow-hidden transition-all duration-300
+                            relative cursor-pointer rounded-full overflow-hidden transition-all duration-300 outline-none
                             ${selectedAvatar === avatar.id ? 'ring-4 ring-primary scale-110 z-10' : 'ring-2 ring-transparent opacity-70 hover:opacity-100 hover:scale-105'}
                           `}
+                          activeClassName="ring-4 ring-white scale-125 z-20"
                         >
                           <div className="aspect-square bg-linear-to-br from-gray-800 to-gray-900">
                              <Avatar id={avatar.id} />
@@ -128,7 +138,7 @@ const ProfileSelection: React.FC = () => {
                               <Check className="text-white drop-shadow-md" size={24} />
                             </div>
                           )}
-                        </div>
+                        </Focusable>
                       ))}
                     </div>
                   </div>
@@ -136,24 +146,28 @@ const ProfileSelection: React.FC = () => {
                   <div className="flex-1 space-y-6 w-full">
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-gray-400">Profile Name</label>
-                      <input
+                      <Focusable
+                        as="input"
                         type="text"
                         value={newProfileName}
-                        onChange={(e) => setNewProfileName(e.target.value)}
-                        className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all text-lg"
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProfileName(e.target.value)}
+                        className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-transparent transition-all text-lg"
                         placeholder="Enter name"
                         autoFocus
+                        activeClassName="ring-2 ring-primary bg-black/60"
                       />
                     </div>
 
                     <div className="pt-4">
-                      <button
+                      <Focusable
+                        as="button"
                         type="submit"
                         disabled={!newProfileName.trim()}
-                        className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed text-lg"
+                        className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed text-lg outline-none"
+                        activeClassName="ring-4 ring-white scale-105"
                       >
                         Create Profile
-                      </button>
+                      </Focusable>
                     </div>
                   </div>
                 </div>

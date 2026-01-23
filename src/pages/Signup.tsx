@@ -36,7 +36,7 @@ const Signup: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-y-auto overflow-x-hidden">
       {/* Animated Background Ambience */}
       <motion.div 
         animate={{ 

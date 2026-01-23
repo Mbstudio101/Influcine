@@ -6,9 +6,9 @@ import Logo from '../components/Logo';
 
 const Landing: React.FC = () => {
   const downloadUrl = "#"; // TODO: Replace with actual download URL
-
+  
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-primary/30">
+    <div className="min-h-screen bg-black text-white selection:bg-primary/30 overflow-x-hidden overflow-y-auto">
       {/* Background Ambience */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary/20 blur-[120px] rounded-full opacity-40" />
@@ -138,12 +138,12 @@ const Landing: React.FC = () => {
   );
 };
 
-const FeatureCard: React.FC<{ icon: React.ReactNode, title: string, description: string }> = ({ icon, title, description }) => (
-  <div className="p-8 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
-    <div className="text-primary mb-4">{icon}</div>
-    <h3 className="text-xl font-bold mb-3">{title}</h3>
-    <p className="text-gray-400 leading-relaxed">{description}</p>
-  </div>
-);
+  const FeatureCard: React.FC<{ icon: React.ReactNode, title: string, description: string }> = ({ icon, title, description }) => (
+    <div className="p-8 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all hover:scale-105 duration-300 group cursor-default">
+      <div className="text-primary mb-4 group-hover:scale-110 transition-transform duration-300">{icon}</div>
+      <h3 className="text-xl font-bold mb-3 group-hover:text-white transition-colors">{title}</h3>
+      <p className="text-gray-400 leading-relaxed group-hover:text-gray-300 transition-colors">{description}</p>
+    </div>
+  );
 
 export default Landing;

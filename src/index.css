@@ -32,9 +32,13 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background-color: var(--color-background);
-  overflow: hidden; /* Prevent body scroll, handle in layout */
+  /* overflow: hidden; Removed to allow scrolling on web */
   overscroll-behavior: none; /* Prevent bounce effects */
 }
+
+/* TV Mode: Apply overflow hidden only when needed or on specific TV routes if possible */
+/* For now, we allow scrolling because the Web Landing Page needs it. */
+/* If the TV app needs fixed layout, we should handle it in the App Layout container */
 
 /* TV Specific: Remove default browser focus outline */
 *:focus {

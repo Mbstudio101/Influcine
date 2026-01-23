@@ -22,6 +22,12 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
+// Set App Name for Dock
+if (process.platform === 'darwin') {
+  app.dock.setIcon(path.join(process.env.VITE_PUBLIC, 'icon.png'));
+}
+app.setName('Influcine');
+
 let win: BrowserWindow | null
 
 function createWindow() {
@@ -32,7 +38,8 @@ function createWindow() {
     minHeight: 600,
     frame: false, // Frameless window
     backgroundColor: '#0f172a', // Dark background to match new theme
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    icon: path.join(process.env.VITE_PUBLIC, 'icon.png'),
+    title: 'Influcine',
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,

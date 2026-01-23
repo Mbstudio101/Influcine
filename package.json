@@ -29,6 +29,7 @@
     "@capacitor/android": "^8.0.1",
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^7.4.5",
+    "@emotion/is-prop-valid": "^1.4.0",
     "@tailwindcss/postcss": "^4.1.18",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",

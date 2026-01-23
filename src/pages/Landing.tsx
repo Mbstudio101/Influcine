@@ -1,0 +1,149 @@
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Download, Play, Monitor, Smartphone, Tv } from 'lucide-react';
+import Logo from '../components/Logo';
+
+const Landing: React.FC = () => {
+  const downloadUrl = "#"; // TODO: Replace with actual download URL
+
+  return (
+    <div className="min-h-screen bg-black text-white selection:bg-primary/30">
+      {/* Background Ambience */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary/20 blur-[120px] rounded-full opacity-40" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-900/20 blur-[120px] rounded-full opacity-40" />
+      </div>
+
+      {/* Navigation */}
+      <nav className="fixed top-0 w-full z-50 backdrop-blur-md border-b border-white/5 bg-black/50">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <Logo />
+          <div className="flex items-center gap-6">
+            <Link 
+              to="/login" 
+              className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
+            >
+              Sign In
+            </Link>
+            <Link 
+              to="/signup" 
+              className="bg-primary hover:bg-primary-hover text-white text-sm font-bold px-5 py-2.5 rounded-full transition-all shadow-lg hover:shadow-primary/25"
+            >
+              Get Started
+            </Link>
+          </div>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <main className="relative z-10 pt-32 pb-20 px-6">
+        <div className="max-w-7xl mx-auto text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            <span className="inline-block py-1 px-3 rounded-full bg-white/10 border border-white/10 text-primary text-xs font-bold tracking-wider mb-6">
+              AVAILABLE NOW
+            </span>
+            <h1 className="text-5xl md:text-7xl font-bold mb-6 tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
+              Cinema in Your Pocket.<br />
+              And on Your Wall.
+            </h1>
+            <p className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed">
+              Experience unlimited entertainment with Influcine. Stream your favorite movies and shows in 4K HDR, anywhere you go.
+            </p>
+            
+            <div className="flex flex-col md:flex-row items-center justify-center gap-4 mb-16">
+              <a 
+                href={downloadUrl}
+                className="group relative px-8 py-4 bg-white text-black rounded-full font-bold text-lg flex items-center gap-3 hover:bg-gray-100 transition-all shadow-xl hover:shadow-white/10"
+              >
+                <Download className="w-5 h-5" />
+                <span>Download App</span>
+                <span className="absolute -top-2 -right-2 bg-primary text-white text-[10px] px-2 py-0.5 rounded-full animate-bounce">
+                  FREE
+                </span>
+              </a>
+              <Link 
+                to="/login"
+                className="px-8 py-4 bg-white/10 border border-white/10 backdrop-blur-sm text-white rounded-full font-bold text-lg flex items-center gap-3 hover:bg-white/20 transition-all"
+              >
+                <Play className="w-5 h-5 fill-current" />
+                <span>Open Web Player</span>
+              </Link>
+            </div>
+          </motion.div>
+
+          {/* App Preview */}
+          <motion.div 
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="relative mx-auto max-w-5xl"
+          >
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-10" />
+            <div className="rounded-xl overflow-hidden border border-white/10 shadow-2xl shadow-primary/10 bg-gray-900/50 backdrop-blur-sm aspect-video flex items-center justify-center group cursor-pointer">
+              {/* Mockup UI - Just a placeholder or simple representation */}
+              <div className="text-center">
+                <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-500">
+                  <Play className="w-8 h-8 text-white ml-1" />
+                </div>
+                <p className="text-gray-400 font-medium">Preview Experience</p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </main>
+
+      {/* Features Grid */}
+      <section className="relative z-10 py-24 bg-gradient-to-b from-black to-gray-900/20">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid md:grid-cols-3 gap-8">
+            <FeatureCard 
+              icon={<Monitor size={32} />}
+              title="Cross-Platform"
+              description="Seamlessly switch between your TV, computer, and mobile devices. Your progress syncs automatically."
+            />
+            <FeatureCard 
+              icon={<Tv size={32} />}
+              title="Built for TV"
+              description="Enjoy a fully optimized 10-foot UI designed specifically for large screens and remote controls."
+            />
+            <FeatureCard 
+              icon={<Smartphone size={32} />}
+              title="Mobile Ready"
+              description="Take your library with you. Download content for offline viewing on iOS and Android."
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="relative z-10 py-12 border-t border-white/5 bg-black">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+          <Logo size="sm" />
+          <p className="text-gray-500 text-sm">
+            © {new Date().getFullYear()} Influcine. All rights reserved.
+          </p>
+          <div className="flex gap-6 text-sm text-gray-400">
+            <a href="#" className="hover:text-white transition-colors">Privacy</a>
+            <a href="#" className="hover:text-white transition-colors">Terms</a>
+            <a href="#" className="hover:text-white transition-colors">Contact</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+const FeatureCard: React.FC<{ icon: React.ReactNode, title: string, description: string }> = ({ icon, title, description }) => (
+  <div className="p-8 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+    <div className="text-primary mb-4">{icon}</div>
+    <h3 className="text-xl font-bold mb-3">{title}</h3>
+    <p className="text-gray-400 leading-relaxed">{description}</p>
+  </div>
+);
+
+export default Landing;

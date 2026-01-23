@@ -1,47 +1,65 @@
-import React from 'react';
-import { Minus, Square, X } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { ChevronLeft, Minimize2, Maximize2, X } from 'lucide-react';
 
 const TitleBar: React.FC = () => {
-  // Only render if ipcRenderer is available (Electron)
-  if (!window.ipcRenderer) {
-    return null;
-  }
+  const navigate = useNavigate();
+  const location = useLocation();
 
+  // Handle window controls
   const handleMinimize = () => {
-    window.ipcRenderer?.send('window-minimize');
+    if (window.ipcRenderer) {
+      window.ipcRenderer.send('window-minimize');
+    }
   };
 
   const handleMaximize = () => {
-    window.ipcRenderer?.send('window-maximize');
+    if (window.ipcRenderer) {
+      window.ipcRenderer.send('window-maximize');
+    }
   };
 
   const handleClose = () => {
-    window.ipcRenderer?.send('window-close');
+    if (window.ipcRenderer) {
+      window.ipcRenderer.send('window-close');
+    }
   };
 
-  const dragStyle: React.CSSProperties & { WebkitAppRegion?: string } = { WebkitAppRegion: 'drag' };
-  const noDragStyle: React.CSSProperties & { WebkitAppRegion?: string } = { WebkitAppRegion: 'no-drag' };
+  // Determine if we should show the back button
+  // Don't show on root landing page, login, or main browse page if it's the root of the app
+  const showBackButton = location.pathname !== '/' && location.pathname !== '/login' && location.pathname !== '/browse' && location.pathname !== '/profiles';
 
   return (
-    <div className="h-10 bg-black/80 backdrop-blur-2xl flex items-center justify-end select-none fixed top-0 left-20 right-0 z-100 border-b border-white/5" style={dragStyle}>
-      <div className="flex h-full" style={noDragStyle}>
-        <button
+    <div className="h-10 bg-black/50 backdrop-blur-md flex items-center justify-between px-4 fixed top-0 w-full z-50 select-none drag-region border-b border-white/5">
+      <div className="flex items-center gap-2 no-drag">
+        {showBackButton && (
+          <button 
+            onClick={() => navigate(-1)}
+            className="p-1 hover:bg-white/10 rounded-md transition-colors text-gray-400 hover:text-white"
+          >
+            <ChevronLeft size={16} />
+          </button>
+        )}
+        <span className="text-xs font-medium text-gray-400 ml-2">Influcine</span>
+      </div>
+
+      <div className="flex items-center gap-2 no-drag">
+        <button 
           onClick={handleMinimize}
-          className="w-12 h-full hover:bg-white/5 transition-colors flex items-center justify-center text-textSecondary hover:text-white"
+          className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-gray-400 hover:text-white"
         >
-          <Minus size={16} />
+          <Minimize2 size={14} />
         </button>
-        <button
+        <button 
           onClick={handleMaximize}
-          className="w-12 h-full hover:bg-white/5 transition-colors flex items-center justify-center text-textSecondary hover:text-white"
+          className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-gray-400 hover:text-white"
         >
-          <Square size={14} />
+          <Maximize2 size={14} />
         </button>
-        <button
+        <button 
           onClick={handleClose}
-          className="w-12 h-full hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center text-textSecondary"
+          className="p-1.5 hover:bg-red-500 hover:text-white rounded-md transition-colors text-gray-400"
         >
-          <X size={16} />
+          <X size={14} />
         </button>
       </div>
     </div>

@@ -9,7 +9,9 @@ import Settings from './pages/Settings';
 import Details from './pages/Details';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import Activate from './pages/Activate';
 import ProfileSelection from './pages/ProfileSelection';
+import Landing from './pages/Landing';
 import { useAuth } from './context/useAuth';
 
 const ProtectedRoute = ({ children, requireProfile = true }: { children: JSX.Element, requireProfile?: boolean }) => {
@@ -47,8 +49,18 @@ function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/" element={<Landing />} />
         <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
         <Route path="/signup" element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>} />
+        
+        <Route 
+          path="/activate" 
+          element={
+            <ProtectedRoute requireProfile={false}>
+              <Activate />
+            </ProtectedRoute>
+          } 
+        />
         
         <Route 
           path="/profiles" 
@@ -74,7 +86,7 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <Routes>
-                  <Route path="/" element={<Home />} />
+                  <Route path="/browse" element={<Home />} />
                   <Route path="/search" element={<Search />} />
                   <Route path="/watchlist" element={<Watchlist />} />
                   <Route path="/profile" element={<Profile />} />

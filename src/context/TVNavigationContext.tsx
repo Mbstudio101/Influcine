@@ -11,6 +11,7 @@ interface TVNavigationContextType {
 
 const TVNavigationContext = createContext<TVNavigationContextType | undefined>(undefined);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useTVNavigation = () => {
   const context = useContext(TVNavigationContext);
   if (!context) {

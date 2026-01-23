@@ -4,6 +4,7 @@ import { useAuth } from '../context/useAuth';
 import { Mail, Lock, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Logo from '../components/Logo';
+import Focusable from '../components/Focusable';
 
 const Signup: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -14,8 +15,8 @@ const Signup: React.FC = () => {
   const { signup } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (password !== confirmPassword) {
       return setError('Passwords do not match');
     }
@@ -24,11 +25,12 @@ const Signup: React.FC = () => {
     setLoading(true);
     try {
       await signup(email, password);
-      localStorage.setItem('influcine_has_used_app', 'true');
-      navigate('/profiles');
+      // Wait a bit for AuthContext to update via Supabase listener
+      setTimeout(() => {
+          navigate('/profiles');
+      }, 500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create account');
-    } finally {
       setLoading(false);
     }
   };
@@ -86,13 +88,15 @@ const Signup: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
             <label className="text-sm font-medium text-gray-300 ml-1">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-              <input
+            <div className="relative group">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-primary transition-colors" size={18} />
+              <Focusable
+                as="input"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all"
+                activeClassName="ring-2 ring-primary border-transparent bg-white/10"
                 placeholder="you@example.com"
                 required
               />
@@ -101,51 +105,61 @@ const Signup: React.FC = () => {
 
           <div className="space-y-1">
             <label className="text-sm font-medium text-gray-300 ml-1">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-              <input
+            <div className="relative group">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-primary transition-colors" size={18} />
+              <Focusable
+                as="input"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all"
+                activeClassName="ring-2 ring-primary border-transparent bg-white/10"
                 placeholder="••••••••"
                 required
-                minLength={6}
               />
             </div>
           </div>
 
           <div className="space-y-1">
             <label className="text-sm font-medium text-gray-300 ml-1">Confirm Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-              <input
+            <div className="relative group">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-primary transition-colors" size={18} />
+              <Focusable
+                as="input"
                 type="password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmPassword(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all"
+                activeClassName="ring-2 ring-primary border-transparent bg-white/10"
                 placeholder="••••••••"
                 required
-                minLength={6}
               />
             </div>
           </div>
 
-          <button
+          <Focusable
+            as="button"
             type="submit"
             disabled={loading}
-            className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl transition-all shadow-lg hover:shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            onClick={() => handleSubmit()}
+            className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl transition-all shadow-lg hover:shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
+            activeClassName="ring-4 ring-primary/50 scale-[1.02]"
           >
             {loading ? <Loader2 className="animate-spin" size={20} /> : 'Create Account'}
-          </button>
+          </Focusable>
         </form>
 
         <div className="mt-8 text-center">
           <p className="text-gray-400 text-sm">
             Already have an account?{' '}
-            <Link to="/login" className="text-primary hover:text-primary-hover font-medium transition-colors">
-              Sign in
-            </Link>
+            <Focusable 
+              as={Link} 
+              to="/login" 
+              className="text-primary hover:text-primary-hover font-medium transition-colors px-2 py-1 rounded focus:outline-none"
+              activeClassName="bg-primary/20 ring-2 ring-primary"
+            >
+              Sign In
+            </Focusable>
           </p>
         </div>
       </motion.div>

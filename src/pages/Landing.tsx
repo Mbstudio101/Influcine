@@ -81,21 +81,39 @@ const Landing: React.FC = () => {
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="p-2 space-y-1">
-                      <a href="/downloads/influcine-mac-universal.dmg" download className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-lg transition-colors group/item">
+                      <a 
+                        href="/downloads/influcine-mac-universal.dmg" 
+                        download
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-lg transition-colors group/item"
+                      >
                         <Monitor className="w-5 h-5 text-gray-400 group-hover/item:text-primary transition-colors" />
                         <div className="text-left">
                           <div className="text-sm font-medium text-white">macOS</div>
                           <div className="text-xs text-gray-500">Universal (M1/Intel)</div>
                         </div>
                       </a>
-                      <a href="/downloads/influcine-win-x64.exe" download className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-lg transition-colors group/item">
+                      <a 
+                        href="/downloads/influcine-win-x64.exe" 
+                        download
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-lg transition-colors group/item"
+                      >
                         <Monitor className="w-5 h-5 text-gray-400 group-hover/item:text-blue-400 transition-colors" />
                         <div className="text-left">
                           <div className="text-sm font-medium text-white">Windows</div>
                           <div className="text-xs text-gray-500">10/11 (64-bit)</div>
                         </div>
                       </a>
-                      <a href="/downloads/influcine-tv-debug.apk" download className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-lg transition-colors group/item">
+                      <a 
+                        href="/downloads/influcine-tv-debug.apk" 
+                        download
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-lg transition-colors group/item"
+                      >
                         <Tv className="w-5 h-5 text-gray-400 group-hover/item:text-green-400 transition-colors" />
                         <div className="text-left">
                           <div className="text-sm font-medium text-white">Android TV</div>

@@ -109,7 +109,8 @@ const Landing: React.FC = () => {
                       </a>
                       <a 
                         href="/downloads/influcine-tv-debug.apk" 
-                        download
+                        download="influcine-tv-debug.apk"
+                        type="application/vnd.android.package-archive"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-lg transition-colors group/item"

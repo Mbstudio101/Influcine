@@ -1,3 +1,15 @@
+[[redirects]]
+  from = "/tv"
+  to = "/downloads/influcine-tv-debug.apk"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "/install"
+  to = "/downloads/influcine-tv-debug.apk"
+  status = 302
+  force = true
+
 [[headers]]
   for = "/*.apk"
   [headers.values]

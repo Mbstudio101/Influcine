@@ -5,11 +5,16 @@ import { Download, Play, Monitor, Smartphone, Tv, X } from 'lucide-react';
 import Logo from '../components/Logo';
 
 const Landing: React.FC = () => {
-  const downloadUrl = "#"; // TODO: Replace with actual download URL
   const [isPlaying, setIsPlaying] = useState(false);
+  const [showDownloadOptions, setShowDownloadOptions] = useState(false);
+  
+  const handleDownloadClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowDownloadOptions(!showDownloadOptions);
+  };
   
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-primary/30 overflow-x-hidden overflow-y-auto">
+    <div className="min-h-screen bg-black text-white selection:bg-primary/30 overflow-x-hidden overflow-y-auto" onClick={() => setShowDownloadOptions(false)}>
       {/* Background Ambience */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary/20 blur-[120px] rounded-full opacity-40" />
@@ -56,17 +61,52 @@ const Landing: React.FC = () => {
               Experience unlimited entertainment with Influcine. Stream your favorite movies and shows in 4K HDR, anywhere you go.
             </p>
             
-            <div className="flex flex-col md:flex-row items-center justify-center gap-4 mb-16">
-              <a 
-                href={downloadUrl}
-                className="group relative px-8 py-4 bg-white text-black rounded-full font-bold text-lg flex items-center gap-3 hover:bg-gray-100 transition-all shadow-xl hover:shadow-white/10"
-              >
-                <Download className="w-5 h-5" />
-                <span>Download App</span>
-                <span className="absolute -top-2 -right-2 bg-primary text-white text-[10px] px-2 py-0.5 rounded-full animate-bounce">
-                  FREE
-                </span>
-              </a>
+            <div className="flex flex-col md:flex-row items-center justify-center gap-4 mb-16 relative">
+              <div className="relative z-50">
+                <button 
+                  onClick={handleDownloadClick}
+                  className="group relative px-8 py-4 bg-white text-black rounded-full font-bold text-lg flex items-center gap-3 hover:bg-gray-100 transition-all shadow-xl hover:shadow-white/10"
+                >
+                  <Download className="w-5 h-5" />
+                  <span>Download App</span>
+                  <span className="absolute -top-2 -right-2 bg-primary text-white text-[10px] px-2 py-0.5 rounded-full animate-bounce">
+                    FREE
+                  </span>
+                </button>
+
+                {/* Download Dropdown */}
+                {showDownloadOptions && (
+                  <div 
+                    className="absolute top-full left-1/2 -translate-x-1/2 mt-4 w-64 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="p-2 space-y-1">
+                      <a href="#" className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-lg transition-colors group/item">
+                        <Monitor className="w-5 h-5 text-gray-400 group-hover/item:text-primary transition-colors" />
+                        <div className="text-left">
+                          <div className="text-sm font-medium text-white">macOS</div>
+                          <div className="text-xs text-gray-500">Universal (M1/Intel)</div>
+                        </div>
+                      </a>
+                      <a href="#" className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-lg transition-colors group/item">
+                        <Monitor className="w-5 h-5 text-gray-400 group-hover/item:text-blue-400 transition-colors" />
+                        <div className="text-left">
+                          <div className="text-sm font-medium text-white">Windows</div>
+                          <div className="text-xs text-gray-500">10/11 (64-bit)</div>
+                        </div>
+                      </a>
+                      <a href="#" className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-lg transition-colors group/item">
+                        <Tv className="w-5 h-5 text-gray-400 group-hover/item:text-green-400 transition-colors" />
+                        <div className="text-left">
+                          <div className="text-sm font-medium text-white">Android TV</div>
+                          <div className="text-xs text-gray-500">APK Installer</div>
+                        </div>
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <Link 
                 to="/login"
                 className="px-8 py-4 bg-white/10 border border-white/10 backdrop-blur-sm text-white rounded-full font-bold text-lg flex items-center gap-3 hover:bg-white/20 transition-all"

@@ -11,6 +11,8 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     // Play sound
     const playSound = async () => {
       try {
@@ -18,9 +20,15 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
           audioRef.current = new Audio('/sounds/intro.mp3');
           audioRef.current.volume = 0.5;
         }
-        await audioRef.current.play();
-      } catch (error) {
-        console.error("Audio playback failed:", error);
+        
+        if (mounted && audioRef.current) {
+          await audioRef.current.play();
+        }
+      } catch (error: unknown) {
+        // Ignore AbortError which happens if component unmounts quickly (e.g. React StrictMode)
+        if (error instanceof Error && error.name !== 'AbortError') {
+          console.error("Audio playback failed:", error);
+        }
       }
     };
 
@@ -33,11 +41,14 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     // 4.0s: Complete
     
     const timer = setTimeout(() => {
-      setIsVisible(false);
-      setTimeout(onComplete, 1000); // Wait for exit animation
+      if (mounted) {
+        setIsVisible(false);
+        setTimeout(onComplete, 1000); // Wait for exit animation
+      }
     }, 4000);
 
     return () => {
+      mounted = false;
       clearTimeout(timer);
       if (audioRef.current) {
         audioRef.current.pause();

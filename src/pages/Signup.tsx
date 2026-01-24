@@ -1,0 +1,179 @@
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../context/useAuth';
+import { Mail, Lock, Loader2 } from 'lucide-react';
+import { motion } from 'framer-motion';
+import Logo from '../components/Logo';
+import Focusable from '../components/Focusable';
+
+const Signup: React.FC = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { signup } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (password !== confirmPassword) {
+      return setError('Passwords do not match');
+    }
+    
+    setError('');
+    setLoading(true);
+    try {
+      await signup(email, password);
+      // Wait a bit for AuthContext to update via Supabase listener
+      setTimeout(() => {
+          navigate('/profiles');
+      }, 500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create account');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 w-full h-full bg-black flex flex-col items-center justify-center p-4 overflow-hidden touch-none overscroll-none drag-region">
+      {/* Cinematic Background */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#1a1a1a] via-black to-black z-0" />
+      
+      {/* Animated Nebulas - "Breathtaking" Ambience */}
+      <motion.div 
+        animate={{ 
+          scale: [1, 1.2, 1],
+          opacity: [0.3, 0.6, 0.3],
+          rotate: [0, 45, 0]
+        }}
+        transition={{ 
+          duration: 15, 
+          repeat: Infinity,
+          ease: "easeInOut" 
+        }}
+        className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-primary/30 blur-[100px] rounded-full pointer-events-none mix-blend-screen" 
+      />
+      <motion.div 
+        animate={{ 
+          scale: [1, 1.3, 1],
+          opacity: [0.2, 0.5, 0.2],
+          rotate: [0, -45, 0]
+        }}
+        transition={{ 
+          duration: 20, 
+          repeat: Infinity,
+          ease: "easeInOut",
+          delay: 2
+        }}
+        className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-900/40 blur-[100px] rounded-full pointer-events-none mix-blend-screen" 
+      />
+      
+      {/* Film Grain Texture Overlay */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none z-[1]" 
+           style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} 
+      />
+
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
+        className="w-full max-w-md bg-black/40 backdrop-blur-2xl border border-white/10 p-8 rounded-3xl shadow-2xl relative z-10 no-drag"
+      >
+        <div className="flex flex-col items-center mb-8">
+          <div className="mb-6 scale-125">
+            <Logo size="lg" showText={false} />
+          </div>
+          <h1 className="text-3xl font-bold text-white mb-2">Create Account</h1>
+          <p className="text-gray-400">Join Influcine today</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-3 rounded-lg mb-6 text-sm text-center">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-300 ml-1">Email Address</label>
+            <div className="relative group">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-primary transition-colors" size={18} />
+              <Focusable
+                as="input"
+                type="email"
+                value={email}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all"
+                activeClassName="ring-2 ring-primary border-transparent bg-white/10"
+                placeholder="you@example.com"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-300 ml-1">Password</label>
+            <div className="relative group">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-primary transition-colors" size={18} />
+              <Focusable
+                as="input"
+                type="password"
+                value={password}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all"
+                activeClassName="ring-2 ring-primary border-transparent bg-white/10"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-300 ml-1">Confirm Password</label>
+            <div className="relative group">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-primary transition-colors" size={18} />
+              <Focusable
+                as="input"
+                type="password"
+                value={confirmPassword}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmPassword(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all"
+                activeClassName="ring-2 ring-primary border-transparent bg-white/10"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+          </div>
+
+          <Focusable
+            as="button"
+            type="submit"
+            disabled={loading}
+            onClick={() => handleSubmit()}
+            className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl transition-all shadow-lg hover:shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
+            activeClassName="ring-4 ring-primary/50 scale-[1.02]"
+          >
+            {loading ? <Loader2 className="animate-spin" size={20} /> : 'Create Account'}
+          </Focusable>
+        </form>
+
+        <div className="mt-8 text-center">
+          <p className="text-gray-400 text-sm">
+            Already have an account?{' '}
+            <Focusable 
+              as={Link} 
+              to="/login" 
+              className="text-primary hover:text-primary-hover font-medium transition-colors px-2 py-1 rounded focus:outline-none"
+              activeClassName="bg-primary/20 ring-2 ring-primary"
+            >
+              Sign In
+            </Focusable>
+          </p>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+export default Signup;

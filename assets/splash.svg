@@ -1,0 +1,17 @@
+<svg width="2732" height="2732" viewBox="0 0 2732 2732" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="2732" height="2732" fill="#000000"/>
+  <defs>
+    <linearGradient id="grad1" x1="1066" y1="1066" x2="1666" y2="1666" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF3366" />
+      <stop offset="1" stop-color="#FF6B6B" />
+    </linearGradient>
+     <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="30" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <g transform="translate(866, 866) scale(2)">
+      <path d="M150 50 L400 256 L150 462 V50 Z" fill="url(#grad1)" filter="url(#glow)"/>
+  </g>
+  <text x="1366" y="2000" font-family="Arial, sans-serif" font-size="120" fill="white" text-anchor="middle" font-weight="bold" letter-spacing="10">INFLUCINE</text>
+</svg>

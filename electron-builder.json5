@@ -15,9 +15,11 @@
     "dist-electron"
   ],
   "mac": {
+    "identity": null,
     "target": [
       "dmg"
     ],
+    "icon": "icons/icon.icns",
     "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
   },
   "win": {
@@ -29,6 +31,7 @@
         ]
       }
     ],
+    "icon": "icons/icon.png",
     "artifactName": "${productName}-Windows-${version}-Setup.${ext}"
   },
   "nsis": {

@@ -68,40 +68,49 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-y-auto overflow-x-hidden">
-      {/* Animated Background Ambience */}
+    <div className="fixed inset-0 w-full h-full bg-black flex flex-col items-center justify-center p-4 overflow-hidden touch-none overscroll-none drag-region">
+      {/* Cinematic Background */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#1a1a1a] via-black to-black z-0" />
+      
+      {/* Animated Nebulas - "Breathtaking" Ambience */}
       <motion.div 
         animate={{ 
           scale: [1, 1.2, 1],
-          rotate: [0, 90, 0],
-          opacity: [0.3, 0.5, 0.3] 
+          opacity: [0.3, 0.6, 0.3],
+          rotate: [0, 45, 0]
+        }}
+        transition={{ 
+          duration: 15, 
+          repeat: Infinity,
+          ease: "easeInOut" 
+        }}
+        className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-primary/30 blur-[100px] rounded-full pointer-events-none mix-blend-screen" 
+      />
+      <motion.div 
+        animate={{ 
+          scale: [1, 1.3, 1],
+          opacity: [0.2, 0.5, 0.2],
+          rotate: [0, -45, 0]
         }}
         transition={{ 
           duration: 20, 
           repeat: Infinity,
-          ease: "linear" 
-        }}
-        className="absolute top-[-20%] left-[-20%] w-[70%] h-[70%] bg-primary/20 blur-[120px] rounded-full pointer-events-none" 
-      />
-      <motion.div 
-        animate={{ 
-          scale: [1, 1.5, 1],
-          rotate: [0, -60, 0],
-          opacity: [0.2, 0.4, 0.2] 
-        }}
-        transition={{ 
-          duration: 25, 
-          repeat: Infinity,
-          ease: "linear",
+          ease: "easeInOut",
           delay: 2
         }}
-        className="absolute bottom-[-20%] right-[-20%] w-[70%] h-[70%] bg-purple-900/20 blur-[120px] rounded-full pointer-events-none" 
+        className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-purple-900/40 blur-[100px] rounded-full pointer-events-none mix-blend-screen" 
+      />
+      
+      {/* Film Grain Texture Overlay */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none z-[1]" 
+           style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} 
       />
 
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-4xl bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl relative z-10 overflow-hidden flex flex-col md:flex-row"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
+        className="w-full max-w-4xl bg-black/40 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl relative z-10 overflow-hidden flex flex-col md:flex-row no-drag"
       >
         {/* Left Side: Form */}
         <div className="flex-1 p-8 md:p-12 border-b md:border-b-0 md:border-r border-white/10">

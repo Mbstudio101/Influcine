@@ -13,12 +13,14 @@ import {
 } from 'lucide-react';
 import { db } from '../db';
 import { useSettings, Settings as AppSettings } from '../context/SettingsContext';
+import { useAuth } from '../context/useAuth';
 import { Avatar } from '../components/Avatars';
 import { useNavigate } from 'react-router-dom';
 
 const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'appearance' | 'player' | 'account' | 'storage'>('appearance');
   const navigate = useNavigate();
+  const { user, profile: authProfile } = useAuth();
   
   const { 
     themeColor, 
@@ -27,8 +29,7 @@ const Settings: React.FC = () => {
     autoplay, 
     reducedMotion,
     defaultLanguage,
-    updateSettings,
-    profile
+    updateSettings
   } = useSettings();
 
   const colors = [
@@ -241,12 +242,14 @@ const Settings: React.FC = () => {
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                <div className="flex items-center gap-6 p-6 bg-linear-to-br from-primary/20 to-purple-900/20 rounded-2xl border border-primary/20">
                  <div className="w-24 h-24 rounded-full bg-linear-to-br from-primary to-purple-600 p-1 flex items-center justify-center text-3xl font-bold shadow-2xl ring-4 ring-white/5 overflow-hidden">
-                   <Avatar id={profile.avatarId} />
+                   <Avatar id={authProfile?.avatarId || 'human-m-1'} />
                  </div>
                  <div>
-                   <h2 className="text-3xl font-bold">{profile.name}</h2>
+                   <h2 className="text-3xl font-bold">{authProfile?.name || 'Guest'}</h2>
                    <p className="text-primary/80 font-medium">Premium Member</p>
-                   <p className="text-gray-400 text-sm mt-1">Member since 2024</p>
+                   <p className="text-gray-400 text-sm mt-1">
+                     Member since {user?.createdAt ? new Date(user.createdAt).getFullYear() : new Date().getFullYear()}
+                   </p>
                  </div>
                  <button 
                    onClick={() => navigate('/profile')}
@@ -259,7 +262,7 @@ const Settings: React.FC = () => {
                <div className="grid grid-cols-2 gap-6">
                  <div className="p-6 bg-white/5 rounded-2xl border border-white/5 hover:border-white/10 transition-colors">
                    <h3 className="font-bold text-gray-400 mb-1">Email</h3>
-                   <p className="text-lg font-medium">john.doe@example.com</p>
+                   <p className="text-lg font-medium">{user?.email || 'Not signed in'}</p>
                  </div>
                  <div className="p-6 bg-white/5 rounded-2xl border border-white/5 hover:border-white/10 transition-colors">
                    <h3 className="font-bold text-gray-400 mb-1">Plan</h3>

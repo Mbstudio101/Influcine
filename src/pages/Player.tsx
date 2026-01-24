@@ -7,12 +7,18 @@ import EpisodeSelector from '../components/EpisodeSelector';
 import InflucinePlayer from '../components/InflucinePlayer';
 import { db } from '../db';
 import { useSettings } from '../context/SettingsContext';
+import { useAuth } from '../context/useAuth';
 import Focusable from '../components/Focusable';
+import { awardXP, unlockAchievement } from '../services/achievements';
+import { recordSourceSuccess, recordSourceFailure, getBestSource } from '../services/sourceMemory';
+import { AlertTriangle, CheckCircle } from 'lucide-react';
 
 const Player: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
   const navigate = useNavigate();
   const { themeColor, autoplay: autoPlayNext } = useSettings();
+  const { profile } = useAuth();
+  
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
   const [showControls, setShowControls] = useState(true);
@@ -20,7 +26,25 @@ const Player: React.FC = () => {
   const [isEpisodeSelectorOpen, setIsEpisodeSelectorOpen] = useState(false);
   const [startTime, setStartTime] = useState(0);
   const [isNativePlayer, setIsNativePlayer] = useState(false);
+  const [verifiedSource, setVerifiedSource] = useState<string | null>(null);
+  
   const hasResumedRef = useRef(false);
+  const lastXPAwardTimeRef = useRef(0);
+
+  // Check for verified source
+  useEffect(() => {
+    const checkSource = async () => {
+      if (id) {
+        const best = await getBestSource(parseInt(id), type === 'tv' ? season : 0, type === 'tv' ? episode : 0);
+        if (best && best.isVerified) {
+          setVerifiedSource(best.provider);
+        } else {
+          setVerifiedSource(null);
+        }
+      }
+    };
+    checkSource();
+  }, [id, type, season, episode]);
 
   // Load saved progress
   useEffect(() => {
@@ -65,53 +89,117 @@ const Player: React.FC = () => {
 
       // Handle Resume (Seek to start time)
       if (event.data.type === 'PLAYER_EVENT') {
-        const { event: playerEvent } = event.data.data;
-        
-        if (playerEvent === 'play' && startTime > 0 && !hasResumedRef.current) {
-          // Send seek command
-          const iframe = document.querySelector('iframe');
-          if (iframe && iframe.contentWindow) {
-            iframe.contentWindow.postMessage({
-              command: 'seek',
-              time: startTime
-            }, '*');
-            hasResumedRef.current = true;
-            console.log('Resuming playback at', startTime);
-          }
-        }
-      }
-
-      if (event.data.type === 'PLAYER_EVENT' && details) {
         const { event: playerEvent, currentTime, duration } = event.data.data;
         
+        // --- Play Event: Check start time achievements ---
+        if (playerEvent === 'play') {
+          if (startTime > 0 && !hasResumedRef.current) {
+            // Send seek command
+            const iframe = document.querySelector('iframe');
+            if (iframe && iframe.contentWindow) {
+              iframe.contentWindow.postMessage({
+                command: 'seek',
+                time: startTime
+              }, '*');
+              hasResumedRef.current = true;
+            }
+          }
+
+          // Check Sleep/Time Achievements
+          if (profile?.id) {
+            const hour = new Date().getHours();
+            // Night Owl: 00:00 - 04:00
+            if (hour >= 0 && hour < 4) {
+               await unlockAchievement(profile.id, 'night_owl', 1);
+            }
+          }
+
+          // Record Source Success (Memory Agent)
+          if (id) {
+             await recordSourceSuccess(
+               parseInt(id), 
+               'VidFast', 
+               getSrc(), 
+               type === 'tv' ? season : 0, 
+               type === 'tv' ? episode : 0
+             );
+          }
+        }
+
+        // --- TimeUpdate: XP & Progress ---
+        if (playerEvent === 'timeupdate' && profile?.id) {
+            // XP Accumulation (every 5 mins = 300s)
+            // We use currentTime to approximate continuous watching if they don't skip
+            // A better way is measuring real elapsed wall-clock time, but this is simpler for now
+            if (currentTime - lastXPAwardTimeRef.current > 300) {
+               await awardXP(profile.id, 20); // 20 XP per 5 mins
+               lastXPAwardTimeRef.current = currentTime;
+            }
+        }
+
         if (['pause', 'timeupdate'].includes(playerEvent)) {
           // Save progress every timeupdate or pause
-          // Calculate percentage
           const percentage = duration > 0 ? (currentTime / duration) * 100 : 0;
           
           try {
-            await db.history.put({
-              ...details,
-              savedAt: Date.now(),
-              progress: {
-                watched: currentTime,
-                duration: duration,
-                percentage: percentage,
-                lastUpdated: Date.now(),
-                season: type === 'tv' ? season : undefined,
-                episode: type === 'tv' ? episode : undefined
-              }
-            });
+            if (details) {
+                await db.history.put({
+                ...details,
+                savedAt: Date.now(),
+                progress: {
+                    watched: currentTime,
+                    duration: duration,
+                    percentage: percentage,
+                    lastUpdated: Date.now(),
+                    season: type === 'tv' ? season : undefined,
+                    episode: type === 'tv' ? episode : undefined
+                }
+                });
+            }
           } catch (err) {
             console.error('Error saving progress:', err);
           }
+        }
+
+        // --- Ended: Completion Bonuses ---
+        if (playerEvent === 'ended' && profile?.id) {
+             // 1. Award Bonus XP
+             const bonus = type === 'movie' ? 150 : 75;
+             await awardXP(profile.id, bonus);
+
+             // 2. Track Binge Watching (Session Storage)
+             let sessionCount = parseInt(sessionStorage.getItem('influcine_session_watch_count') || '0');
+             sessionCount++;
+             sessionStorage.setItem('influcine_session_watch_count', sessionCount.toString());
+             
+             await unlockAchievement(profile.id, 'binge_watcher', sessionCount);
+
+             // 3. Track Early Bird (4AM - 6AM finish)
+             const hour = new Date().getHours();
+             if (hour >= 4 && hour < 6) {
+                 await unlockAchievement(profile.id, 'early_bird', 1);
+             }
+
+             // 4. Taste Achievements
+             if (details?.genres) {
+                 const isDrama = details.genres.some(g => g.name.toLowerCase().includes('drama'));
+                 if (isDrama) {
+                     // Track total dramas watched
+                     const historyCount = await db.history.filter(h => 
+                        (h.media_type === 'movie' || h.media_type === 'tv') &&
+                        (h.genres?.some(g => g.name.toLowerCase().includes('drama')) || false)
+                     ).count();
+                     
+                     await unlockAchievement(profile.id, 'drama_queen', historyCount); 
+                 }
+             }
         }
       }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [details, type, season, episode, startTime]);
+  }, [details, type, season, episode, startTime, profile]);
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -177,6 +265,24 @@ const Player: React.FC = () => {
     );
   }
 
+  const handleReportIssue = async () => {
+    if (id) {
+      await recordSourceFailure(
+        parseInt(id), 
+        'VidFast', 
+        type === 'tv' ? season : 0, 
+        type === 'tv' ? episode : 0
+      );
+      // Force reload or just notify user?
+      // For now, just reset verified source
+      setVerifiedSource(null);
+      // Ideally we would trigger a re-render or try next source
+      // But we only have one source provider hardcoded for now (VidFast)
+      // So we just log it.
+      alert('Issue reported. We will try to find a better source next time.');
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col overflow-hidden group">
       {/* Hover Zone - Top 15% of screen to detect mouse and show controls */}
@@ -203,6 +309,22 @@ const Player: React.FC = () => {
                 <ArrowLeft size={24} />
               </div>
               <span className="font-medium text-lg tracking-wide">Back to Browse</span>
+            </Focusable>
+
+            {verifiedSource && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/20 border border-green-500/30 backdrop-blur-md">
+                <CheckCircle size={16} className="text-green-400" />
+                <span className="text-xs font-bold text-green-300 uppercase tracking-wider">Verified Source</span>
+              </div>
+            )}
+
+            <Focusable
+              onClick={handleReportIssue}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 backdrop-blur-md transition-all cursor-pointer group/report"
+              activeClassName="ring-2 ring-red-500"
+            >
+              <AlertTriangle size={16} className="text-red-400 group-hover/report:text-red-300" />
+              <span className="text-xs font-bold text-red-400 group-hover/report:text-red-300">Report Issue</span>
             </Focusable>
 
             <Focusable

@@ -4,7 +4,7 @@ type Direction = 'up' | 'down' | 'left' | 'right';
 
 interface TVNavigationContextType {
   focusedId: string | null;
-  setFocusedId: (id: string) => void;
+  setFocusedId: (id: string | null, options?: { preventScroll?: boolean }) => void;
   register: (id: string, element: HTMLElement) => void;
   unregister: (id: string) => void;
 }
@@ -25,8 +25,14 @@ interface TVNavigationProviderProps {
 }
 
 export const TVNavigationProvider: React.FC<TVNavigationProviderProps> = ({ children }) => {
-  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [focusedId, setFocusedIdState] = useState<string | null>(null);
   const elementsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const shouldScrollRef = useRef(true);
+
+  const setFocusedId = useCallback((id: string | null, options?: { preventScroll?: boolean }) => {
+    shouldScrollRef.current = !options?.preventScroll;
+    setFocusedIdState(id);
+  }, []);
   
   // Register focusable elements
   const register = useCallback((id: string, element: HTMLElement) => {
@@ -35,7 +41,7 @@ export const TVNavigationProvider: React.FC<TVNavigationProviderProps> = ({ chil
     if (!focusedId && elementsRef.current.size === 1) {
       setFocusedId(id);
     }
-  }, [focusedId]);
+  }, [focusedId, setFocusedId]);
 
   const unregister = useCallback((id: string) => {
     elementsRef.current.delete(id);
@@ -43,7 +49,7 @@ export const TVNavigationProvider: React.FC<TVNavigationProviderProps> = ({ chil
       // If the focused element is removed, reset focus (could be smarter here)
       setFocusedId(null);
     }
-  }, [focusedId]);
+  }, [focusedId, setFocusedId]);
 
   // Find the next element in the given direction
   const findNextFocus = useCallback((currentId: string, direction: Direction): string | null => {
@@ -175,7 +181,7 @@ export const TVNavigationProvider: React.FC<TVNavigationProviderProps> = ({ chil
 
   // Scroll focused element into view
   useEffect(() => {
-    if (focusedId) {
+    if (focusedId && shouldScrollRef.current) {
       const el = elementsRef.current.get(focusedId);
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });

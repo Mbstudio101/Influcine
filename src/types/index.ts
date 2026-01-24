@@ -25,6 +25,15 @@ export interface MediaDetails extends Media {
   runtime?: number;
   number_of_seasons?: number;
   seasons?: Season[];
+  next_episode_to_air?: {
+    id: number;
+    name: string;
+    overview: string;
+    air_date: string;
+    episode_number: number;
+    season_number: number;
+    still_path: string | null;
+  };
   videos?: {
     results: Video[];
   };

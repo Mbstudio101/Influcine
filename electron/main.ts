@@ -1,6 +1,12 @@
 import { app, BrowserWindow, ipcMain, session } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { autoUpdater } from 'electron-updater'
+import log from 'electron-log'
+
+// Configure logging
+log.transports.file.level = 'info';
+autoUpdater.logger = log;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -45,6 +51,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: false, // Allow cross-origin for iframes if needed
+      autoplayPolicy: 'no-user-gesture-required',
     },
   })
 
@@ -143,7 +150,24 @@ app.on('activate', () => {
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow()
+    autoUpdater.checkForUpdatesAndNotify().catch(err => log.error('Auto-update error:', err));
   }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  createWindow();
+  
+  // Check for updates
+  autoUpdater.checkForUpdatesAndNotify().catch(err => log.error('Auto-update error:', err));
+  
+  // Update events
+  autoUpdater.on('update-available', () => {
+    log.info('Update available.');
+    win?.webContents.send('update-message', 'Update available. Downloading...');
+  });
+  
+  autoUpdater.on('update-downloaded', () => {
+    log.info('Update downloaded');
+    win?.webContents.send('update-message', 'Update downloaded. It will be installed on restart.');
+  });
+});

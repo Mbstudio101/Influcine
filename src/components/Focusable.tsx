@@ -58,7 +58,7 @@ const Focusable: React.FC<FocusableProps> = ({
   }, [isFocused, onFocus, onBlur]);
 
   const handleClick = (e: React.MouseEvent<HTMLElement>) => {
-    setFocusedId(id);
+    setFocusedId(id, { preventScroll: true });
     if (onClick) onClick(e);
     if (onEnter) onEnter();
   };

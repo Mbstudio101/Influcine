@@ -1,7 +1,12 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, Minimize2, Maximize2, X } from 'lucide-react';
+import clsx from 'clsx';
 
-const TitleBar: React.FC = () => {
+interface TitleBarProps {
+  className?: string;
+}
+
+const TitleBar: React.FC<TitleBarProps> = ({ className }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -29,7 +34,7 @@ const TitleBar: React.FC = () => {
   const showBackButton = location.pathname !== '/' && location.pathname !== '/login' && location.pathname !== '/browse' && location.pathname !== '/profiles';
 
   return (
-    <div className="h-10 bg-black/50 backdrop-blur-md flex items-center justify-between px-4 fixed top-0 w-full z-50 select-none drag-region border-b border-white/5">
+    <div className={clsx("h-10 bg-black/50 backdrop-blur-md flex items-center justify-between px-4 fixed top-0 z-50 select-none drag-region border-b border-white/5", className || "w-full")}>
       <div className="flex items-center gap-2 no-drag">
         {showBackButton && (
           <button 
@@ -39,7 +44,6 @@ const TitleBar: React.FC = () => {
             <ChevronLeft size={16} />
           </button>
         )}
-        <span className="text-xs font-medium text-gray-400 ml-2">Influcine</span>
       </div>
 
       <div className="flex items-center gap-2 no-drag">

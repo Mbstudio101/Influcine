@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, Search, User, Settings, Library, LogOut, Users } from 'lucide-react';
+import { Home, Search, User, Settings, Library, LogOut, Users, Calendar } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
+import { db } from '../db';
+import { format } from 'date-fns';
 import clsx from 'clsx';
 import TitleBar from './TitleBar';
 import Logo from './Logo';
@@ -53,6 +55,31 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { logout } = useAuth();
   const dragStyle: React.CSSProperties & { WebkitAppRegion?: string } = { WebkitAppRegion: 'drag' };
 
+  useEffect(() => {
+    // Check for reminders due today
+    const checkReminders = async () => {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const dueReminders = await db.reminders.where('releaseDate').equals(today).toArray();
+
+      if (dueReminders.length > 0) {
+        // Show notification (limit to 1 summary or first few)
+        const title = dueReminders.length === 1 
+          ? `Release Today: ${dueReminders[0].title}`
+          : `${dueReminders.length} Releases Today!`;
+        
+        const body = dueReminders.length === 1
+          ? 'Check it out in your calendar.'
+          : dueReminders.map(r => r.title).slice(0, 3).join(', ') + (dueReminders.length > 3 ? '...' : '');
+
+        new Notification(title, { body });
+      }
+    };
+
+    checkReminders();
+  }, []);
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -65,7 +92,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
     <div className="flex h-screen bg-background text-text overflow-hidden flex-col">
       {/* TitleBar */}
-      <TitleBar />
+      <TitleBar className="left-20 right-0" />
 
       {/* Sidebar - Fixed to Top-Left */}
       <div className="fixed left-0 top-0 bottom-0 z-110 w-20 hover:w-64 bg-black/80 backdrop-blur-2xl border-r border-white/5 flex flex-col transition-all duration-300 group">
@@ -81,6 +108,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <NavItem to="/" icon={Home} label="Home" active={location.pathname === '/'} />
           <NavItem to="/search" icon={Search} label="Search" active={location.pathname === '/search'} />
           <NavItem to="/watchlist" icon={Library} label="My Library" active={location.pathname === '/watchlist'} />
+          <NavItem to="/calendar" icon={Calendar} label="Calendar" active={location.pathname === '/calendar'} />
         </nav>
 
         <div className="p-3 border-t border-white/5 space-y-3 mb-4 shrink-0">
@@ -101,8 +129,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
       </div>
 
-      <TitleBar />
-      
       <div className="flex flex-1 relative overflow-hidden ml-20">
         {/* Main Content */}
         <div className="flex-1 overflow-hidden relative">

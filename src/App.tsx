@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
+import SplashScreen from './components/SplashScreen';
 import Home from './pages/Home';
 import Search from './pages/Search';
 import Watchlist from './pages/Watchlist';
@@ -7,6 +9,7 @@ import Player from './pages/Player';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import Details from './pages/Details';
+import Calendar from './pages/Calendar';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Activate from './pages/Activate';
@@ -45,11 +48,22 @@ const PublicOnlyRoute = ({ children }: { children: JSX.Element }) => {
   return children;
 };
 
+import { Capacitor } from '@capacitor/core';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const isNativeApp = Capacitor.isNativePlatform() || (window as any).ipcRenderer;
+
 function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
+  if (showSplash) {
+    return <SplashScreen onComplete={() => setShowSplash(false)} />;
+  }
+
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Landing />} />
+        <Route path="/" element={isNativeApp ? <Navigate to="/browse" replace /> : <Landing />} />
         <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
         <Route path="/signup" element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>} />
         
@@ -88,6 +102,7 @@ function App() {
                 <Routes>
                   <Route path="/browse" element={<Home />} />
                   <Route path="/search" element={<Search />} />
+                  <Route path="/calendar" element={<Calendar />} />
                   <Route path="/watchlist" element={<Watchlist />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/settings" element={<Settings />} />

@@ -4,7 +4,7 @@ import clsx from 'clsx';
 interface LogoProps {
   className?: string;
   showText?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   textClassName?: string;
 }
 
@@ -13,6 +13,7 @@ const Logo: React.FC<LogoProps> = ({ className = '', showText = true, size = 'md
     sm: { container: 'w-6 h-6', icon: 'w-3 h-3', text: 'text-sm', subtext: 'text-[8px]' },
     md: { container: 'w-10 h-10', icon: 'w-5 h-5', text: 'text-xl', subtext: 'text-[10px]' },
     lg: { container: 'w-16 h-16', icon: 'w-8 h-8', text: 'text-3xl', subtext: 'text-xs' },
+    xl: { container: 'w-32 h-32', icon: 'w-16 h-16', text: 'text-6xl', subtext: 'text-xl' },
   };
 
   const s = sizeClasses[size];

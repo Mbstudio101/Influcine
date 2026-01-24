@@ -41,10 +41,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               userRecord = await db.users.get(userId);
               
               // Create default profile for new shadow user
+              const metadataName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'My Profile';
               await db.profiles.add({
                 userId: userId as number,
-                name: 'My Profile',
-                avatarId: 'avatar-1',
+                name: metadataName,
+                avatarId: 'human-m-1',
                 isKid: false,
                 settings: {
                   autoplay: true,
@@ -115,10 +116,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 createdAt: Date.now()
               });
              userRecord = await db.users.get(userId);
+             const metadataName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'My Profile';
              await db.profiles.add({
                 userId: userId as number,
-                name: 'My Profile',
-                avatarId: 'avatar-1',
+                name: metadataName,
+                avatarId: 'human-m-1',
                 isKid: false,
                 settings: { autoplay: true, subtitleSize: 'medium', subtitleColor: 'white' }
               });
@@ -126,6 +128,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
          if (userRecord) {
              setUser(userRecord);
              const userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
+             
+             // Sync profile name from Supabase metadata if default
+             const metadataName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0];
+             if (metadataName) {
+               for (const p of userProfiles) {
+                 if (p.name === 'John Doe' || p.name === 'My Profile') {
+                   await db.profiles.update(p.id!, { name: metadataName });
+                   p.name = metadataName;
+                 }
+               }
+             }
+
              setProfiles(userProfiles);
          }
       } else {

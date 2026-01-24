@@ -5,6 +5,9 @@ import { useAuth } from '../context/useAuth';
 import { AVATARS, Avatar } from '../components/Avatars';
 import { Edit2, Check, X, Mail, Key, LogOut, Users, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { db, Achievement } from '../db';
+import { LevelProgress } from '../components/Achievements/LevelProgress';
+import { AchievementGrid } from '../components/Achievements/AchievementGrid';
 
 const Profile: React.FC = () => {
   const { profile, updateProfile, user, updateUser, logout } = useAuth();
@@ -18,11 +21,15 @@ const Profile: React.FC = () => {
   const [tempEmail, setTempEmail] = useState(user?.email || '');
   const [emailError, setEmailError] = useState('');
   const [resetSent, setResetSent] = useState(false);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
 
   useEffect(() => {
     if (profile) {
       setTempName(profile.name);
       setTempAvatar(profile.avatarId);
+      
+      // Load achievements
+      db.achievements.where('profileId').equals(profile.id!).toArray().then(setAchievements);
     }
   }, [profile]);
 
@@ -78,7 +85,7 @@ const Profile: React.FC = () => {
   if (!profile) return null;
 
   return (
-    <div className="min-h-screen pt-24 pb-20 px-6 md:px-12 overflow-y-auto scrollbar-hide relative">
+    <div className="h-full pt-24 pb-20 px-6 md:px-12 overflow-y-auto scrollbar-hide relative">
       {/* Background Decor */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-primary/20 rounded-full blur-[100px]" style={{ backgroundColor: themeColor, opacity: 0.2 }} />
@@ -185,6 +192,23 @@ const Profile: React.FC = () => {
                 </>
               )}
             </div>
+          </div>
+        </motion.div>
+
+        {/* XP & Achievements */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="space-y-6"
+        >
+          <LevelProgress 
+            level={profile.stats?.level || 1} 
+            currentXP={profile.stats?.totalXP || 0} 
+          />
+          
+          <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+             <AchievementGrid userAchievements={achievements} />
           </div>
         </motion.div>
 

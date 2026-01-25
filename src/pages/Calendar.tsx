@@ -25,6 +25,7 @@ interface CalendarEvent extends Media {
   isReminderSet?: boolean;
   isEpisode?: boolean;
   episodeInfo?: string;
+  popularity: number;
 }
 
 // Genius Hover Card Component
@@ -116,7 +117,7 @@ const GeniusHoverCard = ({ event, position, onClose, onToggleReminder, isReminde
 
           <div className="flex gap-2 pt-2">
             <button 
-              onClick={() => navigate(`/${event.media_type}/${event.id}`)}
+              onClick={() => navigate(`/details/${event.media_type}/${event.id}`)}
               className="flex-1 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
             >
               <Info size={16} /> Details
@@ -402,9 +403,6 @@ const CalendarPage = () => {
               // Sort day events by popularity to show best first
               dayEvents.sort((a, b) => b.popularity - a.popularity);
               
-              const topEvent = dayEvents[0];
-              const otherEvents = dayEvents.slice(1);
-              
               return (
                 <div 
                   key={day.toISOString()} 
@@ -433,7 +431,7 @@ const CalendarPage = () => {
                            <div
                               key={`${event.media_type}-${event.id}`}
                               className="relative aspect-video w-full rounded-lg overflow-hidden cursor-pointer shadow-lg group/item"
-                              onClick={() => navigate(`/${event.media_type}/${event.id}`)}
+                              onClick={() => navigate(`/details/${event.media_type}/${event.id}`)}
                               onMouseEnter={(e) => handleEventMouseEnter(event, e)}
                               onMouseLeave={handleEventMouseLeave}
                            >
@@ -466,7 +464,7 @@ const CalendarPage = () => {
                         <div
                           key={`${event.media_type}-${event.id}`}
                           className="flex items-center gap-2 p-1.5 rounded-lg bg-white/5 hover:bg-white/10 cursor-pointer transition-colors"
-                          onClick={() => navigate(`/${event.media_type}/${event.id}`)}
+                          onClick={() => navigate(`/details/${event.media_type}/${event.id}`)}
                           onMouseEnter={(e) => handleEventMouseEnter(event, e)}
                           onMouseLeave={handleEventMouseLeave}
                         >
@@ -498,7 +496,7 @@ const CalendarPage = () => {
                return (
               <Focusable
                 key={`${event.media_type}-${event.id}`}
-                onClick={() => navigate(`/${event.media_type}/${event.id}`)}
+                onClick={() => navigate(`/details/${event.media_type}/${event.id}`)}
                 className="group relative flex gap-6 p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/5 hover:border-white/20 transition-all"
               >
                 <div className="w-24 h-36 shrink-0 rounded-xl overflow-hidden shadow-lg">

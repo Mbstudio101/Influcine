@@ -9,6 +9,7 @@ export interface Media {
   release_date?: string;
   first_air_date?: string; // TV shows
   media_type: 'movie' | 'tv';
+  popularity?: number;
 }
 
 export interface Video {

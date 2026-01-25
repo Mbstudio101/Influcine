@@ -48,26 +48,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
          
          if (userRecord) {
              setUser(userRecord);
-             const userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
              
-             // Sync profile name from Supabase metadata
-             const metadataName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0];
-             if (metadataName) {
-               for (const p of userProfiles) {
-                 if (p.name === 'John Doe' || p.name === 'My Profile') {
-                   await db.profiles.update(p.id!, { name: metadataName });
-                   p.name = metadataName;
+             // Sync profile from Supabase metadata
+             const metadata = session.user.user_metadata || {};
+             const profileName = metadata.full_name || metadata.name || session.user.email?.split('@')[0] || 'My Profile';
+             const avatarId = metadata.avatar_id || 'human-m-1';
+             const settings = metadata.settings || { autoplay: true, subtitleSize: 'medium', subtitleColor: 'white' };
+
+             let userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
+             
+             if (userProfiles.length === 0) {
+                 await db.profiles.add({
+                    userId: userRecord.id!,
+                    name: profileName,
+                    avatarId: avatarId,
+                    isKid: false,
+                    settings: settings
+                  });
+             } else {
+                 // Update the primary profile with Supabase data (Source of Truth)
+                 const primaryProfile = userProfiles[0];
+                 await db.profiles.update(primaryProfile.id!, { 
+                     name: profileName,
+                     avatarId: avatarId,
+                     settings: settings
+                 });
+                 
+                 // Remove duplicates if any exist (Enforce Single Profile)
+                 if (userProfiles.length > 1) {
+                     const idsToDelete = userProfiles.slice(1).map(p => p.id!);
+                     await db.profiles.bulkDelete(idsToDelete);
                  }
-               }
              }
 
-             // Enforce single profile view
-             if (userProfiles.length > 0) {
-                setProfiles([userProfiles[0]]); // Only keep one
-                setProfile(userProfiles[0]); // Auto-select the first profile
-             } else {
-                setProfiles([]);
-             }
+             // Refresh profiles
+             userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
+             setProfiles(userProfiles);
+             setProfile(userProfiles[0]); // Auto-select
          }
       } else {
         // Sign out if it was a supabase user
@@ -228,7 +245,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     // Enforce single profile limit
     const existingCount = await db.profiles.where('userId').equals(user.id).count();
-    if (existingCount >= 1) throw new Error('Maximum of 1 profile allowed');
+    if (existingCount >= 1) throw new Error('Single profile policy enforced. Cannot add more profiles.');
 
     await db.profiles.add({
       userId: user.id,
@@ -241,6 +258,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         subtitleColor: 'white'
       }
     });
+    
+    // If Supabase user, sync the new profile (though this case is rare as handleSession creates one)
+    if (user.passwordHash === 'supabase_auth') {
+         await supabase.auth.updateUser({
+            data: {
+                full_name: name,
+                name: name,
+                avatar_id: avatarId,
+                settings: { autoplay: true, subtitleSize: 'medium', subtitleColor: 'white' }
+            }
+         });
+    }
+
     await refreshProfiles();
   };
 
@@ -251,6 +281,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (profile?.id === profileId) {
       setProfile(prev => prev ? { ...prev, ...data } : null);
     }
+    
+    // Sync with Supabase if applicable
+    if (user?.passwordHash === 'supabase_auth') {
+        const updates: Record<string, string | object> = {};
+        if (data.name) {
+            updates.full_name = data.name;
+            updates.name = data.name;
+        }
+        if (data.avatarId) updates.avatar_id = data.avatarId;
+        if (data.settings) updates.settings = data.settings;
+        
+        if (Object.keys(updates).length > 0) {
+            await supabase.auth.updateUser({ data: updates });
+        }
+    }
+
     await refreshProfiles();
   };
 

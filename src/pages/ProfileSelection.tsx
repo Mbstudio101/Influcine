@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
 import { Avatar, AVATARS } from '../components/Avatars';
@@ -22,6 +22,12 @@ const ProfileSelection: React.FC = () => {
       console.error('Failed to switch profile:', error);
     }
   };
+
+  useEffect(() => {
+    if (profiles.length === 1 && profiles[0].id) {
+       handleSelect(profiles[0].id);
+    }
+  }, [profiles]);
 
   const handleAddProfile = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -74,7 +80,7 @@ const ProfileSelection: React.FC = () => {
                 </Focusable>
               ))}
 
-              {profiles.length < 5 && (
+              {profiles.length < 1 && (
                 <Focusable
                   as={motion.div}
                   whileHover={{ scale: 1.1 }}

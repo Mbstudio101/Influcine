@@ -1,26 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { searchMulti, getImageUrl } from '../services/tmdb';
+import { getImageUrl } from '../services/tmdb';
+import { VideoAgent } from '../services/VideoAgent';
 import { Media } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { Search as SearchIcon, Play } from 'lucide-react';
+import { Search as SearchIcon, Play, Zap } from 'lucide-react';
 import Focusable from '../components/Focusable';
 
 const Search: React.FC = () => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Media[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isCached, setIsCached] = useState(false);
   const navigate = useNavigate();
   
   useEffect(() => {
     const search = async () => {
       if (!query.trim()) {
         setResults([]);
+        setIsCached(false);
         return;
       }
       setLoading(true);
       try {
-        const data = await searchMulti(query);
-        setResults(data.filter(item => item.media_type === 'movie' || item.media_type === 'tv'));
+        const agentResult = await VideoAgent.search(query);
+        setResults(agentResult.results.filter(item => item.media_type === 'movie' || item.media_type === 'tv'));
+        setIsCached(agentResult.source === 'cache');
       } catch (error) {
         console.error('Search failed:', error);
       } finally {
@@ -47,6 +51,12 @@ const Search: React.FC = () => {
             autoFocus
             activeClassName="ring-2 ring-primary"
           />
+          {isCached && !loading && (
+             <div className="absolute right-4 top-1/2 -translate-y-1/2 text-green-400 flex items-center gap-1 text-xs font-medium" title="Served from intelligent cache">
+                <Zap size={14} fill="currentColor" />
+                <span>Cached</span>
+             </div>
+          )}
         </div>
       </div>
 

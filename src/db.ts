@@ -92,6 +92,7 @@ class InflucineDB extends Dexie {
   sourceMemory!: Table<SourceMemory>;
   reminders!: Table<Reminder>;
   cachedReleases!: Table<CachedRelease>;
+  queryCache!: Table<QueryCache>;
 
   constructor() {
     super('InflucineDB');
@@ -117,7 +118,20 @@ class InflucineDB extends Dexie {
       reminders: '++id, mediaId, releaseDate, [mediaId+mediaType]',
       cachedReleases: '++id, tmdbId, releaseDate, [tmdbId+mediaType]'
     });
+
+    this.version(5).stores({
+      queryCache: '++id, query, normalizedQuery, timestamp'
+    });
   }
+}
+
+export interface QueryCache {
+  id?: number;
+  query: string;
+  normalizedQuery: string;
+  results: Media[];
+  timestamp: number;
+  hitCount: number;
 }
 
 export const db = new InflucineDB();

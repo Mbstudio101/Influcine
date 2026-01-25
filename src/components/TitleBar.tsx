@@ -34,8 +34,8 @@ const TitleBar: React.FC<TitleBarProps> = ({ className }) => {
   const showBackButton = location.pathname !== '/' && location.pathname !== '/login' && location.pathname !== '/browse' && location.pathname !== '/profiles';
 
   return (
-    <div className={clsx("h-10 bg-black/50 backdrop-blur-md flex items-center justify-between px-4 fixed top-0 z-50 select-none drag-region border-b border-white/5", className || "w-full")}>
-      <div className="flex items-center gap-2 no-drag">
+    <div className={clsx("h-10 bg-black/50 backdrop-blur-md flex items-center justify-between px-4 fixed top-0 z-50 select-none border-b border-white/5", className || "w-full")} style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+      <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         {showBackButton && (
           <button 
             onClick={() => navigate(-1)}
@@ -46,7 +46,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ className }) => {
         )}
       </div>
 
-      <div className="flex items-center gap-2 no-drag">
+      <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <button 
           onClick={handleMinimize}
           className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-gray-400 hover:text-white"

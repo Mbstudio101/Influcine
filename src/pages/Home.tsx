@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getTrending, getImageUrl, getMoviesByCategory, getTVShowsByCategory } from '../services/tmdb';
+import { getTrending, getImageUrl, getMoviesByCategory, getTVShowsByCategory, discoverMedia } from '../services/tmdb';
 import { getPersonalizedRecommendations, RecommendationResult } from '../services/recommendations';
 import { Media } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -13,6 +13,7 @@ import Focusable from '../components/Focusable';
 const Home: React.FC = () => {
   const [featured, setFeatured] = useState<Media | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationResult[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState('All');
   const navigate = useNavigate();
   
   // Get list of saved IDs to show checkmark
@@ -61,6 +62,73 @@ const Home: React.FC = () => {
     return history.sort((a, b) => b.savedAt - a.savedAt);
   };
 
+  const content = React.useMemo(() => {
+    switch (selectedCategory) {
+      case 'Movies':
+        return (
+          <>
+            <ContentRow title="Popular Movies" fetcher={() => getMoviesByCategory('popular')} />
+            <ContentRow title="Top Rated Movies" fetcher={() => getMoviesByCategory('top_rated')} />
+            <ContentRow title="New Releases" fetcher={() => getMoviesByCategory('now_playing')} />
+            <ContentRow title="Upcoming" fetcher={() => getMoviesByCategory('upcoming')} />
+            <ContentRow title="Action Movies" fetcher={() => discoverMedia('movie', { with_genres: '28' })} />
+            <ContentRow title="Comedy Movies" fetcher={() => discoverMedia('movie', { with_genres: '35' })} />
+            <ContentRow title="Sci-Fi Movies" fetcher={() => discoverMedia('movie', { with_genres: '878' })} />
+          </>
+        );
+      case 'TV Shows':
+        return (
+          <>
+            <ContentRow title="Popular TV Shows" fetcher={() => getTVShowsByCategory('popular')} />
+            <ContentRow title="Top Rated TV Shows" fetcher={() => getTVShowsByCategory('top_rated')} />
+            <ContentRow title="On The Air" fetcher={() => getTVShowsByCategory('on_the_air')} />
+            <ContentRow title="Action & Adventure" fetcher={() => discoverMedia('tv', { with_genres: '10759' })} />
+            <ContentRow title="Comedy Series" fetcher={() => discoverMedia('tv', { with_genres: '35' })} />
+            <ContentRow title="Drama Series" fetcher={() => discoverMedia('tv', { with_genres: '18' })} />
+          </>
+        );
+      case 'Anime':
+        return (
+          <>
+            <ContentRow title="Popular Anime" fetcher={() => discoverMedia('tv', { with_genres: '16', with_original_language: 'ja', sort_by: 'popularity.desc' })} />
+            <ContentRow title="Top Rated Anime" fetcher={() => discoverMedia('tv', { with_genres: '16', with_original_language: 'ja', sort_by: 'vote_average.desc', 'vote_count.gte': 100 })} />
+            <ContentRow title="Anime Movies" fetcher={() => discoverMedia('movie', { with_genres: '16', with_original_language: 'ja', sort_by: 'popularity.desc' })} />
+            <ContentRow title="New Anime Releases" fetcher={() => discoverMedia('tv', { with_genres: '16', with_original_language: 'ja', 'first_air_date.gte': new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], sort_by: 'popularity.desc' })} />
+          </>
+        );
+      case 'Documentary':
+        return (
+          <>
+            <ContentRow title="Popular Documentaries" fetcher={() => discoverMedia('movie', { with_genres: '99', sort_by: 'popularity.desc' })} />
+            <ContentRow title="Docuseries" fetcher={() => discoverMedia('tv', { with_genres: '99', sort_by: 'popularity.desc' })} />
+            <ContentRow title="Nature & Science" fetcher={() => discoverMedia('movie', { with_genres: '99', sort_by: 'vote_average.desc', 'vote_count.gte': 50 })} />
+            <ContentRow title="History" fetcher={() => discoverMedia('movie', { with_genres: '99,36', sort_by: 'popularity.desc' })} />
+          </>
+        );
+      default: // 'All'
+        return (
+          <>
+            {/* AI Recommendations */}
+            {recommendations.map((rec, index) => (
+               <ContentRow 
+                 key={`rec-${index}`} 
+                 title={rec.type === 'wildcard' ? `✨ ${rec.title}` : rec.title} 
+                 fetcher={() => Promise.resolve(rec.items)} 
+               />
+            ))}
+
+            <ContentRow title="Continue Watching" fetcher={getHistory} cardSize="small" />
+            <ContentRow title="Trending Now" fetcher={() => getTrending('week')} />
+            <ContentRow title="Popular Movies" fetcher={() => getMoviesByCategory('popular')} />
+            <ContentRow title="Top Rated Movies" fetcher={() => getMoviesByCategory('top_rated')} />
+            <ContentRow title="Popular TV Shows" fetcher={() => getTVShowsByCategory('popular')} />
+            <ContentRow title="New Releases" fetcher={() => getMoviesByCategory('now_playing')} />
+            <ContentRow title="On The Air" fetcher={() => getTVShowsByCategory('on_the_air')} />
+          </>
+        );
+    }
+  }, [selectedCategory, recommendations]);
+
   if (!featured) return <div className="flex items-center justify-center h-full text-white">Loading...</div>;
 
   return (
@@ -68,12 +136,13 @@ const Home: React.FC = () => {
       {/* Main Dashboard Area */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20 scrollbar-hide">
         
-        {/* Brand/Category Quick Links (Optional, inspired by image) */}
+        {/* Brand/Category Quick Links */}
         <div className="flex gap-4 px-10 pt-20 pb-4 overflow-x-auto scrollbar-hide">
-          {['All', 'Movies', 'TV Shows', 'Anime', 'Documentary'].map((cat, i) => (
+          {['All', 'Movies', 'TV Shows', 'Anime', 'Documentary'].map((cat) => (
             <Focusable 
               key={cat} 
-              className={`px-6 py-2 rounded-full text-sm font-bold border transition-all cursor-pointer ${i === 0 ? 'bg-white text-black border-white' : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30 hover:text-white'}`}
+              onClick={() => setSelectedCategory(cat)}
+              className={`px-6 py-2 rounded-full text-sm font-bold border transition-all cursor-pointer ${selectedCategory === cat ? 'bg-white text-black border-white' : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30 hover:text-white'}`}
               activeClassName="ring-2 ring-primary scale-105 bg-white text-black"
             >
               {cat}
@@ -129,22 +198,7 @@ const Home: React.FC = () => {
 
         {/* Content Rows */}
         <div className="space-y-2">
-          {/* AI Recommendations */}
-          {recommendations.map((rec, index) => (
-             <ContentRow 
-               key={`rec-${index}`} 
-               title={rec.type === 'wildcard' ? `✨ ${rec.title}` : rec.title} 
-               fetcher={() => Promise.resolve(rec.items)} 
-             />
-          ))}
-
-          <ContentRow title="Continue Watching" fetcher={getHistory} cardSize="small" />
-          <ContentRow title="Trending Now" fetcher={() => getTrending('week')} />
-          <ContentRow title="Popular Movies" fetcher={() => getMoviesByCategory('popular')} />
-          <ContentRow title="Top Rated Movies" fetcher={() => getMoviesByCategory('top_rated')} />
-          <ContentRow title="Popular TV Shows" fetcher={() => getTVShowsByCategory('popular')} />
-          <ContentRow title="New Releases" fetcher={() => getMoviesByCategory('now_playing')} />
-          <ContentRow title="On The Air" fetcher={() => getTVShowsByCategory('on_the_air')} />
+          {content}
         </div>
       </div>
 

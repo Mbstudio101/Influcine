@@ -71,6 +71,7 @@ export const discoverMedia = async (
     'primary_release_date.lte'?: string;
     'first_air_date.gte'?: string;
     'first_air_date.lte'?: string;
+    with_original_language?: string;
     page?: number;
   }
 ): Promise<Media[]> => {

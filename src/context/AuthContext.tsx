@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Session } from '@supabase/supabase-js';
 import { db, User, Profile } from '../db';
 import { AuthContext } from './useAuth';
 import { supabase } from '../lib/supabase';
@@ -17,76 +18,89 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Restore session
   useEffect(() => {
+    const handleSession = async (session: Session | null) => {
+      if (session?.user?.email) {
+         const email = session.user.email;
+         let userRecord = await db.users.where('email').equals(email).first();
+         
+         if (!userRecord) {
+             // Create shadow local user
+             const userId = await db.users.add({
+                email,
+                passwordHash: 'supabase_auth',
+                createdAt: Date.now()
+              });
+             userRecord = await db.users.get(userId);
+             
+             // Create default profile if none exists
+             const existingProfiles = await db.profiles.where('userId').equals(userId).count();
+             if (existingProfiles === 0) {
+               const metadataName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'My Profile';
+               await db.profiles.add({
+                  userId: userId as number,
+                  name: metadataName,
+                  avatarId: 'human-m-1',
+                  isKid: false,
+                  settings: { autoplay: true, subtitleSize: 'medium', subtitleColor: 'white' }
+                });
+             }
+         }
+         
+         if (userRecord) {
+             setUser(userRecord);
+             const userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
+             
+             // Sync profile name from Supabase metadata
+             const metadataName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0];
+             if (metadataName) {
+               for (const p of userProfiles) {
+                 if (p.name === 'John Doe' || p.name === 'My Profile') {
+                   await db.profiles.update(p.id!, { name: metadataName });
+                   p.name = metadataName;
+                 }
+               }
+             }
+
+             // Enforce single profile view
+             if (userProfiles.length > 0) {
+                setProfiles([userProfiles[0]]); // Only keep one
+                setProfile(userProfiles[0]); // Auto-select the first profile
+             } else {
+                setProfiles([]);
+             }
+         }
+      } else {
+        // Sign out if it was a supabase user
+        if (userRef.current?.passwordHash === 'supabase_auth') {
+             setUser(null);
+             setProfile(null);
+             setProfiles([]);
+        }
+      }
+    };
+
     const initAuth = async () => {
-      // ... (keep existing initAuth logic) ...
       try {
         // Check Supabase session first
         const { data: { session } } = await supabase.auth.getSession();
         
-        if (session?.user) {
-          // If logged in with Supabase, verify/sync with local DB or just use Supabase
-          // For now, we will map Supabase user to our local DB user structure for compatibility
-          const email = session.user.email;
-          if (email) {
-            // Try to find local user by email, or create shadow user
-            let userRecord = await db.users.where('email').equals(email).first();
-            
-            if (!userRecord) {
-              // Create shadow local user for Supabase user
-              const userId = await db.users.add({
-                email,
-                passwordHash: 'supabase_auth', // Placeholder
-                createdAt: Date.now()
-              });
-              userRecord = await db.users.get(userId);
-              
-              // Create default profile for new shadow user
-              const metadataName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'My Profile';
-              await db.profiles.add({
-                userId: userId as number,
-                name: metadataName,
-                avatarId: 'human-m-1',
-                isKid: false,
-                settings: {
-                  autoplay: true,
-                  subtitleSize: 'medium',
-                  subtitleColor: 'white'
-                }
-              });
-            }
-            
-            if (userRecord) {
-              setUser(userRecord);
-              const userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
-              setProfiles(userProfiles);
-              
-              const storedProfileId = localStorage.getItem('influcine_profile_id');
-              if (storedProfileId) {
-                const profileRecord = userProfiles.find(p => p.id === parseInt(storedProfileId));
-                if (profileRecord) {
-                  setProfile(profileRecord);
-                }
-              }
-            }
-          }
+        if (session) {
+          await handleSession(session);
         } else {
-           // Fallback to local auth if needed, or clear everything
+           // Fallback to local auth if needed
            const storedUserId = localStorage.getItem('influcine_user_id');
            if (storedUserId) {
-             // ... existing local auth restoration logic ...
-             // For hybrid approach, we might want to keep this.
-             // But for now, let's prioritize Supabase if configured.
-             
              const userRecord = await db.users.get(parseInt(storedUserId));
              if (userRecord && userRecord.passwordHash !== 'supabase_auth') {
                 setUser(userRecord);
                 const userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
-                setProfiles(userProfiles);
-                // ... profile restoration ...
-                const storedProfileId = localStorage.getItem('influcine_profile_id');
-                if (storedProfileId) {
-                    const profileRecord = userProfiles.find(p => p.id === parseInt(storedProfileId));
-                    if (profileRecord) setProfile(profileRecord);
+                
+                // Enforce single profile
+                if (userProfiles.length > 0) {
+                  setProfiles([userProfiles[0]]);
+                  setProfile(userProfiles[0]);
+                } else {
+                  setProfiles([]);
                 }
              } else {
                localStorage.removeItem('influcine_user_id');
@@ -104,53 +118,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
 
     // Listen for Supabase auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user?.email) {
-         // Reload user/profiles similar to initAuth
-         const email = session.user.email;
-         let userRecord = await db.users.where('email').equals(email).first();
-         if (!userRecord) {
-             const userId = await db.users.add({
-                email,
-                passwordHash: 'supabase_auth',
-                createdAt: Date.now()
-              });
-             userRecord = await db.users.get(userId);
-             const metadataName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'My Profile';
-             await db.profiles.add({
-                userId: userId as number,
-                name: metadataName,
-                avatarId: 'human-m-1',
-                isKid: false,
-                settings: { autoplay: true, subtitleSize: 'medium', subtitleColor: 'white' }
-              });
-         }
-         if (userRecord) {
-             setUser(userRecord);
-             const userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
-             
-             // Sync profile name from Supabase metadata if default
-             const metadataName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0];
-             if (metadataName) {
-               for (const p of userProfiles) {
-                 if (p.name === 'John Doe' || p.name === 'My Profile') {
-                   await db.profiles.update(p.id!, { name: metadataName });
-                   p.name = metadataName;
-                 }
-               }
-             }
-
-             setProfiles(userProfiles);
-         }
-      } else {
-        // Sign out
-        // Only clear if it was a supabase user
-        if (userRef.current?.passwordHash === 'supabase_auth') {
-             setUser(null);
-             setProfile(null);
-             setProfiles([]);
-        }
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'INITIAL_SESSION') return; // Handled by initAuth
+      await handleSession(session);
     });
 
     return () => subscription.unsubscribe();
@@ -159,7 +129,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshProfiles = async () => {
     if (!user?.id) return;
     const userProfiles = await db.profiles.where('userId').equals(user.id).toArray();
-    setProfiles(userProfiles);
+    
+    // Enforce single profile view
+    if (userProfiles.length > 0) {
+      setProfiles([userProfiles[0]]);
+    } else {
+      setProfiles([]);
+    }
   };
 
   const login = async (email: string, password: string) => {
@@ -194,8 +170,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('influcine_user_id', userRecord.id!.toString());
       
       const userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
-      setProfiles(userProfiles);
-      setProfile(null);
+      
+      // Enforce single profile
+      if (userProfiles.length > 0) {
+        setProfiles([userProfiles[0]]);
+        setProfile(userProfiles[0]);
+      } else {
+        setProfiles([]);
+        setProfile(null);
+      }
+      
       localStorage.removeItem('influcine_profile_id');
       return;
     }
@@ -241,7 +225,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addProfile = async (name: string, avatarId: string, isKid: boolean = false) => {
     if (!user?.id) throw new Error('Not authenticated');
-    if (profiles.length >= 5) throw new Error('Maximum of 5 profiles allowed');
+    
+    // Enforce single profile limit
+    const existingCount = await db.profiles.where('userId').equals(user.id).count();
+    if (existingCount >= 1) throw new Error('Maximum of 1 profile allowed');
 
     await db.profiles.add({
       userId: user.id,

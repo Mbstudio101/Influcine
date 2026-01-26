@@ -4,6 +4,7 @@ import App from './App.tsx'
 import { SettingsProvider } from './context/SettingsContext'
 import { AuthProvider } from './context/AuthContext'
 import { TVNavigationProvider } from './context/TVNavigationContext'
+import { ToastProvider } from './context/ToastContext'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -11,7 +12,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <AuthProvider>
       <SettingsProvider>
         <TVNavigationProvider>
-          <App />
+          <ToastProvider>
+            <App />
+          </ToastProvider>
         </TVNavigationProvider>
       </SettingsProvider>
     </AuthProvider>

@@ -55,6 +55,9 @@ export interface Profile {
     level: number;
     streak: number;
     lastWatchDate: number; // timestamp
+    hoursWatched: number;
+    moviesWatched: number;
+    seriesWatched: number;
   };
   settings?: {
     autoplay: boolean;

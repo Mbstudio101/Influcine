@@ -3,9 +3,10 @@ import { Media } from '../types';
 import { getImageUrl } from '../services/tmdb';
 import { Link, useNavigate } from 'react-router-dom';
 import { Play, Plus, Check, Star } from 'lucide-react';
-import { db } from '../db';
+import { db, SavedMedia } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import Focusable from './Focusable';
+import { useToast } from '../context/toast';
 
 interface MediaCardProps {
   media: Media;
@@ -22,11 +23,21 @@ interface SavedMediaWithProgress extends Media {
 }
 
 const MediaCard: React.FC<MediaCardProps> = ({ media }) => {
-  const savedItems = useLiveQuery(() => db.watchlist.toArray());
-  const savedIds = new Set(savedItems?.map(i => i.id));
-  const isSaved = savedIds.has(media.id);
+  const compat = media as unknown as {
+    id?: number;
+    tmdbId?: number;
+    mediaId?: number;
+  };
+  const stableId = compat.id ?? compat.tmdbId ?? compat.mediaId;
+
+  const savedItem = useLiveQuery(
+    () => (stableId != null ? db.watchlist.get(stableId) : undefined),
+    [stableId]
+  );
+  const isSaved = !!savedItem;
   const navigate = useNavigate();
   const [isFocused, setIsFocused] = React.useState(false);
+  const { showToast } = useToast();
   
   const mediaType = media.media_type || (media.title ? 'movie' : 'tv');
   
@@ -36,14 +47,38 @@ const MediaCard: React.FC<MediaCardProps> = ({ media }) => {
   const handleSave = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (stableId == null) {
+      console.error('Failed to toggle library item: no valid id found for media item (card).', media);
+      showToast('We could not update your library for this item.', 'error');
+      return;
+    }
+
     try {
-      if (isSaved) {
-        await db.watchlist.delete(media.id);
+      const existing = await db.watchlist.get(stableId);
+
+      if (existing) {
+        await db.watchlist.delete(stableId);
+        showToast('Removed from your library.', 'info');
       } else {
-        await db.watchlist.add({ ...media, savedAt: Date.now() });
+        const payload: Record<string, unknown> = {
+          ...media,
+          savedAt: Date.now(),
+          id: stableId
+        };
+        await db.watchlist.put(payload as unknown as SavedMedia, stableId);
+        showToast('Added to your library.', 'success');
       }
     } catch (error) {
       console.error('Failed to save media:', error);
+      const message =
+        error instanceof Error ? error.message : String(error);
+      showToast(
+        message
+          ? `Failed to update your library: ${message}`
+          : 'Failed to update your library. Please try again.',
+        'error'
+      );
     }
   };
 

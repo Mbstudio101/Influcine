@@ -1,18 +1,16 @@
 import { db, QueryCache } from '../db';
 import { searchMulti } from './tmdb';
 import { Media } from '../types';
-import { calculateSimilarity, normalizeString } from '../utils/stringUtils';
+import { normalizeString } from '../utils/stringUtils';
 
 interface AgentSearchResult {
   results: Media[];
   source: 'cache' | 'api';
   confidence: number;
   query: string;
-  cachedQuery?: string; // If fuzzy matched
 }
 
-const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-const FUZZY_THRESHOLD = 0.85;
+const CACHE_TTL = 24 * 60 * 60 * 1000;
 
 export class VideoAgentService {
   /**
@@ -39,37 +37,7 @@ export class VideoAgentService {
       };
     }
 
-    // 2. Fuzzy/Intelligent Match
-    // Fetch all cached queries (this might be heavy if cache is huge, but fine for < 1000 items)
-    // For production, we'd limit this or use a proper search index
-    const recentCache = await db.queryCache
-      .where('timestamp')
-      .above(now - CACHE_TTL)
-      .toArray();
-
-    let bestMatch: QueryCache | null = null;
-    let highestSimilarity = 0;
-
-    for (const cached of recentCache) {
-      const similarity = calculateSimilarity(normalizedQuery, cached.normalizedQuery);
-      if (similarity > highestSimilarity) {
-        highestSimilarity = similarity;
-        bestMatch = cached;
-      }
-    }
-
-    if (bestMatch && highestSimilarity >= FUZZY_THRESHOLD) {
-      await this.updateHitCount(bestMatch);
-      return {
-        results: bestMatch.results,
-        source: 'cache',
-        confidence: highestSimilarity,
-        query: userQuery,
-        cachedQuery: bestMatch.query
-      };
-    }
-
-    // 3. Fetch from External Sources (TMDB for now, expandable)
+    // 2. Fetch from External Sources (TMDB for now, expandable)
     try {
       console.log(`VideoAgent: Fetching fresh content for "${userQuery}"`);
       const results = await searchMulti(userQuery);

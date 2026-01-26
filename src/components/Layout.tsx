@@ -8,6 +8,7 @@ import clsx from 'clsx';
 import TitleBar from './TitleBar';
 import Logo from './Logo';
 import Focusable from './Focusable';
+import { useToast } from '../context/toast';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -53,6 +54,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { showToast } = useToast();
   const dragStyle: React.CSSProperties & { WebkitAppRegion?: string } = { WebkitAppRegion: 'drag' };
 
   useEffect(() => {
@@ -83,9 +85,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const handleLogout = async () => {
     try {
       await logout();
+      showToast('You have been signed out.', 'info');
       navigate('/login');
     } catch (error) {
       console.error('Failed to logout:', error);
+      showToast('Failed to logout. Please try again.', 'error');
     }
   };
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   format, addMonths, subMonths, startOfMonth, endOfMonth, 
   eachDayOfInterval, isSameMonth, isSameDay, isToday, 
@@ -58,7 +58,7 @@ const GeniusHoverCard = ({ event, position, onClose, onToggleReminder, isReminde
           alt={event.title}
           className="w-full h-full object-cover opacity-80"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a1a] via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-linear-to-t from-[#1a1a1a] via-transparent to-transparent" />
         <div className="absolute top-2 right-2">
           <button 
             onClick={onClose}
@@ -153,17 +153,12 @@ const CalendarPage = () => {
   const [hoveredEvent, setHoveredEvent] = useState<{ event: CalendarEvent; position: { x: number; y: number } } | null>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    fetchEvents();
-    loadReminders();
-  }, [currentDate, filter]);
-
-  const loadReminders = async () => {
+  const loadReminders = useCallback(async () => {
     const allReminders = await db.reminders.toArray();
     setReminders(allReminders);
-  };
+  }, []);
 
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     setLoading(true);
     const start = startOfMonth(currentDate);
     const end = endOfMonth(currentDate);
@@ -177,7 +172,7 @@ const CalendarPage = () => {
 
       // 1. Fetch Watchlist Next Episodes (Priority)
       if (filter === 'all' || filter === 'tv') {
-        const watchlist = await db.watchlist.where('media_type').equals('tv').toArray();
+        const watchlist = await db.watchlist.filter(item => item.media_type === 'tv').toArray();
         const watchlistPromises = watchlist.map(async (show) => {
           try {
             // Only fetch if we suspect it might have a new episode (e.g. ongoing)
@@ -240,7 +235,12 @@ const CalendarPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentDate, filter]);
+
+  useEffect(() => {
+    fetchEvents();
+    loadReminders();
+  }, [fetchEvents, loadReminders]);
 
   const toggleReminder = async (event: CalendarEvent) => {
     const existing = reminders.find(r => r.mediaId === event.id && r.mediaType === event.media_type);
@@ -310,12 +310,12 @@ const CalendarPage = () => {
   return (
     <div className="h-full flex flex-col p-8 overflow-hidden">
       {/* Background Ambience */}
-      <div className="fixed inset-0 pointer-events-none opacity-20 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/30 via-transparent to-transparent" />
+      <div className="fixed inset-0 pointer-events-none opacity-20 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-primary/30 via-transparent to-transparent" />
 
       {/* Header */}
       <div className="flex items-center justify-between mb-8 shrink-0 relative z-10">
         <div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">
+          <h1 className="text-4xl font-bold bg-linear-to-r from-white to-white/60 bg-clip-text text-transparent">
             Release Calendar
           </h1>
           <p className="text-textSecondary mt-1">
@@ -440,7 +440,7 @@ const CalendarPage = () => {
                                alt={event.title}
                                className="w-full h-full object-cover transition-transform duration-500 group-hover/item:scale-110"
                              />
-                             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent p-2 flex flex-col justify-end">
+                             <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/20 to-transparent p-2 flex flex-col justify-end">
                                <p className="text-[10px] font-bold text-white line-clamp-1 leading-tight">
                                  {event.title || event.name}
                                </p>

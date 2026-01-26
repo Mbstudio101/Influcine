@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getDetails, getCredits, getSimilar, getImageUrl } from '../services/tmdb';
 import { MediaDetails } from '../types';
 import { Play, Plus, Check, Star, ArrowLeft, X, Youtube } from 'lucide-react';
-import { db } from '../db';
+import { db, SavedMedia } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import ContentRow from '../components/ContentRow';
 import Focusable from '../components/Focusable';
@@ -16,9 +16,11 @@ const Details: React.FC = () => {
   const [credits, setCredits] = useState<any>(null);
   const [showTrailer, setShowTrailer] = useState(false);
   
-  const savedItems = useLiveQuery(() => db.watchlist.toArray());
-  const savedIds = new Set(savedItems?.map(i => i.id));
-  const isSaved = details && savedIds.has(details.id);
+  const savedItem = useLiveQuery(
+    () => (details ? db.watchlist.get(details.id) : undefined),
+    [details?.id]
+  );
+  const isSaved = !!savedItem;
 
   useEffect(() => {
     if (type && id) {
@@ -40,10 +42,17 @@ const Details: React.FC = () => {
   const handleSave = async () => {
     if (!details) return;
     try {
-      if (isSaved) {
-        await db.watchlist.delete(details.id);
+      const stableId = details.id;
+      const existing = await db.watchlist.get(stableId);
+      if (existing) {
+        await db.watchlist.delete(stableId);
       } else {
-        await db.watchlist.add({ ...details, savedAt: Date.now() });
+        const payload: SavedMedia = {
+          ...(details as unknown as SavedMedia),
+          savedAt: Date.now(),
+          id: stableId
+        };
+        await db.watchlist.put(payload, stableId);
       }
     } catch (error) {
       console.error('Failed to save media:', error);

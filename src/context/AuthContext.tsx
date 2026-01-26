@@ -54,6 +54,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
              const profileName = metadata.full_name || metadata.name || session.user.email?.split('@')[0] || 'My Profile';
              const avatarId = metadata.avatar_id || 'human-m-1';
              const settings = metadata.settings || { autoplay: true, subtitleSize: 'medium', subtitleColor: 'white' };
+             const stats = metadata.stats || {
+                totalXP: 0,
+                level: 1,
+                streak: 0,
+                lastWatchDate: Date.now(),
+                hoursWatched: 0,
+                moviesWatched: 0,
+                seriesWatched: 0
+             };
 
              let userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
              
@@ -63,7 +72,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     name: profileName,
                     avatarId: avatarId,
                     isKid: false,
-                    settings: settings
+                    settings: settings,
+                    stats: stats
                   });
              } else {
                  // Update the primary profile with Supabase data (Source of Truth)
@@ -71,7 +81,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                  await db.profiles.update(primaryProfile.id!, { 
                      name: profileName,
                      avatarId: avatarId,
-                     settings: settings
+                     settings: settings,
+                     stats: stats
                  });
                  
                  // Remove duplicates if any exist (Enforce Single Profile)
@@ -291,6 +302,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         if (data.avatarId) updates.avatar_id = data.avatarId;
         if (data.settings) updates.settings = data.settings;
+        if (data.stats) updates.stats = data.stats;
         
         if (Object.keys(updates).length > 0) {
             await supabase.auth.updateUser({ data: updates });

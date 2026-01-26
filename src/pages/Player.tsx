@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Layers, PlayCircle } from 'lucide-react';
 import { getDetails } from '../services/tmdb';
@@ -9,20 +9,23 @@ import { db } from '../db';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/useAuth';
 import Focusable from '../components/Focusable';
-import { awardXP, unlockAchievement } from '../services/achievements';
+import { awardXP, unlockAchievement, updateWatchStats } from '../services/achievements';
 import { recordSourceSuccess, recordSourceFailure, getBestSource } from '../services/sourceMemory';
 import { AlertTriangle, CheckCircle } from 'lucide-react';
+import { useToast } from '../context/toast';
 
 const Player: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
   const navigate = useNavigate();
   const { themeColor, autoplay: autoPlayNext } = useSettings();
   const { profile } = useAuth();
+  const { showToast } = useToast();
   
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
   const [showControls, setShowControls] = useState(true);
   const [details, setDetails] = useState<MediaDetails | null>(null);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
   const [isEpisodeSelectorOpen, setIsEpisodeSelectorOpen] = useState(false);
   const [startTime, setStartTime] = useState(0);
   const [isNativePlayer, setIsNativePlayer] = useState(false);
@@ -30,6 +33,16 @@ const Player: React.FC = () => {
   
   const hasResumedRef = useRef(false);
   const lastXPAwardTimeRef = useRef(0);
+  const lastStatUpdateTimeRef = useRef(0);
+  const accumulatedTimeRef = useRef(0);
+
+  const getSrc = useCallback(() => {
+    const theme = themeColor.replace('#', '');
+    if (type === 'movie') {
+      return `https://vidfast.pro/movie/${id}?autoPlay=true&theme=${theme}`;
+    }
+    return `https://vidfast.pro/tv/${id}/${season}/${episode}?autoPlay=true&theme=${theme}&nextButton=true&autoNext=${autoPlayNext}`;
+  }, [themeColor, type, id, season, episode, autoPlayNext]);
 
   // Check for verified source
   useEffect(() => {
@@ -135,6 +148,18 @@ const Player: React.FC = () => {
                await awardXP(profile.id, 20); // 20 XP per 5 mins
                lastXPAwardTimeRef.current = currentTime;
             }
+
+            // Stats Accumulation (every 1 min = 60s)
+            const delta = currentTime - lastStatUpdateTimeRef.current;
+            if (delta > 0 && delta < 5) {
+               accumulatedTimeRef.current += delta;
+            }
+            lastStatUpdateTimeRef.current = currentTime;
+
+            if (accumulatedTimeRef.current >= 60) {
+               await updateWatchStats(profile.id, { minutesWatched: 1 });
+               accumulatedTimeRef.current -= 60;
+            }
         }
 
         if (['pause', 'timeupdate'].includes(playerEvent)) {
@@ -166,6 +191,13 @@ const Player: React.FC = () => {
              // 1. Award Bonus XP
              const bonus = type === 'movie' ? 150 : 75;
              await awardXP(profile.id, bonus);
+
+             // Track Movies/Series Watched
+             if (type === 'movie') {
+                 await updateWatchStats(profile.id, { movieCompleted: true });
+             } else {
+                 await updateWatchStats(profile.id, { seriesCompleted: true });
+             }
 
              // 2. Track Binge Watching (Session Storage)
              let sessionCount = parseInt(sessionStorage.getItem('influcine_session_watch_count') || '0');
@@ -199,7 +231,7 @@ const Player: React.FC = () => {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [details, type, season, episode, startTime, profile]);
+  }, [details, type, season, episode, startTime, profile, getSrc, id]);
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -207,13 +239,17 @@ const Player: React.FC = () => {
         try {
           const data = await getDetails(type, parseInt(id));
           setDetails(data);
+          setDetailsError(null);
         } catch (error) {
           console.error('Failed to fetch details:', error);
+          const message = 'We could not load this title right now. Please check your connection and try again.';
+          setDetailsError(message);
+          showToast(message, 'error');
         }
       }
     };
     fetchDetails();
-  }, [type, id]);
+  }, [type, id, showToast]);
 
   useEffect(() => {
     let timeout: NodeJS.Timeout;
@@ -237,13 +273,30 @@ const Player: React.FC = () => {
 
   if (!type || !id) return null;
 
-  const getSrc = () => {
-    const theme = themeColor.replace('#', '');
-    if (type === 'movie') {
-      return `https://vidfast.pro/movie/${id}?autoPlay=true&theme=${theme}`;
-    }
-    return `https://vidfast.pro/tv/${id}/${season}/${episode}?autoPlay=true&theme=${theme}&nextButton=true&autoNext=${autoPlayNext}`;
-  };
+  if (detailsError && !details && !isNativePlayer) {
+    return (
+      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center text-center px-6">
+        <h1 className="text-2xl font-bold text-white mb-3">Playback unavailable</h1>
+        <p className="text-sm text-gray-300 max-w-md mb-6">
+          {detailsError}
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={() => window.location.reload()}
+            className="px-5 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover transition-colors"
+          >
+            Retry
+          </button>
+          <button
+            onClick={() => navigate(-1)}
+            className="px-5 py-2 rounded-lg bg-white/10 text-white text-sm font-semibold hover:bg-white/20 transition-colors"
+          >
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleEpisodeSelect = (newSeason: number, newEpisode: number) => {
     setSeason(newSeason);
@@ -279,7 +332,7 @@ const Player: React.FC = () => {
       // Ideally we would trigger a re-render or try next source
       // But we only have one source provider hardcoded for now (VidFast)
       // So we just log it.
-      alert('Issue reported. We will try to find a better source next time.');
+      showToast('Issue reported. We will try to find a better source next time.', 'info');
     }
   };
 

@@ -127,6 +127,13 @@ export const TVNavigationProvider: React.FC<TVNavigationProviderProps> = ({ chil
   // Handle global key events
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tagName = target?.tagName;
+      const isInputElement =
+        tagName === 'INPUT' ||
+        tagName === 'TEXTAREA' ||
+        target?.isContentEditable === true;
+
       if (!focusedId && elementsRef.current.size > 0) {
         // Recover focus if lost
         const first = elementsRef.current.keys().next().value;
@@ -138,24 +145,36 @@ export const TVNavigationProvider: React.FC<TVNavigationProviderProps> = ({ chil
 
       switch (e.key) {
         case 'ArrowUp': {
+          if (isInputElement) {
+            return;
+          }
           e.preventDefault();
           const nextUp = findNextFocus(focusedId, 'up');
           if (nextUp) setFocusedId(nextUp);
           break;
         }
         case 'ArrowDown': {
+          if (isInputElement) {
+            return;
+          }
           e.preventDefault();
           const nextDown = findNextFocus(focusedId, 'down');
           if (nextDown) setFocusedId(nextDown);
           break;
         }
         case 'ArrowLeft': {
+          if (isInputElement) {
+            return;
+          }
           e.preventDefault();
           const nextLeft = findNextFocus(focusedId, 'left');
           if (nextLeft) setFocusedId(nextLeft);
           break;
         }
         case 'ArrowRight': {
+          if (isInputElement) {
+            return;
+          }
           e.preventDefault();
           const nextRight = findNextFocus(focusedId, 'right');
           if (nextRight) setFocusedId(nextRight);
@@ -168,16 +187,20 @@ export const TVNavigationProvider: React.FC<TVNavigationProviderProps> = ({ chil
           break;
         }
         case 'Escape':
-        case 'Backspace':
-           // Optional: Handle back navigation
-           window.history.back();
-           break;
+        case 'Backspace': {
+          // Do not override normal text editing in inputs/textareas/contentEditable
+          if (isInputElement) {
+            return;
+          }
+          window.history.back();
+          break;
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [focusedId, findNextFocus]);
+  }, [focusedId, findNextFocus, setFocusedId]);
 
   // Scroll focused element into view
   useEffect(() => {

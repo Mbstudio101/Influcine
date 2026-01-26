@@ -7,6 +7,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../lib/supabase';
 import Logo from '../components/Logo';
 import Focusable from '../components/Focusable';
+import { useToast } from '../context/toast';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -19,6 +20,7 @@ const Login: React.FC = () => {
   const [sessionId, setSessionId] = useState('');
   const [customIp, setCustomIp] = useState('');
   const [showIpInput, setShowIpInput] = useState(false);
+  const { showToast } = useToast();
 
   useEffect(() => {
     const hasUsed = localStorage.getItem('influcine_has_used_app');
@@ -41,7 +43,11 @@ const Login: React.FC = () => {
           
           if (!error) {
             localStorage.setItem('influcine_has_used_app', 'true');
+            showToast('Signed in on this device', 'success');
             navigate('/profiles');
+          } else {
+            console.error('Failed to complete QR login:', error);
+            showToast('Failed to complete QR login. Please try again.', 'error');
           }
         }
       })
@@ -50,7 +56,7 @@ const Login: React.FC = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [navigate]);
+  }, [navigate, showToast]);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -59,9 +65,12 @@ const Login: React.FC = () => {
     try {
       await login(email, password);
       localStorage.setItem('influcine_has_used_app', 'true');
+      showToast('Signed in successfully', 'success');
       navigate('/profiles');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to login');
+      const message = err instanceof Error ? err.message : 'Failed to login';
+      setError(message);
+      showToast(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -70,7 +79,7 @@ const Login: React.FC = () => {
   return (
     <div className="fixed inset-0 w-full h-full bg-black flex flex-col items-center justify-center p-4 overflow-hidden touch-none overscroll-none drag-region">
       {/* Cinematic Background */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#1a1a1a] via-black to-black z-0" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--tw-gradient-stops))] from-[#1a1a1a] via-black to-black z-0" />
       
       {/* Animated Nebulas - "Breathtaking" Ambience */}
       <motion.div 
@@ -102,7 +111,7 @@ const Login: React.FC = () => {
       />
       
       {/* Film Grain Texture Overlay */}
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none z-[1]" 
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none z-1" 
            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} 
       />
 

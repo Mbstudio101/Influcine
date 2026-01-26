@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
 import { Avatar, AVATARS } from '../components/Avatars';
@@ -14,20 +14,23 @@ const ProfileSelection: React.FC = () => {
   const [newProfileName, setNewProfileName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0].id);
 
-  const handleSelect = async (profileId: number) => {
-    try {
-      await switchProfile(profileId);
-      navigate('/');
-    } catch (error) {
-      console.error('Failed to switch profile:', error);
-    }
-  };
+  const handleSelect = useCallback(
+    async (profileId: number) => {
+      try {
+        await switchProfile(profileId);
+        navigate('/');
+      } catch (error) {
+        console.error('Failed to switch profile:', error);
+      }
+    },
+    [switchProfile, navigate]
+  );
 
   useEffect(() => {
     if (profiles.length === 1 && profiles[0].id) {
        handleSelect(profiles[0].id);
     }
-  }, [profiles]);
+  }, [profiles, handleSelect]);
 
   const handleAddProfile = async (e?: React.FormEvent) => {
     e?.preventDefault();

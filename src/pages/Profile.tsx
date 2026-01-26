@@ -8,12 +8,18 @@ import { useNavigate } from 'react-router-dom';
 import { db, Achievement } from '../db';
 import { LevelProgress } from '../components/Achievements/LevelProgress';
 import { AchievementGrid } from '../components/Achievements/AchievementGrid';
+import { useToast } from '../context/toast';
 
 const Profile: React.FC = () => {
-  const { profile, updateProfile, user, updateUser, logout } = useAuth();
+  const { profile, updateProfile, user, updateUser, logout, refreshProfiles } = useAuth();
   const { themeColor } = useSettings();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   
+  useEffect(() => {
+    refreshProfiles();
+  }, [refreshProfiles]);
+
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(profile?.name || '');
   const [tempAvatar, setTempAvatar] = useState(profile?.avatarId || AVATARS[0].id);
@@ -43,23 +49,30 @@ const Profile: React.FC = () => {
     if (profile && profile.id) {
       await updateProfile(profile.id, { name: tempName, avatarId: tempAvatar });
       setIsEditing(false);
+      showToast('Profile updated', 'success');
     }
   };
 
   const handleSaveEmail = async () => {
     if (!tempEmail.includes('@')) {
-      setEmailError('Invalid email address');
+      const message = 'Invalid email address';
+      setEmailError(message);
+      showToast(message, 'error');
       return;
     }
     try {
       await updateUser({ email: tempEmail });
       setIsEditingEmail(false);
       setEmailError('');
+      showToast('Email updated', 'success');
     } catch (error: unknown) {
       if (error instanceof Error) {
         setEmailError(error.message);
+        showToast(error.message, 'error');
       } else {
-        setEmailError('Failed to update email');
+        const message = 'Failed to update email';
+        setEmailError(message);
+        showToast(message, 'error');
       }
     }
   };
@@ -75,11 +88,18 @@ const Profile: React.FC = () => {
   const handlePasswordReset = () => {
     setResetSent(true);
     setTimeout(() => setResetSent(false), 3000);
+    showToast('Password reset link sent (demo)', 'info');
   };
 
   const handleLogout = async () => {
-    await logout();
-    navigate('/login');
+    try {
+      await logout();
+      showToast('You have been signed out.', 'info');
+      navigate('/login');
+    } catch (error) {
+      console.error('Failed to logout:', error);
+      showToast('Failed to logout. Please try again.', 'error');
+    }
   };
 
   if (!profile) return null;
@@ -175,17 +195,17 @@ const Profile: React.FC = () => {
                   <h2 className="text-4xl md:text-5xl font-bold text-white mb-2">{profile.name}</h2>
                   <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 md:gap-8 pt-4">
                      <div className="text-center md:text-left">
-                        <div className="text-2xl font-bold text-white">0</div>
+                        <div className="text-2xl font-bold text-white">{profile.stats?.hoursWatched || 0}</div>
                         <div className="text-xs text-gray-400 uppercase tracking-wider">Hours Watched</div>
                      </div>
                      <div className="w-px h-10 bg-white/10"></div>
                      <div className="text-center md:text-left">
-                        <div className="text-2xl font-bold text-white">0</div>
+                        <div className="text-2xl font-bold text-white">{profile.stats?.moviesWatched || 0}</div>
                         <div className="text-xs text-gray-400 uppercase tracking-wider">Movies</div>
                      </div>
                      <div className="w-px h-10 bg-white/10"></div>
                      <div className="text-center md:text-left">
-                        <div className="text-2xl font-bold text-white">0</div>
+                        <div className="text-2xl font-bold text-white">{profile.stats?.seriesWatched || 0}</div>
                         <div className="text-xs text-gray-400 uppercase tracking-wider">Series</div>
                      </div>
                   </div>

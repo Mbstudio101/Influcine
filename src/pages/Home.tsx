@@ -4,31 +4,53 @@ import { getPersonalizedRecommendations, RecommendationResult } from '../service
 import { Media } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { Play, Plus, Check } from 'lucide-react';
-import { db } from '../db';
+import { db, SavedMedia } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import ContentRow from '../components/ContentRow';
 import RightSidebar from '../components/RightSidebar';
 import Focusable from '../components/Focusable';
+import { useToast } from '../context/toast';
 
 const Home: React.FC = () => {
   const [featured, setFeatured] = useState<Media | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationResult[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const navigate = useNavigate();
+  const { showToast } = useToast();
   
-  // Get list of saved IDs to show checkmark
-  const savedItems = useLiveQuery(() => db.watchlist.toArray());
-  const savedIds = new Set(savedItems?.map(i => i.id));
+  // Check if featured item is saved
+  const savedFeatured = useLiveQuery(
+    () => (featured ? db.watchlist.get(featured.id) : undefined),
+    [featured?.id]
+  );
+  const isFeaturedSaved = !!savedFeatured;
 
-  const handleSave = async (media: Media) => {
+  const handleSave = async (media: Media): Promise<{ ok: boolean; message?: string }> => {
     try {
-      if (savedIds.has(media.id)) {
-        await db.watchlist.delete(media.id);
-      } else {
-        await db.watchlist.add({ ...media, savedAt: Date.now() });
+      const compat = media as unknown as {
+        id?: number;
+        tmdbId?: number;
+        mediaId?: number;
+      };
+
+      const stableId = compat.id ?? compat.tmdbId ?? compat.mediaId;
+      if (stableId == null) {
+        return { ok: false, message: 'No valid id found for media item' };
       }
+
+      const payload: Record<string, unknown> = {
+        ...media,
+        savedAt: Date.now(),
+        id: stableId
+      };
+      await db.watchlist.put(payload as unknown as SavedMedia, stableId);
+      return { ok: true };
     } catch (error) {
       console.error('Failed to save media:', error);
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error)
+      };
     }
   };
 
@@ -184,12 +206,26 @@ const Home: React.FC = () => {
                   Watch Now
                 </Focusable>
                 <Focusable 
-                  onClick={() => handleSave(featured)}
+                  onClick={async () => {
+                    if (!featured) return;
+                    const result = await handleSave(featured);
+                    if (!result.ok) {
+                      showToast(
+                        result.message
+                          ? `Failed to add to your library: ${result.message}`
+                          : 'Failed to add to your library.',
+                        'error'
+                      );
+                      return;
+                    }
+                    showToast('Added to your library.', 'success');
+                    navigate('/watchlist');
+                  }}
                   className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all backdrop-blur-md border border-white/10 hover:scale-105 cursor-pointer"
                   activeClassName="ring-4 ring-white scale-110 z-20"
                 >
-                  {savedIds.has(featured.id) ? <Check size={20} /> : <Plus size={20} />}
-                  {savedIds.has(featured.id) ? 'Saved' : 'Add List'}
+                  {isFeaturedSaved ? <Check size={20} /> : <Plus size={20} />}
+                  {isFeaturedSaved ? 'Saved' : 'Add List'}
                 </Focusable>
               </div>
             </div>

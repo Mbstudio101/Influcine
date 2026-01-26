@@ -1,4 +1,5 @@
 import { db } from '../db';
+import { supabase } from '../lib/supabase';
 
 export interface AchievementDef {
   id: string;
@@ -122,7 +123,10 @@ export const awardXP = async (profileId: number, amount: number) => {
     totalXP: 0,
     level: 1,
     streak: 0,
-    lastWatchDate: Date.now()
+    lastWatchDate: Date.now(),
+    hoursWatched: 0,
+    moviesWatched: 0,
+    seriesWatched: 0
   };
 
   const newXP = currentStats.totalXP + amount;
@@ -130,16 +134,84 @@ export const awardXP = async (profileId: number, amount: number) => {
   
   const didLevelUp = newLevel > currentStats.level;
 
+  const newStats = {
+    ...currentStats,
+    totalXP: newXP,
+    level: newLevel,
+    lastWatchDate: Date.now(),
+    hoursWatched: currentStats.hoursWatched || 0,
+    moviesWatched: currentStats.moviesWatched || 0,
+    seriesWatched: currentStats.seriesWatched || 0
+  };
+
   await db.profiles.update(profileId, {
-    stats: {
-      ...currentStats,
-      totalXP: newXP,
-      level: newLevel,
-      lastWatchDate: Date.now()
-    }
+    stats: newStats
   });
 
+  // Sync with Supabase if applicable
+  const user = await db.users.get(profile.userId);
+  if (user && user.passwordHash === 'supabase_auth') {
+      await supabase.auth.updateUser({
+          data: { stats: newStats }
+      });
+  }
+
   return { newXP, newLevel, didLevelUp };
+};
+
+export const updateWatchStats = async (
+    profileId: number, 
+    updates: { minutesWatched?: number; movieCompleted?: boolean; seriesCompleted?: boolean }
+) => {
+    const profile = await db.profiles.get(profileId);
+    if (!profile) return;
+
+    const currentStats = profile.stats || {
+        totalXP: 0,
+        level: 1,
+        streak: 0,
+        lastWatchDate: Date.now(),
+        hoursWatched: 0,
+        moviesWatched: 0,
+        seriesWatched: 0
+    };
+
+    const newStats = { 
+        ...currentStats,
+        hoursWatched: currentStats.hoursWatched || 0,
+        moviesWatched: currentStats.moviesWatched || 0,
+        seriesWatched: currentStats.seriesWatched || 0
+    };
+
+    if (updates.minutesWatched) {
+        // Convert to hours (float)
+        const addedHours = updates.minutesWatched / 60;
+        newStats.hoursWatched = (newStats.hoursWatched || 0) + addedHours;
+        // Round to 2 decimal places for storage
+        newStats.hoursWatched = Math.round(newStats.hoursWatched * 100) / 100;
+    }
+
+    if (updates.movieCompleted) {
+        newStats.moviesWatched = (newStats.moviesWatched || 0) + 1;
+    }
+
+    if (updates.seriesCompleted) {
+        newStats.seriesWatched = (newStats.seriesWatched || 0) + 1;
+    }
+    
+    newStats.lastWatchDate = Date.now();
+
+    await db.profiles.update(profileId, { stats: newStats });
+
+    // Sync with Supabase
+    const user = await db.users.get(profile.userId);
+    if (user && user.passwordHash === 'supabase_auth') {
+        await supabase.auth.updateUser({
+            data: { stats: newStats }
+        });
+    }
+    
+    return newStats;
 };
 
 export const unlockAchievement = async (profileId: number, achievementId: string, progressVal: number) => {

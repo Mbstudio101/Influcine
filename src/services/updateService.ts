@@ -7,7 +7,7 @@ const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/lat
 // Storage keys
 const STORAGE_KEY_LAST_CHECK = 'update_last_checked';
 const STORAGE_KEY_SKIPPED_VERSION = 'update_skipped_version';
-const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+// const CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 // Helper to compare semantic versions (e.g. "1.0.0" vs "1.0.1")
 const compareVersions = (v1: string, v2: string): number => {
@@ -40,12 +40,13 @@ export const checkForUpdates = async (currentVersion: string): Promise<AppVersio
     if (!navigator.onLine) return null;
 
     // Check cool-down period (unless in dev mode)
-    const lastChecked = localStorage.getItem(STORAGE_KEY_LAST_CHECK);
+    // Removed strict cooldown to ensure users see updates when relaunching
+    // const lastChecked = localStorage.getItem(STORAGE_KEY_LAST_CHECK);
     const now = Date.now();
-    if (!import.meta.env.DEV && lastChecked && (now - parseInt(lastChecked)) < CHECK_INTERVAL_MS) {
-      console.log('Update check skipped: Cooldown active');
-      return null;
-    }
+    // if (!import.meta.env.DEV && lastChecked && (now - parseInt(lastChecked)) < CHECK_INTERVAL_MS) {
+    //   console.log('Update check skipped: Cooldown active');
+    //   return null;
+    // }
 
     const response = await fetch(GITHUB_API_URL, { 
       headers: {

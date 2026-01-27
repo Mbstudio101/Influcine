@@ -67,3 +67,14 @@ export interface AppVersion {
     [key: string]: string | undefined;
   };
 }
+
+export interface Episode {
+  id: number;
+  episode_number: number;
+  name: string;
+  overview: string;
+  still_path: string | null;
+  runtime?: number;
+  air_date?: string;
+  vote_average?: number;
+}

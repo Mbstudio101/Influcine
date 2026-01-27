@@ -97,6 +97,7 @@ class InflucineDB extends Dexie {
   reminders!: Table<Reminder>;
   cachedReleases!: Table<CachedRelease>;
   queryCache!: Table<QueryCache>;
+  episodeProgress!: Table<EpisodeProgress>;
 
   constructor() {
     super('InflucineDB');
@@ -126,6 +127,10 @@ class InflucineDB extends Dexie {
     this.version(5).stores({
       queryCache: '++id, query, normalizedQuery, timestamp'
     });
+
+    this.version(6).stores({
+      episodeProgress: '++id, profileId, showId, season, episode, [profileId+showId+season+episode], [profileId+showId]'
+    });
   }
 }
 
@@ -139,3 +144,15 @@ export interface QueryCache {
 }
 
 export const db = new InflucineDB();
+
+export interface EpisodeProgress {
+  id?: number;
+  profileId: number;
+  showId: number;
+  season: number;
+  episode: number;
+  watchedSeconds: number;
+  durationSeconds: number;
+  percentage: number;
+  lastUpdated: number;
+}

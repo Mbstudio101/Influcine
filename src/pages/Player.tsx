@@ -180,6 +180,18 @@ const Player: React.FC = () => {
                     episode: type === 'tv' ? episode : undefined
                 }
                 });
+                if (type === 'tv' && profile?.id) {
+                  await db.episodeProgress.put({
+                    profileId: profile.id,
+                    showId: parseInt(id as string),
+                    season,
+                    episode,
+                    watchedSeconds: currentTime,
+                    durationSeconds: duration,
+                    percentage,
+                    lastUpdated: Date.now()
+                  });
+                }
             }
           } catch (err) {
             console.error('Error saving progress:', err);

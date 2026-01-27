@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
+import introSound from '../assets/sounds/intro.mp3';
 
 interface SplashScreenProps {
   onComplete: () => void;
@@ -17,7 +18,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     const playSound = async () => {
       try {
         if (!audioRef.current) {
-          audioRef.current = new Audio('/sounds/intro.mp3');
+          audioRef.current = new Audio(introSound);
           audioRef.current.volume = 0.5;
         }
         

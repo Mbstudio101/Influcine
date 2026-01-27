@@ -3,10 +3,8 @@ import { Media } from '../types';
 import { getImageUrl } from '../services/tmdb';
 import { Link, useNavigate } from 'react-router-dom';
 import { Play, Plus, Check, Star } from 'lucide-react';
-import { db, SavedMedia } from '../db';
-import { useLiveQuery } from 'dexie-react-hooks';
 import Focusable from './Focusable';
-import { useToast } from '../context/toast';
+import { useWatchlist } from '../hooks/useWatchlist';
 
 interface MediaCardProps {
   media: Media;
@@ -23,64 +21,14 @@ interface SavedMediaWithProgress extends Media {
 }
 
 const MediaCard: React.FC<MediaCardProps> = ({ media }) => {
-  const compat = media as unknown as {
-    id?: number;
-    tmdbId?: number;
-    mediaId?: number;
-  };
-  const stableId = compat.id ?? compat.tmdbId ?? compat.mediaId;
-
-  const savedItem = useLiveQuery(
-    () => (stableId != null ? db.watchlist.get(stableId) : undefined),
-    [stableId]
-  );
-  const isSaved = !!savedItem;
+  const { isSaved, toggleWatchlist } = useWatchlist(media);
   const navigate = useNavigate();
   const [isFocused, setIsFocused] = React.useState(false);
-  const { showToast } = useToast();
   
   const mediaType = media.media_type || (media.title ? 'movie' : 'tv');
   
   const progress = (media as SavedMediaWithProgress).progress;
   const hasProgress = progress && progress.percentage > 0 && progress.percentage < 95; // Don't show if almost finished (credits)
-
-  const handleSave = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (stableId == null) {
-      console.error('Failed to toggle library item: no valid id found for media item (card).', media);
-      showToast('We could not update your library for this item.', 'error');
-      return;
-    }
-
-    try {
-      const existing = await db.watchlist.get(stableId);
-
-      if (existing) {
-        await db.watchlist.delete(stableId);
-        showToast('Removed from your library.', 'info');
-      } else {
-        const payload: Record<string, unknown> = {
-          ...media,
-          savedAt: Date.now(),
-          id: stableId
-        };
-        await db.watchlist.put(payload as unknown as SavedMedia, stableId);
-        showToast('Added to your library.', 'success');
-      }
-    } catch (error) {
-      console.error('Failed to save media:', error);
-      const message =
-        error instanceof Error ? error.message : String(error);
-      showToast(
-        message
-          ? `Failed to update your library: ${message}`
-          : 'Failed to update your library. Please try again.',
-        'error'
-      );
-    }
-  };
 
   return (
     <Focusable
@@ -143,7 +91,7 @@ const MediaCard: React.FC<MediaCardProps> = ({ media }) => {
               <Play size={14} fill="currentColor" /> {hasProgress ? 'Resume' : 'Play'}
             </Link>
             <button
-              onClick={handleSave}
+              onClick={toggleWatchlist}
               className="p-2 bg-white/10 backdrop-blur-md border border-white/10 rounded-lg text-white hover:bg-white/20 transition-colors"
               title={isSaved ? "Remove from Library" : "Add to Library"}
             >

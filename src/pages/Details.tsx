@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getDetails, getCredits, getSimilar, getImageUrl } from '../services/tmdb';
 import { MediaDetails } from '../types';
-import { Play, Plus, Check, Star, ArrowLeft, X, Youtube } from 'lucide-react';
-import { db, SavedMedia } from '../db';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { Play, Plus, Check, Star, ArrowLeft, X, Youtube, ExternalLink } from 'lucide-react';
+import { db } from '../db';
 import ContentRow from '../components/ContentRow';
 import Focusable from '../components/Focusable';
+import { useWatchlist } from '../hooks/useWatchlist';
 
 const Details: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
@@ -16,11 +16,10 @@ const Details: React.FC = () => {
   const [credits, setCredits] = useState<any>(null);
   const [showTrailer, setShowTrailer] = useState(false);
   
-  const savedItem = useLiveQuery(
-    () => (details ? db.watchlist.get(details.id) : undefined),
-    [details?.id]
-  );
-  const isSaved = !!savedItem;
+  const { isSaved, toggleWatchlist } = useWatchlist(details ? {
+    ...details,
+    media_type: (type as 'movie' | 'tv') || details.media_type
+  } : null);
 
   useEffect(() => {
     if (type && id) {
@@ -38,26 +37,6 @@ const Details: React.FC = () => {
       window.scrollTo(0, 0);
     }
   }, [type, id]);
-
-  const handleSave = async () => {
-    if (!details) return;
-    try {
-      const stableId = details.id;
-      const existing = await db.watchlist.get(stableId);
-      if (existing) {
-        await db.watchlist.delete(stableId);
-      } else {
-        const payload: SavedMedia = {
-          ...(details as unknown as SavedMedia),
-          savedAt: Date.now(),
-          id: stableId
-        };
-        await db.watchlist.put(payload, stableId);
-      }
-    } catch (error) {
-      console.error('Failed to save media:', error);
-    }
-  };
 
   const trailer = details?.videos?.results?.find(v => v.type === 'Trailer' && v.site === 'YouTube') || details?.videos?.results?.find(v => v.site === 'YouTube');
 
@@ -98,16 +77,30 @@ const Details: React.FC = () => {
           >
             <X size={24} />
           </Focusable>
-          <div className="w-full max-w-5xl aspect-video rounded-xl overflow-hidden shadow-2xl">
-            <iframe
-              width="100%"
-              height="100%"
-              src={`https://www.youtube.com/embed/${trailer.key}?autoplay=1`}
-              title="YouTube video player"
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            ></iframe>
+          <div className="w-full max-w-5xl flex flex-col gap-4">
+            <div className="aspect-video rounded-xl overflow-hidden shadow-2xl bg-black">
+              <iframe
+                width="100%"
+                height="100%"
+                src={`https://www.youtube.com/embed/${trailer.key}?autoplay=1`}
+                title="YouTube video player"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              ></iframe>
+            </div>
+            
+            <div className="flex justify-center">
+              <a 
+                href={`https://www.youtube.com/watch?v=${trailer.key}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 px-6 py-3 rounded-lg font-bold transition-all"
+              >
+                <ExternalLink size={20} />
+                Having trouble? Watch on YouTube
+              </a>
+            </div>
           </div>
         </div>
       )}
@@ -175,8 +168,12 @@ const Details: React.FC = () => {
                 </button>
               )}
               <button 
-                onClick={handleSave}
-                className="bg-white/10 hover:bg-white/20 text-white px-8 py-3 rounded-lg font-bold flex items-center gap-3 transition-all backdrop-blur-md border border-white/10 hover:scale-105 text-lg"
+                onClick={toggleWatchlist}
+                className={`px-8 py-3 rounded-lg font-bold flex items-center gap-3 transition-all backdrop-blur-md border border-white/10 hover:scale-105 text-lg ${
+                  isSaved 
+                    ? 'bg-primary border-primary text-white' 
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
               >
                 {isSaved ? <Check size={20} /> : <Plus size={20} />}
                 {isSaved ? 'In Library' : 'Add to Library'}

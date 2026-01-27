@@ -1,327 +1,240 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, Reminder } from '../db';
+import { db, SavedMedia } from '../db';
 import MediaCard from '../components/MediaCard';
 import Focusable from '../components/Focusable';
 import { useNavigate } from 'react-router-dom';
-import { addMonths, endOfWeek, format, startOfWeek } from 'date-fns';
-import { getDetails, getImageUrl } from '../services/tmdb';
-import { Bell, CheckCircle } from 'lucide-react';
-import { motion } from 'framer-motion';
-
-interface LibraryUpcomingEvent {
-  mediaId: number;
-  mediaType: 'movie' | 'tv';
-  title: string;
-  date: Date;
-  posterPath?: string | null;
-  isEpisode: boolean;
-  episodeInfo?: string;
-}
+import { getImageUrl } from '../services/tmdb';
+import { Play, Search, Tv, Film, Layers, ChevronRight, Star } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const Watchlist: React.FC = () => {
-  const watchlist = useLiveQuery(() => db.watchlist.toArray());
-  const [upcoming, setUpcoming] = useState<LibraryUpcomingEvent[]>([]);
-  const [loadingUpcoming, setLoadingUpcoming] = useState(false);
-  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const watchlist = useLiveQuery(() => db.watchlist.orderBy('savedAt').reverse().toArray());
+  const [filter, setFilter] = useState<'all' | 'movie' | 'tv'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [featuredItem, setFeaturedItem] = useState<SavedMedia | null>(null);
   const navigate = useNavigate();
 
+  // Set a featured item randomly from the watchlist on load
   useEffect(() => {
-    const loadUpcoming = async () => {
-      if (!watchlist || watchlist.length === 0) {
-        setUpcoming([]);
-        return;
-      }
+    if (watchlist && watchlist.length > 0 && !featuredItem) {
+      const random = watchlist[Math.floor(Math.random() * watchlist.length)];
+      setFeaturedItem(random);
+    } else if (watchlist?.length === 0) {
+      setFeaturedItem(null);
+    }
+  }, [watchlist, featuredItem]);
 
-      setLoadingUpcoming(true);
-      try {
-        const today = new Date();
-        const horizon = addMonths(today, 2);
+  const filteredItems = useMemo(() => {
+    if (!watchlist) return [];
+    return watchlist.filter((item) => {
+      const matchesFilter = filter === 'all' || item.media_type === filter;
+      const matchesSearch = 
+        (item.title || item.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesFilter && matchesSearch;
+    });
+  }, [watchlist, filter, searchQuery]);
 
-        const tvItems = watchlist.filter(item => item.media_type === 'tv');
-        const tvPromises = tvItems.map(async (show) => {
-          try {
-            const details = await getDetails('tv', show.id);
-            if (details.next_episode_to_air) {
-              const airDate = new Date(details.next_episode_to_air.air_date);
-              if (airDate >= today && airDate <= horizon) {
-                return {
-                  mediaId: show.id,
-                  mediaType: 'tv' as const,
-                  title: show.name || show.title || 'Unknown',
-                  date: airDate,
-                  posterPath: details.next_episode_to_air.still_path || show.poster_path,
-                  isEpisode: true,
-                  episodeInfo: `S${details.next_episode_to_air.season_number}E${details.next_episode_to_air.episode_number}: ${details.next_episode_to_air.name}`
-                } as LibraryUpcomingEvent;
-              }
-            }
-          } catch (error) {
-            console.error('Failed to load TV details for library calendar', error);
-          }
-          return null;
-        });
-
-        const tvEvents = (await Promise.all(tvPromises)).filter(
-          (e): e is LibraryUpcomingEvent => e !== null
-        );
-
-        const movieItems = watchlist.filter(item => item.media_type === 'movie');
-        const movieEvents: LibraryUpcomingEvent[] = movieItems
-          .map((movie) => {
-            const dateStr = movie.release_date;
-            if (!dateStr) return null;
-            const date = new Date(dateStr);
-            if (isNaN(date.getTime())) return null;
-            if (date < today || date > horizon) return null;
-            return {
-              mediaId: movie.id,
-              mediaType: 'movie' as const,
-              title: movie.title || 'Unknown',
-              date,
-              posterPath: movie.poster_path,
-              isEpisode: false
-            } as LibraryUpcomingEvent;
-          })
-          .filter((e): e is LibraryUpcomingEvent => e !== null);
-
-        const allEvents = [...tvEvents, ...movieEvents]
-          .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-        setUpcoming(allEvents);
-      } finally {
-        setLoadingUpcoming(false);
-      }
+  const stats = useMemo(() => {
+    if (!watchlist) return { total: 0, movies: 0, tv: 0 };
+    return {
+      total: watchlist.length,
+      movies: watchlist.filter(i => i.media_type === 'movie').length,
+      tv: watchlist.filter(i => i.media_type === 'tv').length
     };
-
-    loadUpcoming();
   }, [watchlist]);
 
-  useEffect(() => {
-    const loadReminders = async () => {
-      const all = await db.reminders.toArray();
-      setReminders(all);
-    };
-    loadReminders();
-  }, []);
-
-  const toggleReminder = async (event: LibraryUpcomingEvent) => {
-    const existing = reminders.find(
-      (r) => r.mediaId === event.mediaId && r.mediaType === event.mediaType
-    );
-
-    if (existing && existing.id != null) {
-      await db.reminders.delete(existing.id);
-      setReminders((prev) => prev.filter((r) => r.id !== existing.id));
-      return;
-    }
-
-    const releaseDate = format(event.date, 'yyyy-MM-dd');
-    const reminder: Reminder = {
-      mediaId: event.mediaId,
-      mediaType: event.mediaType,
-      title: event.title,
-      releaseDate,
-      posterPath: event.posterPath || undefined,
-      remindAt: event.date.getTime() - 24 * 60 * 60 * 1000
-    };
-
-    const id = await db.reminders.add(reminder);
-    const saved = { ...reminder, id } as Reminder;
-    setReminders((prev) => [...prev, saved]);
-
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(`Reminder set for ${reminder.title}`, {
-        body: `Releases on ${reminder.releaseDate}`
-      });
-    } else if ('Notification' in window && Notification.permission !== 'denied') {
-      Notification.requestPermission().then((permission) => {
-        if (permission === 'granted') {
-          new Notification(`Reminder set for ${reminder.title}`, {
-            body: `Releases on ${reminder.releaseDate}`
-          });
-        }
-      });
-    }
-  };
-
-  const groupedUpcoming = useMemo(() => {
-    if (upcoming.length === 0) return [];
-
-    const today = new Date();
-    const groups = new Map<
-      string,
-      { label: string; items: LibraryUpcomingEvent[]; start: Date }
-    >();
-
-    for (const event of upcoming) {
-      const start = startOfWeek(event.date, { weekStartsOn: 1 });
-      const end = endOfWeek(event.date, { weekStartsOn: 1 });
-      const key = start.toISOString();
-
-      if (!groups.has(key)) {
-        const isThisWeek = start <= today && today <= end;
-        const label = isThisWeek ? 'This Week' : format(start, "'Week of' MMM d");
-        groups.set(key, { label, items: [], start });
-      }
-
-      groups.get(key)!.items.push(event);
-    }
-
-    return Array.from(groups.values()).sort(
-      (a, b) => a.start.getTime() - b.start.getTime()
-    );
-  }, [upcoming]);
+  const filterOptions: { id: 'all' | 'movie' | 'tv'; label: string; icon: React.ElementType; count: number }[] = [
+    { id: 'all', label: 'All', icon: Layers, count: stats.total },
+    { id: 'movie', label: 'Movies', icon: Film, count: stats.movies },
+    { id: 'tv', label: 'TV Shows', icon: Tv, count: stats.tv }
+  ];
 
   if (!watchlist) return null;
 
   return (
-    <div className="h-full overflow-y-auto pt-24 px-10 pb-20 scrollbar-hide">
-      <div className="flex items-center gap-4 mb-8">
-        <h1 className="text-3xl font-bold">My Library</h1>
-        <span className="bg-white/10 px-3 py-1 rounded-full text-sm font-medium text-textSecondary">
-          {watchlist.length} Items
-        </span>
-      </div>
+    <div className="h-full overflow-y-auto overflow-x-hidden pb-20 scrollbar-hide">
+      
+      {/* Hero / Featured Section */}
+      <AnimatePresence mode="wait">
+        {featuredItem ? (
+          <motion.div 
+            key={featuredItem.id}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="relative w-full h-[60vh] md:h-[70vh]"
+          >
+            <div className="absolute inset-0">
+              <img
+                src={getImageUrl(featuredItem.backdrop_path || featuredItem.poster_path, 'original')}
+                alt={featuredItem.title || featuredItem.name}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-linear-to-t from-background via-background/60 to-transparent" />
+              <div className="absolute inset-0 bg-linear-to-r from-background via-background/80 to-transparent" />
+            </div>
 
-      {import.meta.env.DEV && (
-        <div className="mb-4 text-xs text-gray-400">
-          Debug: {watchlist.length} items in local watchlist
-          {watchlist[0] && (
-            <> — first: "{watchlist[0].title || watchlist[0].name}" (id {watchlist[0].id})</>
-          )}
-        </div>
-      )}
-
-      {watchlist.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center opacity-50">
-          <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4">
-            <span className="text-4xl">📂</span>
+            <div className="absolute bottom-0 left-0 w-full p-8 md:p-16 z-10 flex flex-col justify-end h-full">
+              <motion.div
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.2 }}
+                className="max-w-3xl"
+              >
+                <div className="flex items-center gap-3 mb-4 text-primary font-medium tracking-wider text-sm uppercase">
+                  <span className="bg-primary/20 px-3 py-1 rounded-full border border-primary/20 backdrop-blur-md">
+                    Featured in Library
+                  </span>
+                  {featuredItem.vote_average > 0 && (
+                    <span className="flex items-center gap-1 text-yellow-400">
+                      <Star size={14} fill="currentColor" /> {featuredItem.vote_average.toFixed(1)}
+                    </span>
+                  )}
+                </div>
+                
+                <h1 className="text-4xl md:text-6xl font-black text-white mb-4 leading-tight drop-shadow-2xl">
+                  {featuredItem.title || featuredItem.name}
+                </h1>
+                
+                <p className="text-gray-200 text-lg md:text-xl line-clamp-2 md:line-clamp-3 mb-8 max-w-2xl font-medium drop-shadow-md">
+                  {featuredItem.overview}
+                </p>
+                
+                <div className="flex items-center gap-4">
+                  <Focusable
+                    as="button"
+                    onClick={() => navigate(`/watch/${featuredItem.media_type}/${featuredItem.id}`)}
+                    className="bg-primary hover:bg-primary-hover text-white px-8 py-4 rounded-xl font-bold flex items-center gap-3 transition-all hover:scale-105 shadow-[0_0_40px_rgba(124,58,237,0.4)] text-lg group"
+                    activeClassName="ring-4 ring-primary/50 scale-105"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white text-white group-hover:text-primary transition-colors">
+                      <Play fill="currentColor" size={20} className="ml-1" />
+                    </div>
+                    Watch Now
+                  </Focusable>
+                  
+                  <Focusable
+                    as="button"
+                    onClick={() => navigate(`/details/${featuredItem.media_type}/${featuredItem.id}`)}
+                    className="bg-white/5 hover:bg-white/10 text-white px-8 py-4 rounded-xl font-bold flex items-center gap-3 transition-all border border-white/10 backdrop-blur-md hover:scale-105 text-lg"
+                    activeClassName="ring-4 ring-white/50 scale-105"
+                  >
+                    Details <ChevronRight size={20} />
+                  </Focusable>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        ) : (
+          <div className="w-full h-[40vh] flex flex-col items-center justify-center bg-linear-to-b from-primary/10 to-background border-b border-white/5">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-linear-to-r from-white to-gray-500">
+              Your Library
+            </h1>
+            <p className="text-gray-400 text-lg">Your personal collection of movies and shows.</p>
           </div>
-          <p className="text-xl font-medium mb-2">Your library is empty</p>
-          <p className="text-sm">Add movies and shows to access them quickly.</p>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-            {watchlist.map((item) => (
-              <MediaCard key={item.id} media={item} />
+        )}
+      </AnimatePresence>
+
+      {/* Toolbar */}
+      <div className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-white/5 py-4 px-6 md:px-16 transition-all">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          
+          {/* Filters */}
+          <div className="flex items-center gap-2 p-1 bg-white/5 rounded-xl border border-white/5">
+            {filterOptions.map((f) => (
+              <Focusable
+                key={f.id}
+                as="button"
+                onClick={() => setFilter(f.id)}
+                className={`relative px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${
+                  filter === f.id 
+                    ? 'bg-primary text-white shadow-lg' 
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+                activeClassName="ring-2 ring-primary bg-white/10"
+              >
+                <f.icon size={16} />
+                {f.label}
+                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                  filter === f.id ? 'bg-black/20 text-white' : 'bg-white/10 text-gray-400'
+                }`}>
+                  {f.count}
+                </span>
+              </Focusable>
             ))}
           </div>
 
-          <div className="mt-12">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-2xl font-bold">Release Calendar</h2>
-                <p className="text-sm text-textSecondary">
-                  Upcoming movies, shows, and anime from your library
-                </p>
-              </div>
-            </div>
-
-            {loadingUpcoming ? (
-              <div className="flex items-center justify-center h-24 text-textSecondary">
-                Loading upcoming releases...
-              </div>
-            ) : upcoming.length === 0 ? (
-              <div className="text-sm text-textSecondary">
-                No upcoming releases for your library in the next 60 days.
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {groupedUpcoming.map((group) => (
-                  <div key={group.label} className="space-y-2">
-                    <div className="text-xs font-semibold text-textSecondary uppercase tracking-wide">
-                      {group.label}
-                    </div>
-                    <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-                      {group.items.map((event, index) => {
-                        const isReminderSet = reminders.some(
-                          (r) =>
-                            r.mediaId === event.mediaId &&
-                            r.mediaType === event.mediaType
-                        );
-
-                        return (
-                          <Focusable
-                            key={`${event.mediaType}-${event.mediaId}-${event.date.toISOString()}`}
-                            className="min-w-[220px] max-w-[220px] bg-white/5 border border-white/10 rounded-2xl overflow-hidden cursor-pointer hover:bg-white/10 transition-all"
-                            activeClassName="ring-2 ring-primary scale-[1.02]"
-                            onClick={() =>
-                              navigate(`/details/${event.mediaType}/${event.mediaId}`)
-                            }
-                          >
-                            <motion.div
-                              initial={{ opacity: 0, y: 8 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ duration: 0.3, delay: index * 0.03 }}
-                              className="h-full"
-                            >
-                              <div className="relative h-32 w-full">
-                                {event.posterPath && (
-                                  <img
-                                    src={getImageUrl(event.posterPath)}
-                                    alt={event.title}
-                                    className="w-full h-full object-cover"
-                                  />
-                                )}
-                                <div className="absolute inset-0 bg-linear-to-t from-black via-black/40 to-transparent" />
-                                <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between">
-                                  <div className="text-xs font-semibold text-white line-clamp-2">
-                                    {event.title}
-                                  </div>
-                                  <div className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-black/50 text-white/80 uppercase tracking-wide">
-                                    {event.mediaType === 'movie' ? 'Movie' : 'TV'}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="p-3 space-y-1">
-                                <div className="flex items-center justify-between text-xs">
-                                  <span className="text-textSecondary">
-                                    {format(event.date, 'EEE, MMM d')}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleReminder(event);
-                                    }}
-                                    className={`p-1.5 rounded-full transition-colors ${
-                                      isReminderSet
-                                        ? 'bg-primary text-white'
-                                        : 'bg-white/10 text-textSecondary hover:bg-white/20 hover:text-white'
-                                    }`}
-                                    aria-label={
-                                      isReminderSet
-                                        ? 'Remove reminder'
-                                        : 'Add reminder'
-                                    }
-                                  >
-                                    {isReminderSet ? (
-                                      <CheckCircle size={14} />
-                                    ) : (
-                                      <Bell size={14} />
-                                    )}
-                                  </button>
-                                </div>
-                                {event.isEpisode && event.episodeInfo && (
-                                  <div className="text-[11px] text-purple-300 line-clamp-2">
-                                    {event.episodeInfo}
-                                  </div>
-                                )}
-                              </div>
-                            </motion.div>
-                          </Focusable>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+          {/* Search */}
+          <div className="relative group w-full md:w-auto">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-primary transition-colors" size={18} />
+            <input
+              type="text"
+              placeholder="Search library..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full md:w-64 bg-black/20 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all"
+            />
           </div>
-        </>
-      )}
+        </div>
+      </div>
+
+      {/* Content Grid */}
+      <div className="px-6 md:px-16 py-10">
+        {watchlist.length === 0 ? (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center justify-center py-20 text-center"
+          >
+            <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10">
+              <Layers className="text-gray-500" size={40} />
+            </div>
+            <h2 className="text-2xl font-bold mb-3">Your library is empty</h2>
+            <p className="text-gray-400 max-w-md mb-8">
+              Start building your collection by adding movies and TV shows you love or want to watch later.
+            </p>
+            <Focusable
+              as="button"
+              onClick={() => navigate('/browse')}
+              className="bg-white text-black px-8 py-3 rounded-xl font-bold hover:bg-primary hover:text-white transition-all shadow-lg"
+              activeClassName="ring-4 ring-primary/50"
+            >
+              Browse Content
+            </Focusable>
+          </motion.div>
+        ) : filteredItems.length === 0 ? (
+          <div className="text-center py-20">
+            <p className="text-gray-400 text-lg">No matches found for "{searchQuery}" in {filter !== 'all' ? filter : 'your library'}.</p>
+            <button 
+              onClick={() => { setSearchQuery(''); setFilter('all'); }}
+              className="mt-4 text-primary hover:underline"
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : (
+          <motion.div 
+            layout
+            className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 md:gap-8"
+          >
+            <AnimatePresence>
+              {filteredItems.map((item) => (
+                <motion.div
+                  layout
+                  key={item.id}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <MediaCard media={item} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </div>
     </div>
   );
 };

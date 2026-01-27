@@ -54,3 +54,16 @@ export interface SearchResult {
   total_pages: number;
   total_results: number;
 }
+
+export interface AppVersion {
+  latest: string;
+  forceUpdate: boolean;
+  releaseNotes: string;
+  platforms: {
+    macos?: string;
+    windows?: string;
+    androidtv?: string;
+    linux?: string;
+    [key: string]: string | undefined;
+  };
+}

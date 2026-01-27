@@ -3,6 +3,7 @@ import { Media } from './types';
 
 export interface SavedMedia extends Media {
   savedAt: number;
+  tmdbId?: number;
   genres?: { id: number; name: string }[];
   progress?: {
     watched: number; // Seconds watched

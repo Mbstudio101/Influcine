@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import SplashScreen from './components/SplashScreen';
@@ -12,10 +12,12 @@ import Details from './pages/Details';
 import Calendar from './pages/Calendar';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
-import Activate from './pages/Activate';
 import ProfileSelection from './pages/ProfileSelection';
-import Landing from './pages/Landing';
 import { useAuth } from './context/useAuth';
+import { checkForUpdates, getPlatformDownloadLink, skipUpdate } from './services/updateService';
+import UpdateModal from './components/UpdateModal';
+import { AppVersion } from './types';
+import pkg from '../package.json';
 
 const ProtectedRoute = ({ children, requireProfile = true }: { children: JSX.Element, requireProfile?: boolean }) => {
   const { isAuthenticated, profile, isLoading } = useAuth();
@@ -48,33 +50,55 @@ const PublicOnlyRoute = ({ children }: { children: JSX.Element }) => {
   return children;
 };
 
-import { Capacitor } from '@capacitor/core';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const isNativeApp = Capacitor.isNativePlatform() || (window as any).ipcRenderer;
-
 function App() {
   const [showSplash, setShowSplash] = useState(true);
+  const [updateAvailable, setUpdateAvailable] = useState<AppVersion | null>(null);
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const update = await checkForUpdates(pkg.version);
+        if (update) {
+          setUpdateAvailable(update);
+        }
+      } catch (error) {
+        console.error('Update check failed', error);
+      }
+    };
+    check();
+  }, []);
+
+  const handleUpdate = () => {
+    if (!updateAvailable) return;
+    const link = getPlatformDownloadLink(updateAvailable);
+    if (link) {
+      window.open(link, '_blank');
+    } else {
+      alert('Update available but no download link found for your platform.');
+    }
+  };
 
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} />;
   }
 
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={isNativeApp ? <Navigate to="/browse" replace /> : <Landing />} />
+    <>
+      {updateAvailable && (
+        <UpdateModal 
+          update={updateAvailable} 
+          onClose={() => {
+            skipUpdate(updateAvailable.latest);
+            setUpdateAvailable(null);
+          }}
+          onUpdate={handleUpdate}
+        />
+      )}
+      <Router>
+        <Routes>
+        <Route path="/" element={<Navigate to="/browse" replace />} />
         <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
         <Route path="/signup" element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>} />
-        
-        <Route 
-          path="/activate" 
-          element={
-            <ProtectedRoute requireProfile={false}>
-              <Activate />
-            </ProtectedRoute>
-          } 
-        />
         
         <Route 
           path="/profiles" 
@@ -114,6 +138,7 @@ function App() {
         />
       </Routes>
     </Router>
+    </>
   );
 }
 

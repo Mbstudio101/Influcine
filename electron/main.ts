@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session } from 'electron'
+import { app, BrowserWindow, ipcMain, session, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { autoUpdater } from 'electron-updater'
@@ -105,6 +105,12 @@ function createWindow() {
 
   // Prevent new windows (Popups) - Aggressive Ad/Popup Blocking
   win.webContents.setWindowOpenHandler(({ url }) => {
+    // Open external links in the default browser
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    }
+    
     // You can add logic here to allow specific URLs if needed, 
     // but for a streaming app, blocking all popups is usually the best policy.
     console.log('Blocked popup:', url)

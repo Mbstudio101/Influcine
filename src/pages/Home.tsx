@@ -4,55 +4,19 @@ import { getPersonalizedRecommendations, RecommendationResult } from '../service
 import { Media } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { Play, Plus, Check } from 'lucide-react';
-import { db, SavedMedia } from '../db';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../db';
+import { useWatchlist } from '../hooks/useWatchlist';
 import ContentRow from '../components/ContentRow';
 import RightSidebar from '../components/RightSidebar';
 import Focusable from '../components/Focusable';
-import { useToast } from '../context/toast';
 
 const Home: React.FC = () => {
   const [featured, setFeatured] = useState<Media | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationResult[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const navigate = useNavigate();
-  const { showToast } = useToast();
   
-  // Check if featured item is saved
-  const savedFeatured = useLiveQuery(
-    () => (featured ? db.watchlist.get(featured.id) : undefined),
-    [featured?.id]
-  );
-  const isFeaturedSaved = !!savedFeatured;
-
-  const handleSave = async (media: Media): Promise<{ ok: boolean; message?: string }> => {
-    try {
-      const compat = media as unknown as {
-        id?: number;
-        tmdbId?: number;
-        mediaId?: number;
-      };
-
-      const stableId = compat.id ?? compat.tmdbId ?? compat.mediaId;
-      if (stableId == null) {
-        return { ok: false, message: 'No valid id found for media item' };
-      }
-
-      const payload: Record<string, unknown> = {
-        ...media,
-        savedAt: Date.now(),
-        id: stableId
-      };
-      await db.watchlist.put(payload as unknown as SavedMedia, stableId);
-      return { ok: true };
-    } catch (error) {
-      console.error('Failed to save media:', error);
-      return {
-        ok: false,
-        message: error instanceof Error ? error.message : String(error)
-      };
-    }
-  };
+  const { isSaved: isFeaturedSaved, toggleWatchlist: toggleFeaturedWatchlist } = useWatchlist(featured);
 
   useEffect(() => {
     const fetchFeatured = async () => {
@@ -188,7 +152,7 @@ const Home: React.FC = () => {
             <div className="absolute bottom-0 left-0 p-10 w-full max-w-2xl z-10">
               <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/20 backdrop-blur-md border border-primary/20 text-xs font-bold text-primary uppercase tracking-wider">
                  <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-                 #{1} Trending
+                 Trending Now
               </div>
               <h1 className="text-5xl font-black mb-4 drop-shadow-2xl leading-tight text-white tracking-tight">
                 {featured.title || featured.name}
@@ -206,21 +170,7 @@ const Home: React.FC = () => {
                   Watch Now
                 </Focusable>
                 <Focusable 
-                  onClick={async () => {
-                    if (!featured) return;
-                    const result = await handleSave(featured);
-                    if (!result.ok) {
-                      showToast(
-                        result.message
-                          ? `Failed to add to your library: ${result.message}`
-                          : 'Failed to add to your library.',
-                        'error'
-                      );
-                      return;
-                    }
-                    showToast('Added to your library.', 'success');
-                    navigate('/watchlist');
-                  }}
+                  onClick={toggleFeaturedWatchlist}
                   className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all backdrop-blur-md border border-white/10 hover:scale-105 cursor-pointer"
                   activeClassName="ring-4 ring-white scale-110 z-20"
                 >

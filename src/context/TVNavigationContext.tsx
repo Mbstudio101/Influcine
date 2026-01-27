@@ -124,7 +124,6 @@ export const TVNavigationProvider: React.FC<TVNavigationProviderProps> = ({ chil
     return bestCandidate;
   }, []);
 
-  // Handle global key events
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -133,6 +132,14 @@ export const TVNavigationProvider: React.FC<TVNavigationProviderProps> = ({ chil
         tagName === 'INPUT' ||
         tagName === 'TEXTAREA' ||
         target?.isContentEditable === true;
+
+      const keyCode = (e as KeyboardEvent & { keyCode?: number }).keyCode ?? 0;
+      const isUp = e.key === 'ArrowUp' || keyCode === 38 || keyCode === 19;
+      const isDown = e.key === 'ArrowDown' || keyCode === 40 || keyCode === 20;
+      const isLeft = e.key === 'ArrowLeft' || keyCode === 37 || keyCode === 21;
+      const isRight = e.key === 'ArrowRight' || keyCode === 39 || keyCode === 22;
+      const isSelect = e.key === 'Enter' || keyCode === 13 || keyCode === 23;
+      const isBack = e.key === 'Escape' || e.key === 'Backspace' || keyCode === 4 || keyCode === 27 || keyCode === 8;
 
       if (!focusedId && elementsRef.current.size > 0) {
         // Recover focus if lost
@@ -143,58 +150,48 @@ export const TVNavigationProvider: React.FC<TVNavigationProviderProps> = ({ chil
 
       if (!focusedId) return;
 
-      switch (e.key) {
-        case 'ArrowUp': {
-          if (isInputElement) {
-            return;
-          }
-          e.preventDefault();
-          const nextUp = findNextFocus(focusedId, 'up');
-          if (nextUp) setFocusedId(nextUp);
-          break;
+      if (isUp) {
+        e.preventDefault();
+        const nextUp = findNextFocus(focusedId, 'up');
+        if (nextUp) setFocusedId(nextUp);
+        return;
+      }
+
+      if (isDown) {
+        e.preventDefault();
+        const nextDown = findNextFocus(focusedId, 'down');
+        if (nextDown) setFocusedId(nextDown);
+        return;
+      }
+
+      if (isLeft) {
+        e.preventDefault();
+        const nextLeft = findNextFocus(focusedId, 'left');
+        if (nextLeft) setFocusedId(nextLeft);
+        return;
+      }
+
+      if (isRight) {
+        e.preventDefault();
+        const nextRight = findNextFocus(focusedId, 'right');
+        if (nextRight) setFocusedId(nextRight);
+        return;
+      }
+
+      if (isSelect) {
+        e.preventDefault();
+        const el = elementsRef.current.get(focusedId);
+        if (el) el.click();
+        return;
+      }
+
+      if (isBack) {
+        if (isInputElement) {
+          return;
         }
-        case 'ArrowDown': {
-          if (isInputElement) {
-            return;
-          }
-          e.preventDefault();
-          const nextDown = findNextFocus(focusedId, 'down');
-          if (nextDown) setFocusedId(nextDown);
-          break;
-        }
-        case 'ArrowLeft': {
-          if (isInputElement) {
-            return;
-          }
-          e.preventDefault();
-          const nextLeft = findNextFocus(focusedId, 'left');
-          if (nextLeft) setFocusedId(nextLeft);
-          break;
-        }
-        case 'ArrowRight': {
-          if (isInputElement) {
-            return;
-          }
-          e.preventDefault();
-          const nextRight = findNextFocus(focusedId, 'right');
-          if (nextRight) setFocusedId(nextRight);
-          break;
-        }
-        case 'Enter': {
-          e.preventDefault();
-          const el = elementsRef.current.get(focusedId);
-          if (el) el.click();
-          break;
-        }
-        case 'Escape':
-        case 'Backspace': {
-          // Do not override normal text editing in inputs/textareas/contentEditable
-          if (isInputElement) {
-            return;
-          }
-          window.history.back();
-          break;
-        }
+        e.preventDefault();
+        window.history.back();
+        return;
       }
     };
 

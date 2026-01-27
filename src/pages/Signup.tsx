@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
 import { Mail, Lock, Loader2 } from 'lucide-react';
@@ -6,6 +6,8 @@ import { motion } from 'framer-motion';
 import Logo from '../components/Logo';
 import Focusable from '../components/Focusable';
 import { useToast } from '../context/toast';
+
+const isTVEnvironment = typeof navigator !== 'undefined' && /AFT|Amazon|Android TV|BRAVIA|SMART-TV/i.test(navigator.userAgent);
 
 const Signup: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -43,48 +45,33 @@ const Signup: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (!isTVEnvironment) return;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, []);
+
   return (
-    <div className="fixed inset-0 w-full h-full bg-black flex flex-col items-center justify-center p-4 overflow-hidden touch-none overscroll-none drag-region">
-      {/* Cinematic Background */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--tw-gradient-stops))] from-[#1a1a1a] via-black to-black z-0" />
-      
-      {/* Animated Nebulas - "Breathtaking" Ambience */}
-      <motion.div 
-        animate={{ 
-          scale: [1, 1.2, 1],
-          opacity: [0.3, 0.6, 0.3],
-          rotate: [0, 45, 0]
-        }}
-        transition={{ 
-          duration: 15, 
-          repeat: Infinity,
-          ease: "easeInOut" 
-        }}
-        className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-primary/30 blur-[100px] rounded-full pointer-events-none mix-blend-screen" 
-      />
-      <motion.div 
-        animate={{ 
-          scale: [1, 1.3, 1],
-          opacity: [0.2, 0.5, 0.2],
-          rotate: [0, -45, 0]
-        }}
-        transition={{ 
-          duration: 20, 
-          repeat: Infinity,
-          ease: "easeInOut",
-          delay: 2
-        }}
-        className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-900/40 blur-[100px] rounded-full pointer-events-none mix-blend-screen" 
-      />
-      
-      {/* Film Grain Texture Overlay */}
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none z-1" 
-           style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} 
-      />
+    <div className="fixed inset-0 w-full h-full bg-black flex flex-col items-center justify-start pt-16 md:pt-24 p-4 overflow-hidden touch-none overscroll-none drag-region">
+      {isTVEnvironment ? (
+        <div className="absolute inset-0 bg-black z-0" />
+      ) : (
+        <>
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--tw-gradient-stops))] from-[#1a1a1a] via-black to-black z-0" />
+          <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-primary/30 blur-[100px] rounded-full pointer-events-none mix-blend-screen" />
+          <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-900/40 blur-[100px] rounded-full pointer-events-none mix-blend-screen" />
+        </>
+      )}
 
       <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         transition={{ duration: 0.8, ease: "easeOut" }}
         className="w-full max-w-md bg-black/40 backdrop-blur-2xl border border-white/10 p-8 rounded-3xl shadow-2xl relative z-10 no-drag"
       >

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
 import { Avatar, AVATARS } from '../components/Avatars';
@@ -18,7 +18,7 @@ const ProfileSelection: React.FC = () => {
     async (profileId: number) => {
       try {
         await switchProfile(profileId);
-        navigate('/');
+        navigate('/browse');
       } catch (error) {
         console.error('Failed to switch profile:', error);
       }
@@ -26,11 +26,12 @@ const ProfileSelection: React.FC = () => {
     [switchProfile, navigate]
   );
 
-  useEffect(() => {
-    if (profiles.length === 1 && profiles[0].id) {
-       handleSelect(profiles[0].id);
-    }
-  }, [profiles, handleSelect]);
+  // Removed auto-select effect to allow profile switching/management
+  // useEffect(() => {
+  //   if (profiles.length === 1 && profiles[0].id) {
+  //      handleSelect(profiles[0].id);
+  //   }
+  // }, [profiles, handleSelect]);
 
   const handleAddProfile = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -83,7 +84,7 @@ const ProfileSelection: React.FC = () => {
                 </Focusable>
               ))}
 
-              {profiles.length < 1 && (
+              {profiles.length < 5 && (
                 <Focusable
                   as={motion.div}
                   whileHover={{ scale: 1.1 }}

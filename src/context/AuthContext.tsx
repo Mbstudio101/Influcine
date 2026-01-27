@@ -11,10 +11,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   const userRef = React.useRef<User | null>(null);
+  const profileRef = React.useRef<Profile | null>(null);
 
   useEffect(() => {
     userRef.current = user;
   }, [user]);
+
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
 
   // Restore session
   useEffect(() => {
@@ -84,20 +89,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                      settings: settings,
                      stats: stats
                  });
-                 
-                 // Remove duplicates if any exist (Enforce Single Profile)
-                 if (userProfiles.length > 1) {
-                     const idsToDelete = userProfiles.slice(1).map(p => p.id!);
-                     await db.profiles.bulkDelete(idsToDelete);
-                 }
              }
 
              // Refresh profiles
              userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
              setProfiles(userProfiles);
-             setProfile(userProfiles[0]); // Auto-select
-         }
-      } else {
+             
+             // Auto-select if not set
+            if (!profileRef.current) {
+                const lastProfileId = localStorage.getItem('influcine_profile_id');
+                const lastProfile = lastProfileId ? userProfiles.find(p => p.id === parseInt(lastProfileId)) : null;
+                
+                if (lastProfile) {
+                    setProfile(lastProfile);
+                } else {
+                    setProfile(userProfiles[0]);
+                }
+            }
+        }
+     } else {
         // Sign out if it was a supabase user
         if (userRef.current?.passwordHash === 'supabase_auth') {
              setUser(null);
@@ -123,14 +133,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setUser(userRecord);
                 const userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
                 
-                // Enforce single profile
-                if (userProfiles.length > 0) {
-                  setProfiles([userProfiles[0]]);
-                  setProfile(userProfiles[0]);
-                } else {
-                  setProfiles([]);
-                }
-             } else {
+                // Set profiles
+               setProfiles(userProfiles);
+               
+               // Try to restore last used profile
+               const lastProfileId = localStorage.getItem('influcine_profile_id');
+               const lastProfile = lastProfileId ? userProfiles.find(p => p.id === parseInt(lastProfileId)) : null;
+
+               if (lastProfile) {
+                  setProfile(lastProfile);
+               } else if (userProfiles.length > 0) {
+                 setProfile(userProfiles[0]);
+               }
+            } else {
                localStorage.removeItem('influcine_user_id');
                localStorage.removeItem('influcine_profile_id');
              }
@@ -158,12 +173,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user?.id) return;
     const userProfiles = await db.profiles.where('userId').equals(user.id).toArray();
     
-    // Enforce single profile view
-    if (userProfiles.length > 0) {
-      setProfiles([userProfiles[0]]);
-    } else {
-      setProfiles([]);
-    }
+    // Set profiles
+    setProfiles(userProfiles);
   };
 
   const login = async (email: string, password: string) => {
@@ -199,12 +210,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       const userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
       
-      // Enforce single profile
+      setProfiles(userProfiles);
       if (userProfiles.length > 0) {
-        setProfiles([userProfiles[0]]);
         setProfile(userProfiles[0]);
       } else {
-        setProfiles([]);
         setProfile(null);
       }
       
@@ -254,9 +263,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addProfile = async (name: string, avatarId: string, isKid: boolean = false) => {
     if (!user?.id) throw new Error('Not authenticated');
     
-    // Enforce single profile limit
+    // Enforce profile limit (optional, e.g. 5)
     const existingCount = await db.profiles.where('userId').equals(user.id).count();
-    if (existingCount >= 1) throw new Error('Single profile policy enforced. Cannot add more profiles.');
+    if (existingCount >= 5) throw new Error('Maximum number of profiles reached (5).');
 
     await db.profiles.add({
       userId: user.id,

@@ -15,7 +15,6 @@
     "dist-electron"
   ],
   "mac": {
-    "identity": null,
     "target": [
       "dmg"
     ],

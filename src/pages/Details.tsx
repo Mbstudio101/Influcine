@@ -125,7 +125,7 @@ const Details: React.FC = () => {
     } catch (error) {
       console.error('Failed to set episode for playback:', error);
     }
-    if (effectiveType) navigate(`/watch/${effectiveType}/${details.id}`);
+    if (effectiveType) navigate(`/watch/${effectiveType}/${details.id}?season=${season}&episode=${episode}`);
   };
 
   if (!details) return <div className="flex items-center justify-center h-full text-white">Loading...</div>;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Layers, PlayCircle } from 'lucide-react';
 import { getDetails } from '../services/tmdb';
 import { MediaDetails } from '../types';
@@ -17,12 +17,16 @@ import { useToast } from '../context/toast';
 const Player: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { themeColor, autoplay: autoPlayNext } = useSettings();
   const { profile } = useAuth();
   const { showToast } = useToast();
   
-  const [season, setSeason] = useState(1);
-  const [episode, setEpisode] = useState(1);
+  const urlSeason = searchParams.get('season');
+  const urlEpisode = searchParams.get('episode');
+
+  const [season, setSeason] = useState(urlSeason ? parseInt(urlSeason) : 1);
+  const [episode, setEpisode] = useState(urlEpisode ? parseInt(urlEpisode) : 1);
   const [showControls, setShowControls] = useState(true);
   const [details, setDetails] = useState<MediaDetails | null>(null);
   const [detailsError, setDetailsError] = useState<string | null>(null);
@@ -66,15 +70,21 @@ const Player: React.FC = () => {
         try {
           const saved = await db.history.get(parseInt(id));
           if (saved?.progress) {
-            // Restore season/episode for TV shows
-            if (type === 'tv' && saved.progress.season && saved.progress.episode) {
+            // Restore season/episode for TV shows ONLY if URL params are missing
+            if (!urlSeason && !urlEpisode && type === 'tv' && saved.progress.season && saved.progress.episode) {
               setSeason(saved.progress.season);
               setEpisode(saved.progress.episode);
             }
             
             // Set start time if not finished (e.g. < 95%)
+            // Only resume if we are playing the same episode as in history
             if (saved.progress.percentage < 95) {
-              setStartTime(saved.progress.watched);
+              const currentSeason = urlSeason ? parseInt(urlSeason) : season;
+              const currentEpisode = urlEpisode ? parseInt(urlEpisode) : episode;
+              
+              if (type === 'movie' || (saved.progress.season === currentSeason && saved.progress.episode === currentEpisode)) {
+                setStartTime(saved.progress.watched);
+              }
             }
           }
         } catch (error) {
@@ -83,7 +93,7 @@ const Player: React.FC = () => {
       }
     };
     loadProgress();
-  }, [type, id]);
+  }, [type, id, urlSeason, urlEpisode]);
 
   // Handle Player Events & Progress Tracking
   useEffect(() => {

@@ -464,3 +464,306 @@ const watchParty = new WatchPartyController(iframe);
 
 I want a framless window with a custom title bar and close, minimize, and maximize buttons.
 I want the UI/UX to be different not like NETFLIX. we need a better professional look and feel.
+
+
+
+
+Ugrades: v0.1.4
+=====================================================================
+CURSOR TASK SPEC — GITHUB RELEASES UPDATE SYSTEM (STORE-FREE)
+=====================================================================
+
+ROLE
+You are acting as a senior platform engineer and release engineer.
+Your responsibility is to implement a complete, reliable update system
+for an app distributed via GitHub Releases (NOT App Store / Play Store).
+
+The system must be silent when up to date and visible when action is required.
+
+---------------------------------------------------------------------
+GOAL
+---------------------------------------------------------------------
+When a new version is published on GitHub Releases:
+
+• The app detects it automatically
+• Compares installed version vs latest release
+• Notifies the user (optional or forced)
+• Provides a correct platform download link
+• Never spams the user
+• Never crashes when offline
+• Works for macOS, Windows, and Android TV APK distribution
+
+---------------------------------------------------------------------
+SOURCE OF TRUTH (LOCKED)
+---------------------------------------------------------------------
+GitHub Releases is the ONLY source of truth.
+
+Use GitHub REST API:
+GET https://api.github.com/repos/{OWNER}/{REPO}/releases/latest
+
+Do NOT scrape HTML pages.
+Do NOT hardcode version numbers.
+
+---------------------------------------------------------------------
+EXPECTED RELEASE FORMAT (REQUIRED)
+---------------------------------------------------------------------
+Each GitHub Release MUST include:
+
+• tag_name: "v1.5.0"   (semantic version)
+• body: release notes (markdown allowed)
+• assets:
+  - macOS:  *.dmg  or *.zip
+  - Windows: *.exe or *.msi
+  - Android TV: *.apk
+
+OPTIONAL (RECOMMENDED):
+• Release body includes flags:
+  FORCE_UPDATE=true
+  MIN_SUPPORTED_VERSION=1.4.0
+
+---------------------------------------------------------------------
+VERSION CHECK FLOW (MANDATORY)
+---------------------------------------------------------------------
+1) Trigger update check:
+   • On app cold launch (Splash / Bootstrap)
+   • On app resume IF last check > 24 hours
+
+2) Fetch latest release metadata from GitHub API.
+
+3) Parse:
+   • latestVersion = tag_name
+   • releaseNotes = body
+   • assets = assets[]
+
+4) Compare with local app version.
+
+---------------------------------------------------------------------
+VERSION COMPARISON RULES
+---------------------------------------------------------------------
+If currentVersion == latestVersion:
+→ App is up to date
+→ DO NOTHING (no UI, no notification)
+
+If currentVersion < MIN_SUPPORTED_VERSION:
+→ FORCE UPDATE
+→ Block app usage
+→ Show mandatory update screen
+
+If currentVersion < latestVersion:
+→ OPTIONAL UPDATE
+→ Show non-blocking notification/modal
+
+---------------------------------------------------------------------
+UPDATE UI RULES
+---------------------------------------------------------------------
+Optional Update:
+• Shown once per version
+• Can be dismissed
+• Includes:
+  - version number
+  - release notes
+  - “Update Now” button
+
+Forced Update:
+• Cannot be dismissed
+• Blocks navigation
+• Only action: “Update Now”
+• App remains unusable until updated
+
+UI must match app branding.
+No default alert dialogs unless styled.
+
+---------------------------------------------------------------------
+PLATFORM ASSET SELECTION (REQUIRED)
+---------------------------------------------------------------------
+From GitHub release assets, select download URL by platform:
+
+macOS:
+• Prefer .dmg, fallback to .zip
+
+Windows:
+• Prefer .exe or .msi
+
+Android TV:
+• Prefer .apk
+
+If platform asset is missing:
+• Show error message
+• Do NOT crash
+• Log diagnostic info
+
+---------------------------------------------------------------------
+DOWNLOAD & INSTALL BEHAVIOR
+---------------------------------------------------------------------
+Desktop (macOS / Windows):
+• Clicking “Update Now” opens browser to asset URL
+• OR downloads in-app if already supported
+• App may request restart after install (optional)
+
+Android TV:
+• Clicking “Update Now” opens download intent
+• OR launches installer if permissions allow
+• Gracefully handle install permissions failure
+
+NO silent auto-install without user intent.
+
+---------------------------------------------------------------------
+STATE & SPAM PREVENTION (REQUIRED)
+---------------------------------------------------------------------
+Persist locally:
+• lastCheckedAt
+• lastNotifiedVersion
+
+Rules:
+• Do NOT show same update notification twice
+• Do NOT re-fetch more than once per 24h unless forced
+• Do NOT notify again until a newer version exists
+
+---------------------------------------------------------------------
+OFFLINE & FAILURE HANDLING
+---------------------------------------------------------------------
+If GitHub API fails:
+• Skip update check silently
+• App must continue normally
+• No error popups
+
+If API rate-limited:
+• Back off
+• Retry next launch window
+
+---------------------------------------------------------------------
+SECURITY & SAFETY RULES
+---------------------------------------------------------------------
+• Do NOT embed GitHub tokens unless required
+• If token is used:
+  - store in env
+  - never hardcode
+• Validate version strings
+• Never execute downloaded binaries automatically
+• Never trust remote metadata blindly
+
+---------------------------------------------------------------------
+LOGGING (DEBUG ONLY)
+---------------------------------------------------------------------
+Log:
+• update check started
+• update check skipped (cooldown)
+• version comparison result
+• update required / optional
+
+Logs must NOT expose tokens or URLs with secrets.
+
+---------------------------------------------------------------------
+FILES TO ADD / MODIFY
+---------------------------------------------------------------------
+Client:
+• UpdateService (GitHub API fetch + logic)
+• VersionComparator utility
+• UpdateModal / ForcedUpdateScreen
+• Bootstrap/Splash integration
+
+Optional:
+• ReleaseNotes screen
+
+---------------------------------------------------------------------
+FINAL ACCEPTANCE CHECKLIST
+---------------------------------------------------------------------
+[ ] App fetches latest GitHub release
+[ ] App skips all UI when up to date
+[ ] Optional updates notify once per version
+[ ] Forced updates block app correctly
+[ ] Correct platform asset is selected
+[ ] Offline mode works without issues
+[ ] No notification spam
+[ ] No crashes or weird handlers
+[ ] Update UX matches app branding
+
+If ANY item fails, fix before finalizing.
+=====================================================================
+END TASK
+=====================================================================
+
+
+
+Next Upgrade : v0.1.5
+
+=====================================================================
+CURSOR TASK — TV SHOW EPISODES VIEW (SEASONS + EPISODES)
+=====================================================================
+
+ROLE
+You are a senior product designer + senior frontend + senior backend engineer.
+
+Goal: add a breath-taking premium TV episodes experience with season toggling,
+episode progress tracking, and clean interaction for desktop and TV on top where it says cast
+
+---------------------------------------------------------------------
+REQUIRED FEATURES
+---------------------------------------------------------------------
+• Episodes tab on TV show details page
+• Season selector (switch seasons)
+• Episode list per season
+• Resume logic (episode-aware)
+• Episode progress tracking per profile
+• Works on desktop and Android TV
+
+---------------------------------------------------------------------
+BACKEND REQUIREMENTS
+---------------------------------------------------------------------
+Implement:
+GET /v1/shows/:showId/seasons
+GET /v1/shows/:showId/seasons/:seasonNumber/episodes?profileId=...
+
+Ensure:
+• Episodes sorted by episode_number asc
+• Progress merged into episode response
+• Fast response (indexed by show_id + season_number)
+
+---------------------------------------------------------------------
+FRONTEND REQUIREMENTS
+---------------------------------------------------------------------
+Episodes Tab:
+• Default to last watched season OR season 1
+• Season selector changes episodes without route change
+• Smooth transition between seasons (loading skeleton allowed)
+• Episode cards show:
+  - episode number
+  - title
+  - runtime
+  - progress bar (if started)
+  - watched indicator (if completed)
+
+Play Behavior:
+• “Play” resumes last watched episode
+• Auto-advance to next episode if completed
+• Auto-advance season if last episode completed
+
+---------------------------------------------------------------------
+ANDROID TV RULES
+---------------------------------------------------------------------
+• All items must be focusable
+• Season selector must be navigable via D-pad
+• Episode list must preserve focus on season change
+• Focus ring must be visible and consistent
+
+---------------------------------------------------------------------
+DATA RULES
+---------------------------------------------------------------------
+• Episode progress is per profile
+• Episode completion ≥ 90%
+• Hide progress bar if < 2%
+
+---------------------------------------------------------------------
+FINAL EXIT GATE
+---------------------------------------------------------------------
+[ ] Seasons load correctly
+[ ] Switching seasons works without navigation
+[ ] Episodes display cleanly
+[ ] Progress tracking is accurate
+[ ] Resume logic works end-to-end
+[ ] Android TV navigation works
+[ ] No placeholder or fake logic
+
+=====================================================================
+END TASK
+=====================================================================

@@ -14,6 +14,8 @@ import { recordSourceSuccess, recordSourceFailure, getBestSource } from '../serv
 import { AlertTriangle, CheckCircle } from 'lucide-react';
 import { useToast } from '../context/toast';
 
+import { downloadService, DownloadItem } from '../services/downloadService';
+
 const Player: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
   const navigate = useNavigate();
@@ -34,11 +36,14 @@ const Player: React.FC = () => {
   const [startTime, setStartTime] = useState(0);
   const [isNativePlayer, setIsNativePlayer] = useState(false);
   const [verifiedSource, setVerifiedSource] = useState<string | null>(null);
+  const [downloadItem, setDownloadItem] = useState<DownloadItem | undefined>(undefined);
   
   const hasResumedRef = useRef(false);
   const lastXPAwardTimeRef = useRef(0);
   const lastStatUpdateTimeRef = useRef(0);
   const accumulatedTimeRef = useRef(0);
+  const currentTimeRef = useRef(0);
+  const isPlayingRef = useRef(false);
 
   const getSrc = useCallback(() => {
     const theme = themeColor.replace('#', '');
@@ -62,6 +67,24 @@ const Player: React.FC = () => {
     };
     checkSource();
   }, [id, type, season, episode]);
+
+  // Check for download
+  useEffect(() => {
+    const checkDownload = async () => {
+      if (type && id) {
+        const downloadId = type === 'movie' 
+          ? `movie-${id}` 
+          : `tv-${id}-s${season}-e${episode}`;
+        const item = await downloadService.getDownload(downloadId);
+        if (item && item.status === 'completed') {
+          setDownloadItem(item);
+        } else {
+          setDownloadItem(undefined);
+        }
+      }
+    };
+    checkDownload();
+  }, [type, id, season, episode]);
 
   // Load saved progress
   useEffect(() => {
@@ -93,7 +116,7 @@ const Player: React.FC = () => {
       }
     };
     loadProgress();
-  }, [type, id, urlSeason, urlEpisode]);
+  }, [type, id, urlSeason, urlEpisode, season, episode]);
 
   // Handle Player Events & Progress Tracking
   useEffect(() => {
@@ -116,6 +139,7 @@ const Player: React.FC = () => {
         
         // --- Play Event: Check start time achievements ---
         if (playerEvent === 'play') {
+          isPlayingRef.current = true;
           if (startTime > 0 && !hasResumedRef.current) {
             // Send seek command
             const iframe = document.querySelector('iframe');
@@ -254,6 +278,53 @@ const Player: React.FC = () => {
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
   }, [details, type, season, episode, startTime, profile, getSrc, id]);
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+
+      const iframe = document.querySelector('iframe');
+      if (!iframe || !iframe.contentWindow) return;
+
+      switch (e.code) {
+        case 'Space':
+          e.preventDefault();
+          iframe.contentWindow.postMessage({ command: isPlayingRef.current ? 'pause' : 'play' }, '*');
+          isPlayingRef.current = !isPlayingRef.current; // Optimistic update
+          showToast(isPlayingRef.current ? 'Play' : 'Pause', 'success');
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          iframe.contentWindow.postMessage({ command: 'seek', time: currentTimeRef.current + 10 }, '*');
+          showToast('+10s', 'success');
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          iframe.contentWindow.postMessage({ command: 'seek', time: Math.max(0, currentTimeRef.current - 10) }, '*');
+          showToast('-10s', 'success');
+          break;
+        case 'KeyF':
+          e.preventDefault();
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+          } else {
+            document.exitFullscreen();
+          }
+          break;
+        case 'Escape':
+          if (!document.fullscreenElement) {
+             navigate(-1);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [navigate, showToast]);
+
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -404,11 +475,17 @@ const Player: React.FC = () => {
 
             <Focusable
               onClick={() => setIsNativePlayer(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 hover:bg-primary/20 backdrop-blur-md border border-white/10 transition-all group/native cursor-pointer"
+              className={`flex items-center gap-2 px-4 py-2 rounded-full backdrop-blur-md border transition-all group/native cursor-pointer ${
+                downloadItem 
+                  ? 'bg-green-500/20 hover:bg-green-500/30 border-green-500/30' 
+                  : 'bg-white/10 hover:bg-primary/20 border-white/10'
+              }`}
               activeClassName="ring-2 ring-primary scale-105"
             >
-              <PlayCircle size={20} className="text-primary group-hover/native:text-white transition-colors" />
-              <span className="text-sm font-bold text-white/90">Try Native Player (4K Demo)</span>
+              <PlayCircle size={20} className={downloadItem ? "text-green-400" : "text-primary group-hover/native:text-white transition-colors"} />
+              <span className={`text-sm font-bold ${downloadItem ? "text-green-100" : "text-white/90"}`}>
+                {downloadItem ? 'Play Downloaded' : 'Try Native Player (4K Demo)'}
+              </span>
             </Focusable>
           </div>
 

@@ -2,17 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getDetails, getCredits, getSimilar, getImageUrl, getSeasonDetails } from '../services/tmdb';
 import { MediaDetails, Episode } from '../types';
-import { Play, Plus, Check, Star, ArrowLeft, X, Youtube, ExternalLink } from 'lucide-react';
+import { Play, Plus, Check, Star, ArrowLeft, X, Youtube, ExternalLink, Download } from 'lucide-react';
 import { db } from '../db';
 import { useAuth } from '../context/useAuth';
 import ContentRow from '../components/ContentRow';
 import Focusable from '../components/Focusable';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '../context/toast';
+import { downloadService } from '../services/downloadService';
 
 const Details: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [details, setDetails] = useState<MediaDetails | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [credits, setCredits] = useState<any>(null);
@@ -105,6 +108,16 @@ const Details: React.FC = () => {
       console.error('Failed to save history:', error);
     }
     if (effectiveType) navigate(`/watch/${effectiveType}/${details.id}`);
+  };
+
+  const handleDownload = async () => {
+    if (!details) return;
+    try {
+      await downloadService.startDownload(details);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Download failed';
+      showToast(message, 'error');
+    }
   };
 
   const handlePlayEpisode = async (season: number, episode: number) => {
@@ -255,6 +268,14 @@ const Details: React.FC = () => {
               >
                 {isSaved ? <Check size={20} /> : <Plus size={20} />}
                 {isSaved ? 'In Library' : 'Add to Library'}
+              </button>
+              
+              <button 
+                onClick={handleDownload}
+                className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-3 transition-all backdrop-blur-md border border-white/10 hover:scale-105 text-lg"
+              >
+                <Download size={20} />
+                Download
               </button>
             </div>
           </div>

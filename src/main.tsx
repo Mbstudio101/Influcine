@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
+import ErrorBoundary from './components/ErrorBoundary'
 import { SettingsProvider } from './context/SettingsContext'
 import { AuthProvider } from './context/AuthContext'
 import { TVNavigationProvider } from './context/TVNavigationContext'
@@ -9,15 +10,17 @@ import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <AuthProvider>
-      <SettingsProvider>
-        <TVNavigationProvider>
-          <ToastProvider>
-            <App />
-          </ToastProvider>
-        </TVNavigationProvider>
-      </SettingsProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <SettingsProvider>
+          <TVNavigationProvider>
+            <ToastProvider>
+              <App />
+            </ToastProvider>
+          </TVNavigationProvider>
+        </SettingsProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   </React.StrictMode>,
 )
 

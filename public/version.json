@@ -1,0 +1,19 @@
+{
+  "version": "0.1.8",
+  "notes": "Fixed ad popups on video player. Improved stability.",
+  "pub_date": "2026-01-27T12:00:00Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "url": "https://github.com/marvens/Influcine/releases/download/v0.1.8/Influcine-0.1.8-arm64.dmg"
+    },
+    "darwin-x64": {
+      "url": "https://github.com/marvens/Influcine/releases/download/v0.1.8/Influcine-0.1.8.dmg"
+    },
+    "win32-x64": {
+      "url": "https://github.com/marvens/Influcine/releases/download/v0.1.8/Influcine-0.1.8.exe"
+    },
+    "android": {
+      "url": "https://github.com/marvens/Influcine/releases/download/v0.1.8/Influcine-0.1.8.apk"
+    }
+  }
+}

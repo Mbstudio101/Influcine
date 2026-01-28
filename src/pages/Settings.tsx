@@ -9,16 +9,20 @@ import {
   Trash2, 
   RefreshCw,
   Globe,
-  Check
+  Check,
+  Shield,
+  FileText,
+  Lock
 } from 'lucide-react';
 import { db } from '../db';
 import { useSettings, Settings as AppSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/useAuth';
 import { Avatar } from '../components/Avatars';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 
 const Settings: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'appearance' | 'player' | 'account' | 'storage'>('appearance');
+  const [activeTab, setActiveTab] = useState<'appearance' | 'player' | 'account' | 'storage' | 'privacy'>('appearance');
   const navigate = useNavigate();
   const { user, profile: authProfile } = useAuth();
   
@@ -83,6 +87,7 @@ const Settings: React.FC = () => {
           <TabButton id="player" icon={Monitor} label="Player & Playback" />
           <TabButton id="account" icon={User} label="Account" />
           <TabButton id="storage" icon={Database} label="Storage & Data" />
+          <TabButton id="privacy" icon={Shield} label="Privacy & Terms" />
         </div>
 
         {/* Content Area */}
@@ -321,6 +326,119 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
               </section>
+            </div>
+          )}
+
+          {/* Privacy & Terms Tab */}
+          {activeTab === 'privacy' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {/* Header Card */}
+              <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-primary/20 via-purple-900/10 to-black border border-white/10 p-8">
+                <div className="absolute top-0 right-0 p-8 opacity-20">
+                  <Shield size={120} className="text-primary rotate-12" />
+                </div>
+                <div className="relative z-10">
+                  <h2 className="text-3xl font-black mb-2 text-white">Legal Center</h2>
+                  <p className="text-gray-300 max-w-lg text-lg">
+                    Transparency is our core value. Here's how we handle your data and the rules that govern our service.
+                  </p>
+                  <div className="mt-6 flex gap-3">
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-bold uppercase tracking-wider">
+                      <Check size={12} strokeWidth={3} />
+                      <span>GDPR Compliant</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold uppercase tracking-wider">
+                      <Lock size={12} strokeWidth={3} />
+                      <span>End-to-End Encrypted</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-6">
+                {/* Privacy Policy Card */}
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="group relative bg-white/5 hover:bg-white/10 border border-white/5 hover:border-primary/30 rounded-2xl p-6 transition-all duration-300 hover:shadow-[0_0_30px_rgba(124,58,237,0.1)]"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="p-3 rounded-xl bg-primary/20 text-primary group-hover:scale-110 transition-transform duration-300">
+                      <Lock size={24} />
+                    </div>
+                    <span className="text-xs font-medium text-gray-500 bg-black/30 px-2 py-1 rounded">Last updated: Jan 2026</span>
+                  </div>
+                  
+                  <h3 className="text-xl font-bold mb-2 text-white group-hover:text-primary transition-colors">Privacy Policy</h3>
+                  <p className="text-gray-400 text-sm mb-6 leading-relaxed">
+                    We collect minimal data necessary for synchronization across devices. Your watch history is stored locally first and encrypted when synced. We do not sell your personal data to third parties.
+                  </p>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 text-sm text-gray-300">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                      <span>Local-first architecture</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm text-gray-300">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                      <span>No third-party tracking cookies</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm text-gray-300">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                      <span>Data deletion available anytime</span>
+                    </div>
+                  </div>
+
+                  <button className="mt-6 w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 text-sm font-bold transition-all flex items-center justify-center gap-2 group-hover:text-white">
+                    Read Full Policy <ChevronRight size={16} />
+                  </button>
+                </motion.div>
+
+                {/* Terms of Service Card */}
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="group relative bg-white/5 hover:bg-white/10 border border-white/5 hover:border-primary/30 rounded-2xl p-6 transition-all duration-300 hover:shadow-[0_0_30px_rgba(124,58,237,0.1)]"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="p-3 rounded-xl bg-blue-500/20 text-blue-400 group-hover:scale-110 transition-transform duration-300">
+                      <FileText size={24} />
+                    </div>
+                    <span className="text-xs font-medium text-gray-500 bg-black/30 px-2 py-1 rounded">Version 2.1</span>
+                  </div>
+                  
+                  <h3 className="text-xl font-bold mb-2 text-white group-hover:text-blue-400 transition-colors">Terms of Service</h3>
+                  <p className="text-gray-400 text-sm mb-6 leading-relaxed">
+                    By using Influcine, you agree to fair usage policies. This app is a content aggregator and does not host copyrighted files directly. Users are responsible for their content consumption sources.
+                  </p>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 text-sm text-gray-300">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                      <span>Fair usage policy</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm text-gray-300">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                      <span>Content aggregation disclaimer</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm text-gray-300">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                      <span>Community guidelines</span>
+                    </div>
+                  </div>
+
+                  <button className="mt-6 w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 text-sm font-bold transition-all flex items-center justify-center gap-2 group-hover:text-white">
+                    Read Terms of Service <ChevronRight size={16} />
+                  </button>
+                </motion.div>
+              </div>
+
+              {/* Contact / Support Footer */}
+              <div className="flex items-center justify-center py-6 text-gray-500 text-sm">
+                <p>Questions about legal? <span className="text-primary cursor-pointer hover:underline">Contact Legal Team</span></p>
+              </div>
             </div>
           )}
         </div>

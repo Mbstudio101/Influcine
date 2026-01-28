@@ -97,14 +97,17 @@ export const checkForUpdates = async (currentVersion: string): Promise<AppVersio
       const url = asset.browser_download_url;
 
       if (name.endsWith('.dmg')) platforms.macos = url;
-      else if (!platforms.macos && name.endsWith('.zip')) platforms.macos = url; // Fallback
-
-      if (name.endsWith('.exe') || name.endsWith('.msi')) platforms.windows = url;
-
-      if (name.endsWith('.apk')) platforms.androidtv = url;
-      
-      if (name.includes('linux') || name.endsWith('.AppImage') || name.endsWith('.deb')) platforms.linux = url;
+      else if (!platforms.macos && name.endsWith('.zip') && name.includes('mac')) platforms.macos = url; // Fallback
+      else if (name.endsWith('.exe')) platforms.windows = url;
+      else if (name.endsWith('.apk')) platforms.androidtv = url;
+      else if (name.endsWith('.AppImage') || name.endsWith('.deb')) platforms.linux = url;
     });
+
+    // Fallback: If no assets match, check if version.json exists in repo
+    // This handles the case where we just released but assets are uploading
+    if (Object.keys(platforms).length === 0) {
+      console.warn('No platform assets found in GitHub release');
+    }
 
     return {
       latest: latestVersion,

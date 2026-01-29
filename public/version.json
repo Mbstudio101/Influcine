@@ -1,16 +1,16 @@
 {
-  "version": "0.1.8",
-  "notes": "Fixed ad popups on video player. Improved stability.",
+  "version": "0.1.9",
+  "notes": "Added Premium Cinema Audio experience with dynamic loudness normalization. Improved player UI.",
   "pub_date": "2026-01-27T12:00:00Z",
   "platforms": {
     "macos": {
-      "url": "https://github.com/marvens/Influcine/releases/download/v0.1.8/Influcine-Mac-0.1.8-Installer.dmg"
+      "url": "https://github.com/marvens/Influcine/releases/download/v0.1.9/Influcine-Mac-0.1.9-Installer.dmg"
     },
     "windows": {
-      "url": "https://github.com/marvens/Influcine/releases/download/v0.1.8/Influcine-0.1.8.exe"
+      "url": "https://github.com/marvens/Influcine/releases/download/v0.1.9/Influcine-0.1.9.exe"
     },
     "androidtv": {
-      "url": "https://github.com/marvens/Influcine/releases/download/v0.1.8/app-release.apk"
+      "url": "https://github.com/marvens/Influcine/releases/download/v0.1.9/app-release.apk"
     }
   }
 }

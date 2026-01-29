@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { ToastContext, ToastVariant } from './toast';
 
 interface Toast {
@@ -22,8 +22,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setToasts((current) => current.filter((toast) => toast.id !== id));
   };
 
+  const value = useMemo(() => ({ showToast }), [showToast]);
+
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={value}>
       {children}
       <div className="fixed inset-x-0 top-4 z-60 flex justify-center pointer-events-none">
         <div className="w-full max-w-md px-4 space-y-2">

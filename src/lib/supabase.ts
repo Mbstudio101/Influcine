@@ -7,13 +7,30 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase credentials missing! Authentication and Sync will not work.');
+const isValidUrl = (url: string) => {
+  try {
+    return url && url.startsWith('http') && !url.includes('your_supabase_url');
+  } catch {
+    return false;
+  }
+};
+
+export const isSupabaseConfigured = !!supabaseUrl && !!supabaseAnonKey && 
+                                   isValidUrl(supabaseUrl) &&
+                                   !supabaseUrl.includes('placeholder') && 
+                                   !supabaseAnonKey.includes('placeholder');
+
+if (!isSupabaseConfigured) {
+  // Supabase is not configured. 
+  // Running in local/offline mode.
 }
 
-export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder',
+// Singleton pattern to prevent "Multiple GoTrueClient instances" warning during HMR
+const globalSupabase = globalThis as unknown as { _supabase: ReturnType<typeof createClient> | undefined };
+
+export const supabase = globalSupabase._supabase ?? createClient(
+  isSupabaseConfigured ? supabaseUrl : 'https://placeholder.supabase.co',
+  isSupabaseConfigured ? supabaseAnonKey : 'placeholder',
   {
     auth: {
       persistSession: true,
@@ -22,3 +39,7 @@ export const supabase = createClient(
     },
   }
 );
+
+if (import.meta.env.DEV) {
+  globalSupabase._supabase = supabase;
+}

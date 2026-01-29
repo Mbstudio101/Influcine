@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Media } from '../types';
 import MediaCard from './MediaCard';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -6,30 +7,30 @@ import Focusable from './Focusable';
 
 interface ContentRowProps {
   title: string;
-  fetcher: () => Promise<Media[]>;
+  fetcher?: () => Promise<Media[]>;
+  data?: Media[];
   cardSize?: 'small' | 'medium' | 'large';
+  staleTime?: number;
 }
 
-const ContentRow: React.FC<ContentRowProps> = ({ title, fetcher, cardSize = 'medium' }) => {
-  const [media, setMedia] = useState<Media[]>([]);
-  const [loading, setLoading] = useState(true);
+const ContentRow: React.FC<ContentRowProps> = ({ title, fetcher, data, cardSize = 'medium', staleTime = 1000 * 60 * 15 }) => {
   const rowRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(true);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const data = await fetcher();
-        setMedia(data);
-      } catch (error) {
-        console.error(`Failed to fetch data for ${title}:`, error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [fetcher, title]);
+  const { data: fetchedMedia = [], isLoading: isFetching, error } = useQuery({
+    queryKey: ['content-row', title],
+    queryFn: fetcher || (() => Promise.resolve([])),
+    enabled: !!fetcher && !data,
+    staleTime,
+  });
+
+  const media = data || fetchedMedia;
+  const loading = !data && !!fetcher && isFetching;
+
+  if (error) {
+    console.error(`Failed to fetch data for ${title}:`, error);
+  }
 
   const handleScroll = () => {
     if (rowRef.current) {

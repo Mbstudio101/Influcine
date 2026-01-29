@@ -9,6 +9,7 @@ import TitleBar from './TitleBar';
 import Logo from './Logo';
 import Focusable from './Focusable';
 import { useToast } from '../context/toast';
+import { usePlayer } from '../context/PlayerContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -55,6 +56,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { showToast } = useToast();
+  const { state } = usePlayer();
+  const isPlayerFull = state.mode === 'full';
   const dragStyle: React.CSSProperties & { WebkitAppRegion?: string } = { WebkitAppRegion: 'drag' };
 
   useEffect(() => {
@@ -99,7 +102,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <TitleBar className="left-20 right-0" />
 
       {/* Sidebar - Fixed to Top-Left */}
-      <div className="fixed left-0 top-0 bottom-0 z-110 w-20 hover:w-64 bg-black/80 backdrop-blur-2xl border-r border-white/5 flex flex-col transition-all duration-300 group">
+      <div className={`fixed left-0 top-0 bottom-0 z-210 w-20 ${isPlayerFull ? '' : 'hover:w-64'} bg-black/80 backdrop-blur-2xl border-r border-white/5 flex flex-col transition-all duration-300 group`}>
         <div className="h-10 flex items-center px-4 overflow-hidden shrink-0" style={dragStyle}>
            <Logo 
              size="sm" 

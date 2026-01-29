@@ -179,6 +179,11 @@ export const TVNavigationProvider: React.FC<TVNavigationProviderProps> = ({ chil
       }
 
       if (isSelect) {
+        // If we are in an input field, allow default behavior (form submission)
+        if (isInputElement) {
+            return;
+        }
+
         e.preventDefault();
         const el = elementsRef.current.get(focusedId);
         if (el) el.click();

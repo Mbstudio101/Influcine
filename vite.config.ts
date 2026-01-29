@@ -2,6 +2,9 @@ import { defineConfig } from 'vite'
 import path from 'node:path'
 import electron from 'vite-plugin-electron/simple'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -14,6 +17,23 @@ export default defineConfig({
       main: {
         // Shortcut of `build.lib.entry`.
         entry: 'electron/main.ts',
+        vite: {
+          build: {
+            rollupOptions: {
+              external: ['better-sqlite3'],
+              output: {
+                banner: `
+import { createRequire as topLevelCreateRequire } from 'node:module';
+import { fileURLToPath as topLevelFileURLToPath } from 'node:url';
+import { dirname as topLevelDirname } from 'node:path';
+const require = topLevelCreateRequire(import.meta.url);
+const __filename = topLevelFileURLToPath(import.meta.url);
+const __dirname = topLevelDirname(__filename);
+`,
+              },
+            },
+          },
+        },
       },
       preload: {
         // Shortcut of `build.rollupOptions.input`.

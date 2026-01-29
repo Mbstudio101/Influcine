@@ -1,5 +1,6 @@
 import { db, QueryCache } from '../db';
 import { searchMulti } from './tmdb';
+import { searchLocalIMDB } from './imdb-local';
 import { Media } from '../types';
 import { normalizeString } from '../utils/stringUtils';
 
@@ -22,40 +23,101 @@ export class VideoAgentService {
     const now = Date.now();
 
     // 1. Exact Cache Match
-    const exactMatch = await db.queryCache
-      .where('normalizedQuery')
-      .equals(normalizedQuery)
-      .first();
+    try {
+      const exactMatch = await db.queryCache
+        .where('normalizedQuery')
+        .equals(normalizedQuery)
+        .first();
 
-    if (exactMatch && (now - exactMatch.timestamp < CACHE_TTL)) {
-      await this.updateHitCount(exactMatch);
-      return {
-        results: exactMatch.results,
-        source: 'cache',
-        confidence: 1.0,
-        query: userQuery
-      };
+      if (exactMatch && (now - exactMatch.timestamp < CACHE_TTL)) {
+        await this.updateHitCount(exactMatch);
+        return {
+          results: exactMatch.results,
+          source: 'cache',
+          confidence: 1.0,
+          query: userQuery
+        };
+      }
+    } catch (cacheError) {
+      console.warn('VideoAgent: Cache lookup failed, proceeding to fetch', cacheError);
     }
 
-    // 2. Fetch from External Sources (TMDB for now, expandable)
+    // 2. Fetch from External Sources (TMDB + Local IMDB)
     try {
-      console.log(`VideoAgent: Fetching fresh content for "${userQuery}"`);
-      const results = await searchMulti(userQuery);
+      if (import.meta.env.DEV) {
+        console.log(`VideoAgent: Fetching fresh content for "${userQuery}"`);
+      }
+      
+      const [tmdbResults, localImdbResults] = await Promise.all([
+        searchMulti(userQuery).catch(e => {
+          if (import.meta.env.DEV) {
+            console.error('TMDB Search failed', e);
+          }
+          return [] as Media[];
+        }),
+        searchLocalIMDB(userQuery).catch(e => {
+          if (import.meta.env.DEV) {
+            console.warn('Local IMDB Search failed', e);
+          }
+          return [];
+        })
+      ]);
+
+      // Convert Local IMDB results to Media objects
+      const localMedia: Media[] = localImdbResults.map(item => ({
+        id: 0, // Placeholder
+        imdb_id: item.tconst,
+        title: item.primaryTitle,
+        name: item.primaryTitle,
+        poster_path: null,
+        backdrop_path: null,
+        overview: `(Local Database) Released: ${item.startYear || 'N/A'}. Rating: ${item.averageRating || 'N/A'}/10.`,
+        vote_average: item.averageRating || 0,
+        release_date: item.startYear ? `${item.startYear}-01-01` : undefined,
+        first_air_date: item.startYear ? `${item.startYear}-01-01` : undefined,
+        media_type: item.titleType === 'tvSeries' ? 'tv' : 'movie',
+        popularity: item.numVotes || 0
+      }));
+
+      // Merge results
+      const results = [...tmdbResults];
+      
+      for (const local of localMedia) {
+        const isDuplicate = results.some(tmdb => {
+          const tmdbTitle = (tmdb.title || tmdb.name || '').toLowerCase();
+          const localTitle = (local.title || local.name || '').toLowerCase();
+          const tmdbYear = (tmdb.release_date || tmdb.first_air_date || '').substring(0, 4);
+          const localYear = (local.release_date || '').substring(0, 4);
+          
+          return tmdbTitle === localTitle && (Math.abs(parseInt(tmdbYear) - parseInt(localYear)) <= 1);
+        });
+        
+        if (!isDuplicate) {
+          results.push(local);
+        }
+      }
+
+      // Sort by popularity
+      results.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
       
       // 4. Cache the new results
       // Filter out people/irrelevant stuff if needed, but searchMulti returns mixed
       // We store it all for now
       
-      await db.queryCache.add({
-        query: userQuery,
-        normalizedQuery,
-        results,
-        timestamp: now,
-        hitCount: 1
-      });
+      try {
+        await db.queryCache.add({
+          query: userQuery,
+          normalizedQuery,
+          results,
+          timestamp: now,
+          hitCount: 1
+        });
 
-      // Cleanup old cache asynchronously
-      this.cleanupCache();
+        // Cleanup old cache asynchronously
+        this.cleanupCache();
+      } catch (cacheWriteError) {
+        console.warn('VideoAgent: Failed to cache results, but search succeeded', cacheWriteError);
+      }
 
       return {
         results,
@@ -104,14 +166,9 @@ export class VideoAgentService {
   /**
    * Helper to verify if a specific media item has a known working source
    */
-  async getVerifiedSource(tmdbId: number, season?: number, episode?: number) {
-    return db.sourceMemory
-      .where('[tmdbId+season+episode]')
-      .equals([tmdbId, season || 0, episode || 0])
-      .filter(s => s.isVerified)
-      .sortBy('successRate')
-      .then(sources => sources[0]?.url);
-  }
+  // async getVerifiedSource(tmdbId: number, season?: number, episode?: number) {
+  //   return null;
+  // }
 }
 
 export const VideoAgent = new VideoAgentService();

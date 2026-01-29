@@ -1,14 +1,27 @@
 import { app, BrowserWindow, ipcMain, session, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import fs from 'node:fs'
 import { autoUpdater } from 'electron-updater'
 import log from 'electron-log'
+import Database from 'better-sqlite3'
+
+// Suppress security warnings in development
+if (process.env.VITE_DEV_SERVER_URL) {
+  process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
+}
+
+// Fix for "GPU process exited unexpectedly" and "Network service crashed" during HMR
+// Disabling hardware acceleration improves stability during development at the cost of performance
+if (!app.isPackaged) {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('no-sandbox');
+  // console.log('Hardware acceleration and sandbox disabled for development stability');
+}
 
 // Configure logging
 log.transports.file.level = 'info';
 autoUpdater.logger = log;
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
 //
@@ -19,7 +32,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // │ │ ├── main.js
 // │ │ └── preload.mjs
 // │
-process.env.APP_ROOT = path.join(__dirname, '..')
+process.env.APP_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 // 🚧 Use ['ENV_NAME'] avoid vite:define plugin - Vite@2.x
 export const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
@@ -33,6 +46,61 @@ if (process.platform === 'darwin') {
   app.dock.setIcon(path.join(process.env.VITE_PUBLIC, 'icon.png'));
 }
 app.setName('Influcine');
+
+// Initialize IMDB DB
+let imdbDb: ReturnType<typeof Database> | null = null;
+
+function initImdbDb() {
+  try {
+    const desktopPath = path.join(app.getPath('desktop'), 'IMDB', 'imdb.db');
+    const devPath = path.join(process.env.APP_ROOT, 'local-data/imdb.db');
+    const prodPath = path.join(process.resourcesPath, 'imdb.db');
+    
+    // Priority: Desktop (User Custom) -> Dev -> Prod
+    let dbPath = '';
+    
+    if (fs.existsSync(desktopPath)) {
+      dbPath = desktopPath;
+    } else if (process.env.VITE_DEV_SERVER_URL && fs.existsSync(devPath)) {
+      dbPath = devPath;
+    } else {
+      dbPath = prodPath;
+    }
+      
+    if (fs.existsSync(dbPath)) {
+      imdbDb = new Database(dbPath, { readonly: true });
+      console.log('IMDB Database connected at', dbPath);
+    } else {
+       console.log('IMDB Database not found. Checked:', { desktopPath, devPath, prodPath });
+    }
+  } catch (err) {
+    console.error('Failed to init IMDB DB:', err);
+  }
+}
+
+// IPC Handler for IMDB Search
+ipcMain.handle('imdb-search', (_event, { query }) => {
+  if (!imdbDb) {
+    initImdbDb();
+    if (!imdbDb) return { results: [], error: 'Database not loaded' };
+  }
+  
+  try {
+    const stmt = imdbDb.prepare(`
+      SELECT t.tconst, t.primaryTitle, t.startYear, t.titleType, r.averageRating, r.numVotes
+      FROM titles t
+      LEFT JOIN ratings r ON t.tconst = r.tconst
+      WHERE t.primaryTitle LIKE ? AND t.titleType IN ('movie', 'tvSeries')
+      ORDER BY r.numVotes DESC NULLS LAST
+      LIMIT 20
+    `);
+    const results = stmt.all(`%${query}%`);
+    return { results };
+  } catch (err: unknown) {
+    if (!app.isPackaged) console.error('IMDB Search Error:', err);
+    return { results: [], error: 'Query failed' };
+  }
+});
 
 let win: BrowserWindow | null
 
@@ -50,9 +118,24 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false, // Allow cross-origin for iframes if needed
+      // Security: Disable webSecurity to avoid CORS issues with external APIs/streams
+      webSecurity: false,
       autoplayPolicy: 'no-user-gesture-required',
+      enableBlinkFeatures: 'AudioTracks,VideoTracks',
     },
+  })
+
+  // Set CSP headers
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          // Allow external images, scripts, and media for TMDB and streaming
+          "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; media-src 'self' https: http: blob: data:;"
+        ]
+      }
+    })
   })
 
   // Ad Blocker
@@ -96,6 +179,82 @@ function createWindow() {
       '*://*.facebook.net/*',
       '*://*.hotjar.com/*',
       '*://*.clarity.ms/*',
+      '*://*.adzerk.net/*',
+      '*://*.adtech.de/*',
+      '*://*.adtechus.com/*',
+      '*://*.advertising.com/*',
+      '*://*.adblade.com/*',
+      '*://*.adk2.com/*',
+      '*://*.admarket.net/*',
+      '*://*.admarvel.com/*',
+      '*://*.admedia.com/*',
+      '*://*.admeta.com/*',
+      '*://*.adnetwork.net/*',
+      '*://*.adnuntius.com/*',
+      '*://*.adpushup.com/*',
+      '*://*.adrevolver.com/*',
+      '*://*.adscale.de/*',
+      '*://*.adserver.com/*',
+      '*://*.adshuffle.com/*',
+      '*://*.adsrvr.org/*',
+      '*://*.adswizz.com/*',
+      '*://*.adthrive.com/*',
+      '*://*.adtoma.com/*',
+      '*://*.adtoniq.com/*',
+      '*://*.adunit.com/*',
+      '*://*.advally.com/*',
+      '*://*.adx1.com/*',
+      '*://*.adzerk.com/*',
+      '*://*.affec.tv/*',
+      '*://*.amazon-adsystem.com/*',
+      '*://*.appnexus.com/*',
+      '*://*.bidswitch.net/*',
+      '*://*.casalemedia.com/*',
+      '*://*.criteo.net/*',
+      '*://*.exponential.com/*',
+      '*://*.fastclick.net/*',
+      '*://*.googleadservices.com/*',
+      '*://*.indexexchange.com/*',
+      '*://*.lkqd.net/*',
+      '*://*.media.net/*',
+      '*://*.openx.com/*',
+      '*://*.pubmine.com/*',
+      '*://*.quantserve.com/*',
+      '*://*.scorecardresearch.com/*',
+      '*://*.smartadserver.com/*',
+      '*://*.spotxchange.com/*',
+      '*://*.teads.tv/*',
+      '*://*.tribalfusion.com/*',
+      '*://*.yldbt.com/*',
+      // Specific to video hostings common ads
+      '*://*.bet365.com/*',
+      '*://*.williamhill.com/*',
+      '*://*.888.com/*',
+      '*://*.pokerstars.com/*',
+      '*://*.betway.com/*',
+      '*://*.betfair.com/*',
+      '*://*.ladbrokes.com/*',
+      '*://*.coral.co.uk/*',
+      '*://*.unibet.com/*',
+      '*://*.bwin.com/*',
+      '*://*.1xbet.com/*',
+      '*://*.22bet.com/*',
+      '*://*.betwinner.com/*',
+      '*://*.melbet.com/*',
+      '*://*.betsson.com/*',
+      '*://*.betsafe.com/*',
+      '*://*.nordvpn.com/*',
+      '*://*.expressvpn.com/*',
+      '*://*.surfshark.com/*',
+      '*://*.cyberghostvpn.com/*',
+      '*://*.privateinternetaccess.com/*',
+      '*://*.protonvpn.com/*',
+      '*://*.vyprvpn.com/*',
+      '*://*.hidemyass.com/*',
+      '*://*.ipvanish.com/*',
+      '*://*.tunnelbear.com/*',
+      '*://*.windscribe.com/*',
+      '*://*.hotspotshield.com/*',
     ]
   }
 
@@ -160,10 +319,13 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(() => {
+  initImdbDb();
   createWindow();
   
-  // Check for updates
-  autoUpdater.checkForUpdatesAndNotify().catch(err => log.error('Auto-update error:', err));
+  // Check for updates only in production
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify().catch(err => log.error('Auto-update error:', err));
+  }
   
   // Update events
   autoUpdater.on('update-available', () => {

@@ -1,52 +1,45 @@
-import React, { useEffect, useState } from 'react';
-import { getTrending, getImageUrl, getMoviesByCategory, getTVShowsByCategory, discoverMedia } from '../services/tmdb';
-import { getPersonalizedRecommendations, RecommendationResult } from '../services/recommendations';
-import { Media } from '../types';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { getTrending, getImageUrl, getMoviesByCategory, getTVShowsByCategory, discoverMedia, getDetails } from '../services/tmdb';
+import { getPersonalizedRecommendations } from '../services/recommendations';
 import { Play, Plus, Check } from 'lucide-react';
 import { db } from '../db';
 import { useWatchlist } from '../hooks/useWatchlist';
+import { usePlayer } from '../context/PlayerContext';
 import ContentRow from '../components/ContentRow';
 import RightSidebar from '../components/RightSidebar';
 import Focusable from '../components/Focusable';
 
 const Home: React.FC = () => {
-  const [featured, setFeatured] = useState<Media | null>(null);
-  const [recommendations, setRecommendations] = useState<RecommendationResult[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const navigate = useNavigate();
+  const { play } = usePlayer();
   
+  const { data: featured, isLoading: featuredLoading } = useQuery({
+    queryKey: ['featured-home'],
+    queryFn: async () => {
+      const data = await getTrending('day');
+      if (data.length > 0) {
+        return data[Math.floor(Math.random() * 5)];
+      }
+      return null;
+    },
+    staleTime: 1000 * 60 * 60, // 1 hour
+  });
+
+  const { data: recommendations = [] } = useQuery({
+    queryKey: ['recommendations-home'],
+    queryFn: getPersonalizedRecommendations,
+    staleTime: 1000 * 60 * 60, // 1 hour
+  });
+
+  const historyQuery = useLiveQuery(
+    () => db.history.orderBy('savedAt').reverse().toArray()
+  );
+  const defaultHistory = React.useMemo(() => [], []);
+  const history = historyQuery ?? defaultHistory;
+
   const { isSaved: isFeaturedSaved, toggleWatchlist: toggleFeaturedWatchlist } = useWatchlist(featured);
-
-  useEffect(() => {
-    const fetchFeatured = async () => {
-      try {
-        const data = await getTrending('day');
-        if (data.length > 0) {
-          // Pick a random item from top 5 for variety
-          setFeatured(data[Math.floor(Math.random() * 5)]);
-        }
-      } catch (error) {
-        console.error('Failed to fetch featured:', error);
-      }
-    };
-    fetchFeatured();
-    
-    const fetchRecs = async () => {
-      try {
-        const recs = await getPersonalizedRecommendations();
-        setRecommendations(recs);
-      } catch (error) {
-        console.error('Failed to fetch recommendations:', error);
-      }
-    };
-    fetchRecs();
-  }, []);
-
-  const getHistory = async () => {
-    const history = await db.history.toArray();
-    return history.sort((a, b) => b.savedAt - a.savedAt);
-  };
 
   const content = React.useMemo(() => {
     switch (selectedCategory) {
@@ -99,11 +92,11 @@ const Home: React.FC = () => {
                <ContentRow 
                  key={`rec-${index}`} 
                  title={rec.type === 'wildcard' ? `✨ ${rec.title}` : rec.title} 
-                 fetcher={() => Promise.resolve(rec.items)} 
+                 data={rec.items}
                />
             ))}
 
-            <ContentRow title="Continue Watching" fetcher={getHistory} cardSize="small" />
+            <ContentRow title="Continue Watching" data={history} cardSize="small" />
             <ContentRow title="Trending Now" fetcher={() => getTrending('week')} />
             <ContentRow title="Popular Movies" fetcher={() => getMoviesByCategory('popular')} />
             <ContentRow title="Top Rated Movies" fetcher={() => getMoviesByCategory('top_rated')} />
@@ -113,9 +106,10 @@ const Home: React.FC = () => {
           </>
         );
     }
-  }, [selectedCategory, recommendations]);
+  }, [selectedCategory, recommendations, history]);
 
-  if (!featured) return <div className="flex items-center justify-center h-full text-white">Loading...</div>;
+  if (featuredLoading) return <div className="flex items-center justify-center h-full text-white">Loading...</div>;
+  if (!featured) return <div className="flex items-center justify-center h-full text-white">No content available</div>;
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -141,9 +135,16 @@ const Home: React.FC = () => {
           <div className="relative w-full h-[60vh] rounded-3xl overflow-hidden shadow-2xl border border-white/5 group">
             <div className="absolute inset-0">
               <img
-                src={getImageUrl(featured.backdrop_path, 'original')}
+                src={getImageUrl(featured.backdrop_path, 'w1280')}
+                srcSet={`
+                  ${getImageUrl(featured.backdrop_path, 'w780')} 780w,
+                  ${getImageUrl(featured.backdrop_path, 'w1280')} 1280w,
+                  ${getImageUrl(featured.backdrop_path, 'original')} 1920w
+                `}
+                sizes="(max-width: 1024px) 100vw, 80vw"
                 alt={featured.title || featured.name}
                 className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
+                loading="eager"
               />
               <div className="absolute inset-0 bg-linear-to-t from-black via-black/20 to-transparent" />
               <div className="absolute inset-0 bg-linear-to-r from-black/80 via-transparent to-transparent" />
@@ -154,24 +155,42 @@ const Home: React.FC = () => {
                  <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
                  Trending Now
               </div>
-              <h1 className="text-5xl font-black mb-4 drop-shadow-2xl leading-tight text-white tracking-tight">
+              <h1 className="text-5xl font-black mb-4 drop-shadow-2xl leading-tight text-white tracking-tight line-clamp-2">
                 {featured.title || featured.name}
               </h1>
-              <p className="text-base text-gray-200 mb-8 line-clamp-3 drop-shadow-md leading-relaxed font-medium">
-                {featured.overview}
-              </p>
-              <div className="flex gap-4">
+              <div className="max-h-[15vh] overflow-y-auto scrollbar-hide mb-8">
+                <p className="text-base text-gray-200 drop-shadow-md leading-relaxed font-medium">
+                  {featured.overview}
+                </p>
+              </div>
+              <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
                 <Focusable
-                  onClick={() => navigate(`/watch/${featured.media_type}/${featured.id}`)}
-                  className="bg-primary hover:bg-primary-hover text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all hover:scale-105 shadow-[0_0_20px_rgba(124,58,237,0.3)] cursor-pointer"
+                  onClick={async () => {
+                    if (featured) {
+                      // Fetch full details to ensure we have seasons/episodes if it's a TV show
+                      // or just pass what we have if we want speed.
+                      // Best to fetch details.
+                      try {
+                        const details = await getDetails(featured.media_type, featured.id);
+                        play(details);
+                      } catch (e) {
+                        console.error('Failed to play featured item', e);
+                      }
+                    }
+                  }}
+                  className="bg-linear-to-r from-primary to-purple-600 hover:from-primary-hover hover:to-purple-500 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all duration-300 hover:scale-105 shadow-[0_0_20px_rgba(124,58,237,0.5)] hover:shadow-[0_0_30px_rgba(124,58,237,0.7)] cursor-pointer shrink-0 border border-white/10 uppercase tracking-wide group"
                   activeClassName="ring-4 ring-white scale-110 z-20"
                 >
-                  <Play fill="currentColor" size={20} />
+                  <Play fill="currentColor" size={20} className="group-hover:animate-pulse" />
                   Watch Now
                 </Focusable>
                 <Focusable 
                   onClick={toggleFeaturedWatchlist}
-                  className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all backdrop-blur-md border border-white/10 hover:scale-105 cursor-pointer"
+                  className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all duration-300 backdrop-blur-md border hover:scale-105 cursor-pointer shrink-0 ${
+                    isFeaturedSaved
+                      ? 'bg-primary border-primary text-white shadow-[0_0_20px_rgba(124,58,237,0.4)]'
+                      : 'bg-white/5 hover:bg-white/10 text-white border-white/10 hover:border-white/30 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]'
+                  }`}
                   activeClassName="ring-4 ring-white scale-110 z-20"
                 >
                   {isFeaturedSaved ? <Check size={20} /> : <Plus size={20} />}

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { motion } from 'framer-motion';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/useAuth';
 import { AVATARS, Avatar } from '../components/Avatars';
 import { Edit2, Check, X, Mail, Key, LogOut, Users, Shield, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { db, Achievement } from '../db';
+import { db } from '../db';
 import { LevelProgress } from '../components/Achievements/LevelProgress';
 import { AchievementGrid } from '../components/Achievements/AchievementGrid';
 import DownloadList from '../components/Downloads/DownloadList';
@@ -28,15 +29,16 @@ const Profile: React.FC = () => {
   const [tempEmail, setTempEmail] = useState(user?.email || '');
   const [emailError, setEmailError] = useState('');
   const [resetSent, setResetSent] = useState(false);
-  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  
+  const achievements = useLiveQuery(
+    () => (profile?.id ? db.achievements.where('profileId').equals(profile.id).toArray() : []),
+    [profile?.id]
+  ) || [];
 
   useEffect(() => {
     if (profile) {
       setTempName(profile.name);
       setTempAvatar(profile.avatarId);
-      
-      // Load achievements
-      db.achievements.where('profileId').equals(profile.id!).toArray().then(setAchievements);
     }
   }, [profile]);
 

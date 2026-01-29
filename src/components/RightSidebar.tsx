@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { getTrending } from '../services/tmdb';
-import { Media } from '../types';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { getTrending, getImageUrl } from '../services/tmdb';
 import { Link, useNavigate } from 'react-router-dom';
 import { Star, ChevronRight, Hash, Crown } from 'lucide-react';
-import { getImageUrl } from '../services/tmdb';
 import { useAuth } from '../context/useAuth';
 import { Avatar } from './Avatars';
 import Focusable from './Focusable';
@@ -28,20 +27,14 @@ const GENRES = [
 
 const RightSidebar: React.FC = () => {
   const { profile } = useAuth();
-  const [trending, setTrending] = useState<Media[]>([]);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchTrending = async () => {
-      try {
-        const data = await getTrending('day');
-        setTrending(data.slice(0, 5));
-      } catch (error) {
-        console.error('Failed to fetch sidebar trending:', error);
-      }
-    };
-    fetchTrending();
-  }, []);
+  const { data: trending = [] } = useQuery({
+    queryKey: ['trending', 'day'],
+    queryFn: () => getTrending('day'),
+    staleTime: 1000 * 60 * 30, // 30 mins
+    select: (data) => data.slice(0, 5),
+  });
 
   return (
     <div className="w-80 h-full border-l border-white/5 bg-black/20 backdrop-blur-md pt-20 px-6 pb-6 overflow-y-auto hidden xl:block">

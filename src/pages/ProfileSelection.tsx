@@ -26,13 +26,6 @@ const ProfileSelection: React.FC = () => {
     [switchProfile, navigate]
   );
 
-  // Removed auto-select effect to allow profile switching/management
-  // useEffect(() => {
-  //   if (profiles.length === 1 && profiles[0].id) {
-  //      handleSelect(profiles[0].id);
-  //   }
-  // }, [profiles, handleSelect]);
-
   const handleAddProfile = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!newProfileName.trim()) return;

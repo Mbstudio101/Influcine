@@ -224,3 +224,417 @@ is ALWAYS better than a larger, fragile one.
 =====================================================================
 END OF UNIVERSAL COMPANY-GRADE SPEC
 =====================================================================
+
+
+
+VIDFast: 
+
+
+Movie Player
+Series Player
+533535
+https://vidfast.pro/movie/533535
+
+Highly customizable video player with advanced controls and premium streaming quality.
+
+Premium Features
+Our platform provides everything you need to deliver exceptional video experiences.
+
+Seamless Embedding
+Integrate our player into your website with a simple iframe code. No complicated setup required.
+
+High-Quality Streaming
+Deliver crystal-clear video content with adaptive bitrate streaming for all network conditions.
+
+Lightning Fast
+Optimized loading times and playback performance to keep your users engaged.
+
+Enhanced Security
+Advanced protection against unauthorized embedding and content scraping.
+
+Performance Analytics
+Comprehensive analytics to monitor viewer engagement and player performance.
+
+Multiple Integrations
+Connect with various content delivery networks and streaming solutions.
+
+System Status
+Real-time monitoring of our infrastructure. Check the operational status of our scrapers and proxy servers.
+
+Scrapers
+Refresh Status
+Name
+Status
+Response Time
+Uptime
+Last Updated
+Alpha
+Operational
+365ms
+100%
+Just now
+Beta
+Offline
+-
+-
+Just now
+Charlie
+Offline
+-
+-
+Just now
+Cobra
+Operational
+128ms
+100%
+Just now
+Viper
+Offline
+-
+-
+Just now
+Specter
+Offline
+-
+-
+Just now
+Ranger
+Operational
+1511ms
+2%
+Just now
+Delta
+Operational
+959ms
+100%
+Just now
+Echo
+Operational
+318ms
+100%
+Just now
+Fury
+Operational
+555ms
+100%
+Just now
+Horizon
+Offline
+-
+-
+Just now
+Iron
+Offline
+-
+-
+Just now
+Jiraiya
+Operational
+481ms
+90%
+Just now
+Kirito
+Operational
+434ms
+74%
+Just now
+Luffy
+Operational
+513ms
+74%
+Just now
+Meliodas
+Operational
+534ms
+100%
+Just now
+Proxy Servers
+Refresh Status
+Name
+Status
+Location
+Current Load
+Last Check
+Proxy-01
+Operational
+EU-Central
+2%
+Just now
+Proxy-02
+Operational
+EU-Central
+2%
+Just now
+Proxy-03
+Operational
+EU-Central
+2%
+Just now
+Proxy-04
+Operational
+EU-Central
+2%
+Just now
+Proxy-05
+Operational
+EU-Central
+2%
+Just now
+Proxy-06
+Operational
+EU-Central
+2%
+Just now
+Use one of the following domains for embed URLs:
+vidfast.pro, vidfast.in, vidfast.io, vidfast.me, vidfast.net, vidfast.pm, vidfast.xyz
+Documentation
+Complete reference guide for embedding and customizing VidFast players on your website.
+
+
+Endpoints
+
+Implementation
+
+Customization
+
+Events
+
+PostMessage
+Movie Embed
+Endpoint
+
+Copy
+https://vidfast.pro/movie/{id}?autoPlay=true
+Required Parameters
+{id}Movie identifier from IMDB or TMDB
+Optional Parameters
+titleControls whether the media title is displayed
+posterDetermines if the poster image is shown
+autoPlayControls whether the media starts playing automatically
+startAtStarts the video at the specified time in seconds
+themeChanges the player's color (hex code format)
+serverChanges the default server for the player (set to server name)
+hideServerControls whether the server selector button is shown or hidden
+fullscreenButtonControls whether the fullscreen button is shown or hidden
+chromecastControls whether the Chromecast button is shown or hidden
+subSets the default subtitle (e.g. en, es, fr)
+Examples
+https://vidfast.pro/movie/tt6263850
+
+https://vidfast.pro/movie/533535?theme=16A085
+
+TV Show Embed
+Endpoint
+
+Copy
+https://vidfast.pro/tv/{id}/{season}/{episode}?autoPlay=true
+Required Parameters
+{id}TV show identifier from IMDB or TMDB
+{season}The season number
+{episode}The episode number
+Optional Parameters
+titleControls whether the media title is displayed
+posterDetermines if the poster image is shown
+autoPlayControls whether the media starts playing automatically
+startAtStarts the video at the specified time in seconds
+themeChanges the player's color (hex code format)
+nextButtonDisplays the "Next Episode" button when 90% of the current episode has been watched
+autoNextAutomatically plays the next episode when the current one ends (requires nextButton)
+serverChanges the default server for the player (set to server name)
+hideServerControls whether the server selector button is shown or hidden
+fullscreenButtonControls whether the fullscreen button is shown or hidden
+chromecastControls whether the Chromecast button is shown or hidden
+subSets the default subtitle (e.g. en, es, fr)
+Examples
+https://vidfast.pro/tv/tt4052886/1/5
+
+https://vidfast.pro/tv/63174/1/5?nextButton=true&autoNext=true
+
+Series Player
+95396
+1
+1
+https://vidfast.pro/tv/95396/1/1
+
+Highly customizable video player with advanced controls and premium streaming quality.
+
+Premium Features
+Our platform provides everything you need to deliver exceptional video experiences.
+
+Seamless Embedding
+Integrate our player into your website with a simple iframe code. No complicated setup required.
+
+High-Quality Streaming
+Deliver crystal-clear video content with adaptive bitrate streaming for all network conditions.
+
+Lightning Fast
+Optimized loading times and playback performance to keep your users engaged.
+
+Enhanced Security
+Advanced protection against unauthorized embedding and content scraping.
+
+Performance Analytics
+Comprehensive analytics to monitor viewer engagement and player performance.
+
+Multiple Integrations
+Connect with various content delivery networks and streaming solutions.
+
+System Status
+Real-time monitoring of our infrastructure. Check the operational status of our scrapers and proxy servers.
+
+Scrapers
+Refresh Status
+Name
+Status
+Response Time
+Uptime
+Last Updated
+Alpha
+Checking
+Checking...
+Beta
+Checking
+Checking...
+Charlie
+Checking
+Checking...
+Cobra
+Checking
+Checking...
+Viper
+Checking
+Checking...
+Specter
+Checking
+Checking...
+Ranger
+Checking
+Checking...
+Delta
+Checking
+Checking...
+Echo
+Checking
+Checking...
+Fury
+Checking
+Checking...
+Horizon
+Checking
+Checking...
+Iron
+Checking
+Checking...
+Jiraiya
+Checking
+Checking...
+Kirito
+Checking
+Checking...
+Luffy
+Checking
+Checking...
+Meliodas
+Checking
+Checking...
+Proxy Servers
+Refresh Status
+Name
+Status
+Location
+Current Load
+Last Check
+Proxy-01
+Operational
+EU-Central
+2%
+Just now
+Proxy-02
+Operational
+EU-Central
+2%
+Just now
+Proxy-03
+Operational
+EU-Central
+2%
+Just now
+Proxy-04
+Operational
+EU-Central
+2%
+Just now
+Proxy-05
+Operational
+EU-Central
+2%
+Just now
+Proxy-06
+Operational
+EU-Central
+2%
+Just now
+Use one of the following domains for embed URLs:
+vidfast.pro, vidfast.in, vidfast.io, vidfast.me, vidfast.net, vidfast.pm, vidfast.xyz
+Documentation
+Complete reference guide for embedding and customizing VidFast players on your website.
+
+
+Endpoints
+
+Implementation
+
+Customization
+
+Events
+
+PostMessage
+Movie Embed
+Endpoint
+
+Copy
+https://vidfast.pro/movie/{id}?autoPlay=true
+Required Parameters
+{id}Movie identifier from IMDB or TMDB
+Optional Parameters
+titleControls whether the media title is displayed
+posterDetermines if the poster image is shown
+autoPlayControls whether the media starts playing automatically
+startAtStarts the video at the specified time in seconds
+themeChanges the player's color (hex code format)
+serverChanges the default server for the player (set to server name)
+hideServerControls whether the server selector button is shown or hidden
+fullscreenButtonControls whether the fullscreen button is shown or hidden
+chromecastControls whether the Chromecast button is shown or hidden
+subSets the default subtitle (e.g. en, es, fr)
+Examples
+https://vidfast.pro/movie/tt6263850
+
+https://vidfast.pro/movie/533535?theme=16A085
+
+TV Show Embed
+Endpoint
+
+Copy
+https://vidfast.pro/tv/{id}/{season}/{episode}?autoPlay=true
+Required Parameters
+{id}TV show identifier from IMDB or TMDB
+{season}The season number
+{episode}The episode number
+Optional Parameters
+titleControls whether the media title is displayed
+posterDetermines if the poster image is shown
+autoPlayControls whether the media starts playing automatically
+startAtStarts the video at the specified time in seconds
+themeChanges the player's color (hex code format)
+nextButtonDisplays the "Next Episode" button when 90% of the current episode has been watched
+autoNextAutomatically plays the next episode when the current one ends (requires nextButton)
+serverChanges the default server for the player (set to server name)
+hideServerControls whether the server selector button is shown or hidden
+fullscreenButtonControls whether the fullscreen button is shown or hidden
+chromecastControls whether the Chromecast button is shown or hidden
+subSets the default subtitle (e.g. en, es, fr)
+Examples
+https://vidfast.pro/tv/tt4052886/1/5
+
+https://vidfast.pro/tv/63174/1/5?nextButton=true&autoNext=true

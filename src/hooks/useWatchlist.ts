@@ -8,14 +8,17 @@ export function useWatchlist(media: Media | null | undefined) {
   const { showToast } = useToast();
 
   const compat = media as unknown as {
-    id?: number;
-    tmdbId?: number;
-    mediaId?: number;
+    id?: number | string;
+    tmdbId?: number | string;
+    mediaId?: number | string;
   };
-  const stableId = compat?.id ?? compat?.tmdbId ?? compat?.mediaId;
+  
+  // Ensure we get a valid numeric ID
+  const rawId = compat?.id ?? compat?.tmdbId ?? compat?.mediaId;
+  const stableId = rawId ? Number(rawId) : undefined;
 
   const savedItem = useLiveQuery(
-    () => (stableId != null ? db.watchlist.get(stableId) : undefined),
+    () => (stableId ? db.library.get(stableId) : undefined),
     [stableId]
   );
   
@@ -27,39 +30,79 @@ export function useWatchlist(media: Media | null | undefined) {
       e.stopPropagation();
     }
 
-    if (!media || stableId == null) {
-      console.error('Failed to toggle library item: no valid id found.', media);
+    if (!media || stableId == null || isNaN(stableId)) {
+      if (import.meta.env.DEV) {
+        console.error('Failed to toggle library item: no valid id found.', media, stableId);
+      }
       showToast('We could not identify this item.', 'error');
       return;
     }
 
+    if (import.meta.env.DEV) {
+      console.log('[useWatchlist] Toggling item:', stableId, typeof stableId);
+      console.log('[useWatchlist] DB Schema for library:', db.library.schema.primKey);
+    }
+
     try {
       if (isSaved) {
-        await db.watchlist.delete(stableId);
+        await db.library.delete(stableId);
         showToast('Removed from your library.', 'info');
       } else {
         const mediaType = media.media_type || (media.title ? 'movie' : 'tv');
+        
+        // Ensure strictly serializable object with null fallbacks
+        // Dexie/IndexedDB prefers null over undefined for nullable fields
         const payload: SavedMedia = {
             id: stableId,
-            title: media.title,
-            name: media.name,
-            poster_path: media.poster_path,
-            backdrop_path: media.backdrop_path,
-            overview: media.overview,
-            vote_average: media.vote_average,
-            release_date: media.release_date,
-            first_air_date: media.first_air_date,
+            title: media.title || '',
+            name: media.name || '',
+            poster_path: media.poster_path ?? null,
+            backdrop_path: media.backdrop_path ?? null,
+            overview: media.overview || '',
+            vote_average: Number(media.vote_average) || 0,
+            release_date: media.release_date || undefined,
+            first_air_date: media.first_air_date || undefined,
             media_type: mediaType as 'movie' | 'tv',
             savedAt: Date.now(),
-            ...((media as { tmdbId?: number }).tmdbId ? { tmdbId: (media as { tmdbId?: number }).tmdbId } : {}),
         };
         
-        await db.watchlist.put(payload);
+        // Add tmdbId only if it exists
+        const mediaWithTmdb = media as { tmdbId?: number | string };
+        if (mediaWithTmdb.tmdbId) {
+            payload.tmdbId = Number(mediaWithTmdb.tmdbId);
+        }
+
+        console.log('[useWatchlist] Saving payload:', payload);
+
+        // Attempt to save
+        try {
+            await db.library.put(payload);
+        } catch (innerError) {
+            // Fallback: If put fails (e.g. type mismatch), try deleting first
+            console.warn('First save attempt failed, trying delete+put...', innerError);
+            try {
+              await db.library.delete(stableId);
+              // Force clean object
+              const cleanPayload = JSON.parse(JSON.stringify(payload));
+              await db.library.put(cleanPayload);
+            } catch (retryError) {
+              console.error('Retry failed:', retryError);
+              throw retryError;
+            }
+        }
+        
         showToast('Added to your library.', 'success');
       }
     } catch (error) {
-      console.error('Failed to update library:', error);
-      showToast('Failed to update your library.', 'error');
+      if (import.meta.env.DEV) {
+        console.error('Failed to update library:', error);
+        // More descriptive error for debugging (visible in console)
+        if (error instanceof Error) {
+          console.error('Error name:', error.name);
+          console.error('Error message:', error.message);
+        }
+      }
+      showToast('Failed to update your library. Please try again.', 'error');
     }
   }, [media, stableId, isSaved, showToast]);
 

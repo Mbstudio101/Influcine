@@ -1,115 +1,232 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { useQuery } from '@tanstack/react-query';
+import { db } from '../db';
 import { VideoAgent } from '../services/VideoAgent';
-import { Media } from '../types';
-import { Search as SearchIcon, Zap } from 'lucide-react';
+import { useDebounce } from '../hooks/useDebounce';
+import { useSearchFilter, FilterType } from '../hooks/useSearchFilter';
+import { Search as SearchIcon, Zap, Clock, X, Film, Tv, LayoutGrid } from 'lucide-react';
 import Focusable from '../components/Focusable';
 import MediaCard from '../components/MediaCard';
 import { useToast } from '../context/toast';
 
 const Search: React.FC = () => {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Media[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [isCached, setIsCached] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const debouncedQuery = useDebounce(query, 500);
   const { showToast } = useToast();
   
+  const recentSearches = useLiveQuery(
+    () => db.recentSearches.orderBy('timestamp').reverse().limit(10).toArray()
+  );
+
+  const { data: searchData, isLoading: loading, error } = useQuery({
+    queryKey: ['search', debouncedQuery],
+    queryFn: async () => {
+      if (!debouncedQuery.trim()) return { results: [], source: 'none' };
+      return VideoAgent.search(debouncedQuery);
+    },
+    enabled: debouncedQuery.trim().length > 0,
+    staleTime: 1000 * 60 * 5, // 5 minutes cache
+    gcTime: 1000 * 60 * 30, // 30 minutes garbage collection
+  });
+
+  // Use the new hook for filtering
+  const { filterType, setFilterType, filteredResults, counts } = useSearchFilter(searchData?.results || []);
+  const isCached = searchData?.source === 'cache';
+
+  const saveToHistory = useCallback(async (searchTerm: string) => {
+    const normalized = searchTerm.trim();
+    if (normalized.length <= 1) return;
+
+    try {
+      await db.transaction('rw', db.recentSearches, async () => {
+        const existing = await db.recentSearches.where('query').equals(normalized).first();
+        if (existing) {
+          await db.recentSearches.update(existing.id!, { timestamp: Date.now() });
+        } else {
+          await db.recentSearches.add({ query: normalized, timestamp: Date.now() });
+        }
+      });
+    } catch (e) {
+      console.warn('Recent search save failed:', e);
+    }
+  }, []);
+
+  // Handle errors via toast
   useEffect(() => {
-    let cancelled = false;
+    if (error) {
+      console.error('Search failed:', error);
+      showToast('Search failed. Please check your connection and try again.', 'error');
+    }
+  }, [error, showToast]);
 
-    const search = async () => {
-      if (!query.trim()) {
-        setResults([]);
-        setIsCached(false);
-        setError(null);
-        return;
-      }
-      setLoading(true);
-      try {
-        const agentResult = await VideoAgent.search(query);
-        if (!cancelled) {
-          setResults(agentResult.results.filter(item => item.media_type === 'movie' || item.media_type === 'tv'));
-          setIsCached(agentResult.source === 'cache');
-          setError(null);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error('Search failed:', error);
-          const message = 'Search failed. Please check your connection and try again.';
-          setError(message);
-          showToast(message, 'error');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
+  const handleRecentClick = (term: string) => {
+    setQuery(term);
+  };
 
-    const timeoutId = setTimeout(search, 500);
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [query, showToast]);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && query.trim()) {
+      saveToHistory(query);
+    }
+  };
+
+  const clearRecentSearches = async () => {
+    await db.recentSearches.clear();
+  };
+
+  const removeRecentSearch = async (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    await db.recentSearches.delete(id);
+  };
+
+  const FilterButton = ({ type, label, icon: Icon }: { type: FilterType, label: string, icon: React.ElementType }) => (
+    <button
+      onClick={() => setFilterType(type)}
+      className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
+        filterType === type 
+          ? 'bg-primary text-white shadow-lg shadow-primary/25 ring-1 ring-primary/50' 
+          : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/5'
+      }`}
+    >
+      <Icon size={16} />
+      <span>{label}</span>
+      {counts[type] > 0 && (
+        <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+          filterType === type ? 'bg-white/20' : 'bg-black/20'
+        }`}>
+          {counts[type]}
+        </span>
+      )}
+    </button>
+  );
 
   return (
     <div className="h-full overflow-y-auto pt-24 px-10 pb-10 scrollbar-hide">
       <div className="max-w-3xl mx-auto mb-6">
-        <div className="relative">
-          <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-textSecondary" size={24} />
+        <div className="relative group">
+          <SearchIcon className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary transition-colors duration-300" size={24} />
           <Focusable
             as="input"
             type="text"
             placeholder="Search for movies and TV shows..."
             value={query}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
-            className="w-full bg-surface text-white pl-14 pr-6 py-4 rounded-full text-lg focus:outline-none focus:ring-2 focus:ring-primary placeholder-textSecondary"
+            onKeyDown={handleKeyDown}
+            className="w-full bg-white/5 backdrop-blur-xl border border-white/10 text-white pl-14 pr-6 py-5 rounded-2xl text-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 shadow-[0_0_20px_rgba(124,58,237,0.1)] focus:shadow-[0_0_40px_rgba(124,58,237,0.4)] placeholder-gray-500 transition-all duration-300"
             autoFocus
-            activeClassName="ring-2 ring-primary"
+            activeClassName="ring-2 ring-primary shadow-[0_0_40px_rgba(124,58,237,0.4)]"
           />
           {isCached && !loading && (
-             <div className="absolute right-4 top-1/2 -translate-y-1/2 text-green-400 flex items-center gap-1 text-xs font-medium" title="Served from intelligent cache">
-                <Zap size={14} fill="currentColor" />
-                <span>Cached</span>
+             <div className="absolute right-6 top-1/2 -translate-y-1/2 text-emerald-400 flex items-center gap-1.5 text-xs font-bold tracking-wide uppercase bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20" title="Served from intelligent cache">
+                <Zap size={12} fill="currentColor" />
+                <span>Fast</span>
              </div>
           )}
         </div>
+
+        {/* Filter Bar */}
+        {!loading && query && !error && (counts.all > 0) && (
+          <div className="flex items-center justify-center gap-3 mt-6 animate-in fade-in slide-in-from-top-2 duration-300">
+            <FilterButton type="all" label="All Results" icon={LayoutGrid} />
+            <FilterButton type="movie" label="Movies" icon={Film} />
+            <FilterButton type="tv" label="TV Shows" icon={Tv} />
+          </div>
+        )}
       </div>
 
+      {!query && recentSearches && recentSearches.length > 0 && (
+        <div className="max-w-3xl mx-auto mb-8">
+          <div className="flex items-center justify-between mb-4 px-2">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Recent Searches</h3>
+            <button 
+              onClick={clearRecentSearches}
+              className="text-xs font-medium text-gray-500 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
+            >
+              Clear History
+            </button>
+          </div>
+          <div className="space-y-3">
+            {recentSearches.map((search) => (
+              <Focusable
+                key={search.id}
+                as="div"
+                className="group flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 hover:shadow-[0_0_20px_rgba(124,58,237,0.1)] transition-all duration-300 cursor-pointer"
+                activeClassName="bg-white/10 border-primary ring-1 ring-primary shadow-[0_0_20px_rgba(124,58,237,0.2)]"
+                onClick={() => handleRecentClick(search.query)}
+              >
+                <div className="flex items-center gap-4 overflow-hidden">
+                  <div className="p-2 rounded-full bg-white/5 group-hover:bg-primary/20 group-hover:text-primary transition-colors text-gray-400">
+                    <Clock size={18} />
+                  </div>
+                  <span className="text-lg text-gray-200 group-hover:text-white font-medium truncate transition-colors">{search.query}</span>
+                </div>
+                <button
+                  onClick={(e) => removeRecentSearch(e, search.id!)}
+                  className="p-2 rounded-full hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 shrink-0"
+                >
+                  <X size={18} />
+                </button>
+              </Focusable>
+            ))}
+          </div>
+        </div>
+      )}
+
       {error && (
-        <div className="max-w-3xl mx-auto mb-6 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/40 text-sm text-red-200">
-          <div className="font-semibold">Search problem</div>
-          <div className="mt-1">
-            {error}
+        <div className="max-w-3xl mx-auto mb-8 px-6 py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-200 backdrop-blur-md">
+          <div className="font-bold text-lg mb-1">Unable to search</div>
+          <div className="text-sm opacity-80">
+            {error instanceof Error ? error.message : 'An unknown error occurred'}
           </div>
         </div>
       )}
 
       {loading ? (
-        <div className="text-center text-textSecondary">Searching...</div>
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="w-12 h-12 rounded-full border-4 border-primary/30 border-t-primary animate-spin mb-4"></div>
+          <div className="text-gray-400 animate-pulse font-medium tracking-wide">Searching the universe...</div>
+        </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {results.map((item) => (
-            <MediaCard key={item.id} media={item} />
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 animate-in fade-in duration-500">
+          {filteredResults.map((item) => (
+            <MediaCard 
+              key={item.id} 
+              media={item} 
+              onClick={() => saveToHistory(debouncedQuery)} 
+            />
           ))}
         </div>
       )}
 
-      {!loading && query && !error && results.length === 0 && (
-        <div className="max-w-3xl mx-auto mt-10 px-6 py-6 rounded-2xl bg-white/5 border border-white/10 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/10 mb-3">
-            <SearchIcon className="text-textSecondary" size={20} />
+      {!loading && query && !error && filteredResults.length === 0 && (
+        <div className="max-w-2xl mx-auto mt-20 p-10 rounded-3xl bg-white/5 border border-white/5 text-center backdrop-blur-sm">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-linear-to-br from-gray-800 to-black border border-white/10 mb-6 shadow-inner">
+            <SearchIcon className="text-gray-500" size={32} />
           </div>
-          <div className="text-base font-semibold text-white mb-1">
-            No results for “{query}”
+          <div className="text-2xl font-bold text-white mb-2">
+            No results found
           </div>
-          <p className="text-sm text-textSecondary mb-2">
-            Try a different title, simplify your keywords, or double-check your spelling.
+          <p className="text-gray-400 text-lg mb-6 max-w-md mx-auto">
+            {counts.all > 0 ? (
+              <span>
+                No {filterType === 'movie' ? 'movies' : 'TV shows'} matching "<span className="text-white font-medium">{query}</span>".
+                <br />
+                <button 
+                  onClick={() => setFilterType('all')}
+                  className="mt-2 text-primary hover:text-primary/80 underline text-base"
+                >
+                  View all results ({counts.all})
+                </button>
+              </span>
+            ) : (
+              <span>We couldn't find anything matching "<span className="text-white font-medium">{query}</span>".</span>
+            )}
           </p>
-          <p className="text-xs text-textSecondary">
-            You can also search by actor, director, or franchise name.
-          </p>
+          {counts.all === 0 && (
+            <div className="text-sm text-gray-500 bg-black/20 inline-block px-4 py-2 rounded-full border border-white/5">
+              Try checking for typos or using broader keywords
+            </div>
+          )}
         </div>
       )}
     </div>

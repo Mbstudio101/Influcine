@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export interface AchievementDef {
   id: string;
@@ -205,7 +205,7 @@ export const updateWatchStats = async (
 
     // Sync with Supabase
     const user = await db.users.get(profile.userId);
-    if (user && user.passwordHash === 'supabase_auth') {
+    if (user && user.passwordHash === 'supabase_auth' && isSupabaseConfigured) {
         await supabase.auth.updateUser({
             data: { stats: newStats }
         });

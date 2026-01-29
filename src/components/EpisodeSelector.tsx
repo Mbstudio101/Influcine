@@ -1,19 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Play, Clock, ChevronDown, ImageOff } from 'lucide-react';
 import { getSeasonDetails, getImageUrl } from '../services/tmdb';
+import { Episode } from '../types';
 import Focusable from './Focusable';
-
-interface Episode {
-  id: number;
-  episode_number: number;
-  name: string;
-  overview: string;
-  still_path: string | null;
-  runtime: number;
-  air_date: string;
-  vote_average: number;
-}
 
 interface EpisodeSelectorProps {
   showId: number;
@@ -34,28 +25,17 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   onClose,
   isOpen
 }) => {
-  const [episodes, setEpisodes] = useState<Episode[]>([]);
-  const [loading, setLoading] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState(currentSeason);
   const [isSeasonDropdownOpen, setIsSeasonDropdownOpen] = useState(false);
 
-  useEffect(() => {
-    const fetchEpisodes = async () => {
-      setLoading(true);
-      try {
-        const data = await getSeasonDetails(showId, selectedSeason);
-        setEpisodes(data.episodes);
-      } catch (error) {
-        console.error('Failed to fetch episodes:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const { data: seasonData, isLoading: loading } = useQuery({
+    queryKey: ['season', showId, selectedSeason],
+    queryFn: () => getSeasonDetails(showId, selectedSeason),
+    enabled: isOpen,
+    staleTime: 1000 * 60 * 30,
+  });
 
-    if (isOpen) {
-      fetchEpisodes();
-    }
-  }, [showId, selectedSeason, isOpen]);
+  const episodes = seasonData?.episodes || [];
 
   // Sync internal state if props change
   useEffect(() => {
@@ -150,7 +130,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                   <p className="text-textSecondary text-sm">Loading episodes...</p>
                 </div>
               ) : (
-                episodes.map((ep, index) => {
+                episodes.map((ep: Episode, index: number) => {
                   const isCurrent = selectedSeason === currentSeason && ep.episode_number === currentEpisode;
                   
                   return (

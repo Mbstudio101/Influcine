@@ -13,7 +13,6 @@ const Signup: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { signup } = useAuth();
   const navigate = useNavigate();
@@ -23,23 +22,20 @@ const Signup: React.FC = () => {
     if (e) e.preventDefault();
     if (password !== confirmPassword) {
       const message = 'Passwords do not match';
-      setError(message);
       showToast(message, 'error');
       return;
     }
     
-    setError('');
     setLoading(true);
     try {
       await signup(email, password);
       // Wait a bit for AuthContext to update via Supabase listener
       setTimeout(() => {
           showToast('Account created. Let’s set up your profile.', 'success');
-          navigate('/profiles');
+          navigate('/profiles', { state: { fromLogin: true } });
       }, 500);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create account';
-      setError(message);
       showToast(message, 'error');
       setLoading(false);
     }
@@ -82,12 +78,6 @@ const Signup: React.FC = () => {
           <h1 className="text-3xl font-bold text-white mb-2">Create Account</h1>
           <p className="text-gray-400">Join Influcine today</p>
         </div>
-
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-3 rounded-lg mb-6 text-sm text-center">
-            {error}
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
@@ -146,7 +136,7 @@ const Signup: React.FC = () => {
             type="submit"
             disabled={loading}
             onClick={() => handleSubmit()}
-            className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl transition-all shadow-lg hover:shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
+            className="w-full bg-primary hover:bg-primary-hover text-white font-bold h-12 rounded-xl transition-all shadow-lg hover:shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
             activeClassName="ring-4 ring-primary/50 scale-[1.02]"
           >
             {loading ? <Loader2 className="animate-spin" size={20} /> : 'Create Account'}

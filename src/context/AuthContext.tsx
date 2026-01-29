@@ -1,158 +1,224 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Session } from '@supabase/supabase-js';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { db, User, Profile } from '../db';
 import { AuthContext } from './useAuth';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  // Initialize IDs from localStorage
+  const [userId, setUserId] = useState<number | null>(() => {
+    const stored = localStorage.getItem('influcine_user_id');
+    return stored ? parseInt(stored) : null;
+  });
+
+  const [profileId, setProfileId] = useState<number | null>(() => {
+    const stored = localStorage.getItem('influcine_profile_id');
+    return stored ? parseInt(stored) : null;
+  });
+
   const [isLoading, setIsLoading] = useState(true);
 
-  const userRef = React.useRef<User | null>(null);
-  const profileRef = React.useRef<Profile | null>(null);
+  // Reactive State via Dexie
+  const user = useLiveQuery(
+    async () => {
+      if (!userId) return null;
+      const u = await db.users.get(userId);
+      return u ?? null;
+    },
+    [userId]
+  ) ?? null;
+
+  const profiles = useLiveQuery(
+    async () => {
+      if (!userId) return [] as Profile[];
+      return await db.profiles.where('userId').equals(userId).toArray();
+    },
+    [userId]
+  ) ?? [];
+
+  const profile = useLiveQuery(
+    async () => {
+      if (!profileId) return null;
+      const p = await db.profiles.get(profileId);
+      return p ?? null;
+    },
+    [profileId]
+  ) ?? null;
+
+  // Persist IDs when they change (backup to localStorage updates)
+  useEffect(() => {
+    if (userId) {
+      localStorage.setItem('influcine_user_id', userId.toString());
+    } else {
+      localStorage.removeItem('influcine_user_id');
+    }
+  }, [userId]);
 
   useEffect(() => {
-    userRef.current = user;
-  }, [user]);
+    if (profileId) {
+      localStorage.setItem('influcine_profile_id', profileId.toString());
+    } else {
+      localStorage.removeItem('influcine_profile_id');
+    }
+  }, [profileId]);
 
-  useEffect(() => {
-    profileRef.current = profile;
-  }, [profile]);
-
-  // Restore session
-  useEffect(() => {
-    const handleSession = async (session: Session | null) => {
-      if (session?.user?.email) {
-         const email = session.user.email;
-         let userRecord = await db.users.where('email').equals(email).first();
-         
-         if (!userRecord) {
-             // Create shadow local user
-             const userId = await db.users.add({
-                email,
-                passwordHash: 'supabase_auth',
-                createdAt: Date.now()
+  // Handle Supabase Session Sync
+  const handleSession = useCallback(async (session: Session | null) => {
+    if (session?.user?.email) {
+       const email = session.user.email;
+       let userRecord = await db.users.where('email').equals(email).first();
+       
+       if (!userRecord) {
+           // Create shadow local user
+           const newUserId = await db.users.add({
+              email,
+              passwordHash: 'supabase_auth',
+              createdAt: Date.now()
+            });
+           userRecord = await db.users.get(newUserId);
+           
+           // Create default profile if none exists
+           const existingProfiles = await db.profiles.where('userId').equals(newUserId).count();
+           if (existingProfiles === 0) {
+             const metadataName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'My Profile';
+             await db.profiles.add({
+                userId: newUserId as number,
+                name: metadataName,
+                avatarId: 'human-m-1',
+                isKid: false,
+                settings: { autoplay: true, subtitleSize: 'medium', subtitleColor: 'white' }
               });
-             userRecord = await db.users.get(userId);
-             
-             // Create default profile if none exists
-             const existingProfiles = await db.profiles.where('userId').equals(userId).count();
-             if (existingProfiles === 0) {
-               const metadataName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'My Profile';
+           }
+       }
+       
+       if (userRecord) {
+           // Set the active user ID
+           setUserId(userRecord.id!);
+           
+           // Sync profile from Supabase metadata
+           const metadata = session.user.user_metadata || {};
+           const profileName = metadata.full_name || metadata.name || session.user.email?.split('@')[0] || 'My Profile';
+           const avatarId = metadata.avatar_id || 'human-m-1';
+           const settings = metadata.settings || { autoplay: true, subtitleSize: 'medium', subtitleColor: 'white' };
+           const stats = metadata.stats || {
+              totalXP: 0,
+              level: 1,
+              streak: 0,
+              lastWatchDate: Date.now(),
+              hoursWatched: 0,
+              moviesWatched: 0,
+              seriesWatched: 0
+           };
+
+           let userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
+           
+           // Cleanup duplicates logic
+           if (userProfiles.length > 1) {
+               const uniqueProfiles: Profile[] = [];
+               const toDelete: number[] = [];
+               const seenNames = new Set<string>();
+
+               for (const p of userProfiles) {
+                   const normalizedName = p.name.trim().toLowerCase();
+                   if (seenNames.has(normalizedName)) {
+                       toDelete.push(p.id!);
+                   } else {
+                       seenNames.add(normalizedName);
+                       uniqueProfiles.push(p);
+                   }
+               }
+
+               if (toDelete.length > 0) {
+                   // console.log('Removing duplicate profiles:', toDelete);
+                   await db.profiles.bulkDelete(toDelete);
+                   userProfiles = uniqueProfiles;
+               }
+           }
+           
+           if (userProfiles.length === 0) {
                await db.profiles.add({
-                  userId: userId as number,
-                  name: metadataName,
-                  avatarId: 'human-m-1',
+                  userId: userRecord.id!,
+                  name: profileName,
+                  avatarId: avatarId,
                   isKid: false,
-                  settings: { autoplay: true, subtitleSize: 'medium', subtitleColor: 'white' }
+                  settings: settings,
+                  stats: stats
                 });
-             }
-         }
-         
-         if (userRecord) {
-             setUser(userRecord);
-             
-             // Sync profile from Supabase metadata
-             const metadata = session.user.user_metadata || {};
-             const profileName = metadata.full_name || metadata.name || session.user.email?.split('@')[0] || 'My Profile';
-             const avatarId = metadata.avatar_id || 'human-m-1';
-             const settings = metadata.settings || { autoplay: true, subtitleSize: 'medium', subtitleColor: 'white' };
-             const stats = metadata.stats || {
-                totalXP: 0,
-                level: 1,
-                streak: 0,
-                lastWatchDate: Date.now(),
-                hoursWatched: 0,
-                moviesWatched: 0,
-                seriesWatched: 0
-             };
+           } else {
+               // Update the primary profile
+               const primaryProfile = userProfiles[0];
+               await db.profiles.update(primaryProfile.id!, { 
+                   name: profileName,
+                   avatarId: avatarId,
+                   settings: settings,
+                   stats: stats
+               });
+           }
 
-             let userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
-             
-             if (userProfiles.length === 0) {
-                 await db.profiles.add({
-                    userId: userRecord.id!,
-                    name: profileName,
-                    avatarId: avatarId,
-                    isKid: false,
-                    settings: settings,
-                    stats: stats
-                  });
-             } else {
-                 // Update the primary profile with Supabase data (Source of Truth)
-                 const primaryProfile = userProfiles[0];
-                 await db.profiles.update(primaryProfile.id!, { 
-                     name: profileName,
-                     avatarId: avatarId,
-                     settings: settings,
-                     stats: stats
-                 });
-             }
-
-             // Refresh profiles
-             userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
-             setProfiles(userProfiles);
-             
-             // Auto-select if not set
-            if (!profileRef.current) {
-                const lastProfileId = localStorage.getItem('influcine_profile_id');
-                const lastProfile = lastProfileId ? userProfiles.find(p => p.id === parseInt(lastProfileId)) : null;
-                
-                if (lastProfile) {
-                    setProfile(lastProfile);
-                } else {
-                    setProfile(userProfiles[0]);
-                }
-            }
-        }
-     } else {
-        // Sign out if it was a supabase user
-        if (userRef.current?.passwordHash === 'supabase_auth') {
-             setUser(null);
-             setProfile(null);
-             setProfiles([]);
-        }
+           // Auto-select profile if none selected - DISABLED to force "Who's watching?" screen
+           // if (!profileId) {
+           //    const lastProfileId = localStorage.getItem('influcine_profile_id');
+           //    // We need to fetch fresh profiles because we might have just added one
+           //    // But here we can just use userProfiles which is reasonably fresh (minus the add/update above if we didn't re-fetch)
+           //    // To be safe, let's just use the first one or the saved one.
+           //    // Since this is async, the useLiveQuery 'profiles' might not have updated yet in this render cycle.
+           //    const freshProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
+           //    
+           //    const lastProfile = lastProfileId ? freshProfiles.find(p => p.id === parseInt(lastProfileId)) : null;
+           //    
+           //    if (lastProfile) {
+           //        setProfileId(lastProfile.id!);
+           //    } else if (freshProfiles.length > 0) {
+           //        setProfileId(freshProfiles[0].id!);
+           //    }
+           // }
       }
-    };
+   } else {
+      // Sign out if it was a supabase user
+      // We check if current user is supabase_auth. 
+      // Since 'user' object might be null or not updated yet, we check the DB or just clear if we know we are in a signed-out state from Supabase.
+      if (userId) {
+          const u = await db.users.get(userId);
+          if (u && u.passwordHash === 'supabase_auth') {
+             setUserId(null);
+             setProfileId(null);
+          }
+      }
+    }
+  }, [userId, profileId]);
 
+  useEffect(() => {
     const initAuth = async () => {
       try {
-        // Check Supabase session first
-        const { data: { session } } = await supabase.auth.getSession();
+        let session = null;
+        if (isSupabaseConfigured) {
+          const { data, error } = await supabase.auth.getSession();
+          if (error) {
+            // If there's an error (e.g. 403 Forbidden, invalid token), ensure we clear any stale state
+            await supabase.auth.signOut().catch(() => {});
+            localStorage.removeItem('sb-' + import.meta.env.VITE_SUPABASE_URL + '-auth-token');
+          } else {
+            session = data.session;
+          }
+        }
         
         if (session) {
           await handleSession(session);
         } else {
            // Fallback to local auth if needed
-           const storedUserId = localStorage.getItem('influcine_user_id');
-           if (storedUserId) {
-             const userRecord = await db.users.get(parseInt(storedUserId));
-             if (userRecord && userRecord.passwordHash !== 'supabase_auth') {
-                setUser(userRecord);
-                const userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
-                
-                // Set profiles
-               setProfiles(userProfiles);
-               
-               // Try to restore last used profile
-               const lastProfileId = localStorage.getItem('influcine_profile_id');
-               const lastProfile = lastProfileId ? userProfiles.find(p => p.id === parseInt(lastProfileId)) : null;
-
-               if (lastProfile) {
-                  setProfile(lastProfile);
-               } else if (userProfiles.length > 0) {
-                 setProfile(userProfiles[0]);
-               }
-            } else {
-               localStorage.removeItem('influcine_user_id');
-               localStorage.removeItem('influcine_profile_id');
-             }
+           // userId is already initialized from localStorage, so useLiveQuery will handle fetching the user object.
+           // We just need to ensure profile selection.
+           if (userId && !profileId) {
+             // Just ensure we have the user loaded, but don't auto-select profile
+             // const userProfiles = await db.profiles.where('userId').equals(userId).toArray();
+             // if (userProfiles.length > 0) {
+             //    setProfileId(userProfiles[0].id!);
+             // }
            }
         }
       } catch (error) {
-        console.error('Failed to restore session:', error);
+        // console.error('Failed to restore session:', error);
       } finally {
         setIsLoading(false);
       }
@@ -160,37 +226,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     initAuth();
 
-    // Listen for Supabase auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'INITIAL_SESSION') return; // Handled by initAuth
+      if (event === 'INITIAL_SESSION') return; 
       await handleSession(session);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
-
-  const refreshProfiles = async () => {
-    if (!user?.id) return;
-    const userProfiles = await db.profiles.where('userId').equals(user.id).toArray();
-    
-    // Set profiles
-    setProfiles(userProfiles);
-  };
+  }, [handleSession, profileId, userId]); // Run once on mount or when dependencies change
 
   const login = async (email: string, password: string) => {
-    // Try Supabase login first
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    let error = null;
+    
+    if (isSupabaseConfigured) {
+      const { error: supabaseError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      error = supabaseError;
+    } else {
+      error = { message: 'Supabase not configured' };
+    }
 
     if (error) {
-      // If Supabase fails, check if it's a local-only user (legacy)
-      // or just throw error
-      console.warn("Supabase login failed, trying local fallback:", error.message);
+      if (isSupabaseConfigured) {
+        console.warn("Supabase login failed, trying local fallback:", error.message);
+      }
       
-      // Local Fallback
-      // Helper for password hashing
       const hashPassword = async (p: string) => {
         const msgBuffer = new TextEncoder().encode(p);
         const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -205,27 +266,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
          throw new Error(error.message || 'Invalid email or password');
       }
 
-      setUser(userRecord);
-      localStorage.setItem('influcine_user_id', userRecord.id!.toString());
+      setUserId(userRecord.id!);
       
-      const userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
+      // Do not auto-select profile on login. Let the user choose.
+      setProfileId(null);
       
-      setProfiles(userProfiles);
-      if (userProfiles.length > 0) {
-        setProfile(userProfiles[0]);
-      } else {
-        setProfile(null);
-      }
-      
-      localStorage.removeItem('influcine_profile_id');
       return;
     }
-
-    // If Supabase login success, the onAuthStateChange listener will handle the state update
   };
 
   const signup = async (email: string, password: string) => {
-    // Supabase Signup
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -234,41 +284,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (error) {
       throw new Error(error.message);
     }
-    
-    // Note: If email confirmation is enabled, user won't be signed in immediately
-    // For this POC, we assume it might be disabled or user checks email.
-    // If auto-confirm is on, onAuthStateChange will trigger.
   };
 
   const logout = async () => {
-    // Supabase logout
     await supabase.auth.signOut();
-    
-    // Local logout
-    setUser(null);
-    setProfile(null);
-    setProfiles([]);
+    setUserId(null);
+    setProfileId(null);
     localStorage.removeItem('influcine_user_id');
     localStorage.removeItem('influcine_profile_id');
   };
 
-  const switchProfile = async (profileId: number) => {
-    const selected = profiles.find(p => p.id === profileId);
-    if (!selected) throw new Error('Profile not found');
-    
-    setProfile(selected);
-    localStorage.setItem('influcine_profile_id', profileId.toString());
+  const switchProfile = async (id: number) => {
+    // Verify it belongs to user
+    const p = await db.profiles.get(id);
+    if (p && p.userId === userId) {
+        setProfileId(id);
+    } else {
+        throw new Error('Profile not found');
+    }
   };
 
   const addProfile = async (name: string, avatarId: string, isKid: boolean = false) => {
-    if (!user?.id) throw new Error('Not authenticated');
+    if (!userId) throw new Error('Not authenticated');
     
-    // Enforce profile limit (optional, e.g. 5)
-    const existingCount = await db.profiles.where('userId').equals(user.id).count();
+    const existingCount = await db.profiles.where('userId').equals(userId).count();
     if (existingCount >= 5) throw new Error('Maximum number of profiles reached (5).');
 
     await db.profiles.add({
-      userId: user.id,
+      userId,
       name,
       avatarId,
       isKid,
@@ -279,8 +322,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
     
-    // If Supabase user, sync the new profile (though this case is rare as handleSession creates one)
-    if (user.passwordHash === 'supabase_auth') {
+    // Sync with Supabase if needed
+    if (user?.passwordHash === 'supabase_auth') {
          await supabase.auth.updateUser({
             data: {
                 full_name: name,
@@ -290,20 +333,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
          });
     }
-
-    await refreshProfiles();
+    // No need to refreshProfiles(), useLiveQuery handles it
   };
 
-  const updateProfile = async (profileId: number, data: Partial<Profile>) => {
-    await db.profiles.update(profileId, data);
+  const updateProfile = async (id: number, data: Partial<Profile>) => {
+    await db.profiles.update(id, data);
     
-    // Update local state if it's the current profile
-    if (profile?.id === profileId) {
-      setProfile(prev => prev ? { ...prev, ...data } : null);
-    }
-    
-    // Sync with Supabase if applicable
-    if (user?.passwordHash === 'supabase_auth') {
+    if (user?.passwordHash === 'supabase_auth' && id === profileId) {
         const updates: Record<string, string | object> = {};
         if (data.name) {
             updates.full_name = data.name;
@@ -317,35 +353,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await supabase.auth.updateUser({ data: updates });
         }
     }
-
-    await refreshProfiles();
   };
 
   const updateUser = async (data: Partial<User>) => {
-    if (!user?.id) throw new Error('Not authenticated');
+    if (!userId) throw new Error('Not authenticated');
 
-    // If updating email, check uniqueness
-    if (data.email && data.email !== user.email) {
+    if (data.email && user && data.email !== user.email) {
       const existing = await db.users.where('email').equals(data.email).first();
       if (existing) {
         throw new Error('Email already taken');
       }
     }
 
-    await db.users.update(user.id, data);
-    setUser(prev => prev ? { ...prev, ...data } : null);
+    await db.users.update(userId, data);
   };
 
-  const deleteProfile = async (profileId: number) => {
+  const deleteProfile = async (id: number) => {
     if (profiles.length <= 1) throw new Error('Cannot delete the last profile');
     
-    await db.profiles.delete(profileId);
+    await db.profiles.delete(id);
     
-    if (profile?.id === profileId) {
-      setProfile(null);
-      localStorage.removeItem('influcine_profile_id');
+    if (profileId === id) {
+      setProfileId(null);
     }
-    await refreshProfiles();
+  };
+
+  const refreshProfiles = async () => {
+    // No-op, kept for compatibility if needed
+    return Promise.resolve();
   };
 
   return (

@@ -1,29 +1,57 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, SavedMedia } from '../db';
+import { db } from '../db';
 import MediaCard from '../components/MediaCard';
 import Focusable from '../components/Focusable';
 import { useNavigate } from 'react-router-dom';
-import { getImageUrl } from '../services/tmdb';
+import { getImageUrl, getDetails } from '../services/tmdb';
 import { Play, Search, Tv, Film, Layers, ChevronRight, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { usePlayer } from '../context/PlayerContext';
 
 const Watchlist: React.FC = () => {
-  const watchlist = useLiveQuery(() => db.watchlist.orderBy('savedAt').reverse().toArray());
+  const watchlist = useLiveQuery(() => db.library.orderBy('savedAt').reverse().toArray());
   const [filter, setFilter] = useState<'all' | 'movie' | 'tv'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [featuredItem, setFeaturedItem] = useState<SavedMedia | null>(null);
+  const [featuredId, setFeaturedId] = useState<number | null>(null);
   const navigate = useNavigate();
+  const { play } = usePlayer();
 
-  // Set a featured item randomly from the watchlist on load
+  // Stable featured item selection
   useEffect(() => {
-    if (watchlist && watchlist.length > 0 && !featuredItem) {
-      const random = watchlist[Math.floor(Math.random() * watchlist.length)];
-      setFeaturedItem(random);
-    } else if (watchlist?.length === 0) {
-      setFeaturedItem(null);
+    if (!watchlist || watchlist.length === 0) {
+      if (featuredId !== null) setFeaturedId(null);
+      return;
     }
-  }, [watchlist, featuredItem]);
+
+    // If currently selected featured item is still in watchlist, keep it
+    if (featuredId && watchlist.some(i => i.id === featuredId)) {
+      return;
+    }
+
+    // Try to restore from session storage for persistence across navigations
+    const storedId = sessionStorage.getItem('influcine_featured_id');
+    if (storedId) {
+      const id = parseInt(storedId);
+      const exists = watchlist.find(i => i.id === id);
+      if (exists) {
+        setFeaturedId(id);
+        return;
+      }
+    }
+
+    // Pick a new random one
+    const randomItem = watchlist[Math.floor(Math.random() * watchlist.length)];
+    if (randomItem?.id) {
+      setFeaturedId(randomItem.id);
+      sessionStorage.setItem('influcine_featured_id', randomItem.id.toString());
+    }
+  }, [watchlist, featuredId]);
+
+  const featuredItem = useMemo(() => {
+    if (!watchlist || !featuredId) return null;
+    return watchlist.find(i => i.id === featuredId) || null;
+  }, [watchlist, featuredId]);
 
   const filteredItems = useMemo(() => {
     if (!watchlist) return [];
@@ -97,28 +125,38 @@ const Watchlist: React.FC = () => {
                   {featuredItem.title || featuredItem.name}
                 </h1>
                 
-                <p className="text-gray-200 text-lg md:text-xl line-clamp-2 md:line-clamp-3 mb-8 max-w-2xl font-medium drop-shadow-md">
-                  {featuredItem.overview}
-                </p>
+                <div className="max-h-[15vh] overflow-y-auto scrollbar-hide mb-8 max-w-2xl">
+                  <p className="text-gray-200 text-lg md:text-xl leading-relaxed font-medium drop-shadow-md">
+                    {featuredItem.overview}
+                  </p>
+                </div>
                 
-                <div className="flex items-center gap-4">
+                <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
                   <Focusable
                     as="button"
-                    onClick={() => navigate(`/watch/${featuredItem.media_type}/${featuredItem.id}`)}
-                    className="bg-primary hover:bg-primary-hover text-white px-8 py-4 rounded-xl font-bold flex items-center gap-3 transition-all hover:scale-105 shadow-[0_0_40px_rgba(124,58,237,0.4)] text-lg group"
-                    activeClassName="ring-4 ring-primary/50 scale-105"
+                    onClick={async () => {
+                      if (featuredItem) {
+                        try {
+                           // Fetch details to be safe, or use item if it has everything
+                           const details = await getDetails(featuredItem.media_type, featuredItem.id);
+                           play(details);
+                        } catch(e) {
+                          console.error(e);
+                        }
+                      }
+                    }}
+                    className="bg-linear-to-r from-primary to-purple-600 hover:from-primary-hover hover:to-purple-500 text-white px-8 py-4 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 hover:scale-105 shadow-[0_0_20px_rgba(124,58,237,0.5)] hover:shadow-[0_0_30px_rgba(124,58,237,0.7)] text-lg shrink-0 border border-white/10 uppercase tracking-wide group"
+                    activeClassName="ring-4 ring-white scale-110 z-20"
                   >
-                    <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white text-white group-hover:text-primary transition-colors">
-                      <Play fill="currentColor" size={20} className="ml-1" />
-                    </div>
+                    <Play fill="currentColor" size={20} className="group-hover:animate-pulse" />
                     Watch Now
                   </Focusable>
                   
                   <Focusable
                     as="button"
                     onClick={() => navigate(`/details/${featuredItem.media_type}/${featuredItem.id}`)}
-                    className="bg-white/5 hover:bg-white/10 text-white px-8 py-4 rounded-xl font-bold flex items-center gap-3 transition-all border border-white/10 backdrop-blur-md hover:scale-105 text-lg"
-                    activeClassName="ring-4 ring-white/50 scale-105"
+                    className="bg-white/5 hover:bg-white/10 text-white px-8 py-4 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 backdrop-blur-md border border-white/10 hover:border-white/30 hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] text-lg shrink-0"
+                    activeClassName="ring-4 ring-white scale-110 z-20"
                   >
                     Details <ChevronRight size={20} />
                   </Focusable>

@@ -767,3 +767,351 @@ FINAL EXIT GATE
 =====================================================================
 END TASK
 =====================================================================
+
+
+
+Upgrade Version: v0.1.9
+
+=====================================================================
+CURSOR TASK — PREMIUM CINEMA AUDIO EXPERIENCE (ALL PLATFORMS) in settings
+
+esign the player controls UI
+
+add dynamic loudness normalization
+
+integrate subtitle & audio track pairing
+
+=====================================================================
+
+ROLE
+You are a senior media systems engineer and product designer.
+Your responsibility is to implement a premium, honest, immersive
+audio experience that adapts to content and device capability.
+
+---------------------------------------------------------------------
+GOAL
+---------------------------------------------------------------------
+Deliver a “Cinema Audio” experience that:
+• Detects best available audio format
+• Passes through spatial/surround audio when supported
+• Falls back gracefully when not
+• Communicates clearly and confidently to users
+• Never falsely claims certification
+
+---------------------------------------------------------------------
+AUDIO STRATEGY (LOCKED)
+---------------------------------------------------------------------
+Internal tiers:
+• Tier 1: Dolby Atmos (if present in source AND device supports it)
+• Tier 2: 7.1 / 5.1 Surround
+• Tier 3: Optimized Stereo
+
+User-facing label:
+• “Cinema Audio” (primary)
+• Append detected format for transparency
+
+---------------------------------------------------------------------
+DETECTION RULES
+---------------------------------------------------------------------
+Detect at playback start:
+• audio codec
+• channel count
+• spatial support
+
+Electron:
+• Use MediaCapabilities API + video.audioTracks
+Android TV:
+• Use ExoPlayer Format metadata (E-AC3 JOC = Atmos)
+
+---------------------------------------------------------------------
+PLAYBACK RULES
+---------------------------------------------------------------------
+• Never transcode audio
+• Always prefer passthrough
+• Allow OS/device to manage spatialization
+• Downmix only when required
+
+---------------------------------------------------------------------
+UI REQUIREMENTS
+---------------------------------------------------------------------
+Player Audio Panel:
+• Cinema Audio (Recommended)
+• Standard Audio
+
+Display:
+• “Cinema Audio · Dolby Atmos”
+• “Cinema Audio · Surround”
+• “Cinema Audio · Optimized Stereo”
+
+No false branding. No certification claims.
+
+---------------------------------------------------------------------
+FALLBACK & SAFETY
+---------------------------------------------------------------------
+If detection fails:
+• Default to Cinema Audio
+• Label as “Optimized Stereo”
+• No errors shown to user
+
+---------------------------------------------------------------------
+FINAL EXIT GATE
+---------------------------------------------------------------------
+[x] Audio format detection works
+[x] Passthrough enabled when possible
+[x] Fallback behaves correctly
+[x] UI is clear and calm
+[x] No false Atmos claims
+[x] Works on macOS, Windows, Android TV
+
+=====================================================================
+END TASK
+=====================================================================
+
+=====================================================================
+CURSOR TASK — IMDB LOCAL DATASET INTEGRATION (SCAN RESULT)
+=====================================================================
+
+---------------------------------------------------------------------
+SOURCE DATA (SCANNED)
+---------------------------------------------------------------------
+Location: /Users/marvens/Desktop/IMDB
+Status: Scanned & Verified
+
+Files Detected:
+• title.principals.tsv (4.1 GB) - Cast/Crew linkage
+• title.akas.tsv       (2.6 GB) - Localized titles
+• title.basics.tsv     (1.0 GB) - Core metadata (Year, Runtime, Genres)
+• name.basics.tsv      (887 MB) - Actor/Director metadata
+• title.crew.tsv       (386 MB) - Directors/Writers
+• title.episode.tsv    (237 MB) - TV Episode linkage
+• title.ratings.tsv    (27 MB)  - User ratings / Votes
+
+Total Size: ~10GB
+
+---------------------------------------------------------------------
+INTEGRATION STRATEGY
+---------------------------------------------------------------------
+[ ] DO NOT copy files to source (Too large for Git/Vite)
+[ ] Option A: Import to local SQLite DB (better-sqlite3)
+[ ] Option B: Stream-read on demand (Slow for search)
+[ ] Option C: Use partial dataset (Ratings + Basics only)
+
+Recommended: Create a local ingestion script to populate a SQLite DB
+for offline search and metadata enrichment.
+
+=====================================================================
+
+V.0.1.10
+
+=====================================================================
+CURSOR TASK SPEC — NATIVE STREAM RESOLVER + PATH PARITY PLAYER
+=====================================================================
+
+ROLE
+You are a senior platform engineer + frontend lead.
+You are extending an existing native video player (InflucinePlayer)
+to support movie, TV, and anime playback using a unified, native
+stream resolver — without using any third-party embedded players.
+
+This task is NOT about UI polish.
+This task is about architecture correctness and path parity.
+
+---------------------------------------------------------------------
+GOAL
+---------------------------------------------------------------------
+Mirror the SAME routing paths and playback flow as external players
+(e.g. /movie/{tmdbId}, /tv/{tmdbId}/{season}/{episode}, /anime/{malId})
+BUT:
+• Use ONLY the native player (InflucinePlayer)
+• Use ONLY native controls, audio, subtitles, progress
+• No iframes in production
+• No external player logic touching playback
+
+---------------------------------------------------------------------
+NON-NEGOTIABLE RULES
+---------------------------------------------------------------------
+• Do NOT embed or iframe third-party players
+• Do NOT attempt to extract or reuse third-party streams
+• Do NOT let routing logic leak into the player
+• Player must remain source-agnostic
+• Embed mode (iframe) is DEV-ONLY and feature-flagged
+
+---------------------------------------------------------------------
+ROUTE CONTRACT (LOCKED — MUST MATCH EXACTLY)
+---------------------------------------------------------------------
+Frontend routes MUST exist and be stable:
+
+/movie/:tmdbId
+/tv/:tmdbId/:season/:episode
+/anime/:malId/:number/:type
+
+These routes define INTENT only.
+They do NOT define where streams come from.
+
+---------------------------------------------------------------------
+ARCHITECTURE (MANDATORY)
+---------------------------------------------------------------------
+Use a 3-layer model:
+
+1) Route Layer (frontend)
+   - Parses params
+   - Handles navigation (Next Episode, Back, Resume)
+
+2) Stream Resolver Layer (service)
+   - Maps route params → stream metadata
+   - Fetches stream URLs + subtitles
+   - Handles fallbacks
+
+3) Native Player Layer (InflucinePlayer)
+   - Receives ONLY resolved data:
+     • src
+     • subtitles
+     • startTime
+     • callbacks
+   - NO knowledge of tmdb, seasons, anime, or routing
+
+---------------------------------------------------------------------
+STREAM RESOLVER (REQUIRED)
+---------------------------------------------------------------------
+Implement a centralized resolver:
+
+Function:
+resolveStream(input)
+
+Input:
+{
+  mediaType: "movie" | "tv" | "anime",
+  tmdbId?: number,
+  malId?: number,
+  season?: number,
+  episode?: number,
+  number?: number,
+  variant?: "sub" | "dub"
+}
+
+Output:
+{
+  stream: {
+    type: "hls" | "dash" | "mp4",
+    url: string
+  },
+  subtitles: [
+    { lang: string, url: string }
+  ],
+  metadata: {
+    title: string,
+    poster: string,
+    runtime?: number
+  }
+}
+
+The resolver may:
+• query backend APIs
+• query local mock data (dev)
+• return demo/legal sample streams
+• switch sources later WITHOUT touching UI
+
+---------------------------------------------------------------------
+FRONTEND IMPLEMENTATION RULES
+---------------------------------------------------------------------
+Movie Page:
+• Route: /movie/:tmdbId
+• On mount:
+  - call resolveStream({ mediaType: "movie", tmdbId })
+• Pass result into InflucinePlayer
+• Resume from saved progress if available
+
+TV Page:
+• Route: /tv/:tmdbId/:season/:episode
+• On mount:
+  - call resolveStream({ mediaType: "tv", tmdbId, season, episode })
+• Next Episode:
+  - navigate to /tv/:tmdbId/:season/:episode+1
+• Season completion:
+  - auto-advance season
+
+Anime Page:
+• Route: /anime/:malId/:number/:type
+• Resolve via same resolver
+• Allow fallback logic inside resolver only
+
+---------------------------------------------------------------------
+PLAYER RULES (DO NOT BREAK)
+---------------------------------------------------------------------
+InflucinePlayer:
+• MUST remain unchanged in responsibilities
+• Must only receive resolved data
+• Must manage:
+  - controls
+  - audio modes
+  - subtitles
+  - progress
+  - next episode callback
+• No resolver logic inside the player
+
+---------------------------------------------------------------------
+AUDIO & SUBTITLE RULES
+---------------------------------------------------------------------
+• Cinema Audio enabled by default
+• If surround / Atmos detected:
+  - force passthrough
+  - disable audio processing
+• Subtitles loaded natively via <track>
+• External subtitles supported via resolver
+
+---------------------------------------------------------------------
+PROGRESS & CONTINUE WATCHING
+---------------------------------------------------------------------
+• Save progress on:
+  - timeupdate (throttled)
+  - pause
+  - ended
+• For TV:
+  - progress stored per episode
+  - resume last watched episode
+• Route navigation must preserve resume state
+
+---------------------------------------------------------------------
+DEV / PROD SAFETY
+---------------------------------------------------------------------
+• Embed/iframe support must be guarded by:
+  ENABLE_EMBED_MODE = false (default)
+• Production builds must NEVER iframe streams
+• Resolver must fail gracefully if no stream exists
+
+---------------------------------------------------------------------
+ERROR HANDLING (REQUIRED)
+---------------------------------------------------------------------
+If resolveStream fails:
+• Show friendly error UI
+• Provide Retry button
+• Do NOT crash player
+• Do NOT leave blank screen
+
+---------------------------------------------------------------------
+TEST CASES (MANDATORY)
+---------------------------------------------------------------------
+[ ] Movie loads and plays via native player
+[ ] TV episode loads, Next Episode works
+[ ] Season boundary advances correctly
+[ ] Audio modes switch correctly
+[ ] Subtitles selectable
+[ ] Progress resumes after reload
+[ ] Embed mode disabled in prod
+[ ] Resolver can swap stream sources without UI changes
+
+---------------------------------------------------------------------
+FINAL EXIT GATE
+---------------------------------------------------------------------
+You may only complete this task when:
+
+[ ] All routes exist and match spec
+[ ] Native player handles ALL playback
+[ ] Resolver layer is isolated and reusable
+[ ] No iframe logic in production paths
+[ ] Controls/audio/subtitles behave identically across media types
+[ ] Architecture is source-agnostic and future-proof
+
+=====================================================================
+END TASK
+=====================================================================

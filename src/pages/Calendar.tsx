@@ -1,17 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef } from 'react';
 import { 
   format, addMonths, subMonths, startOfMonth, endOfMonth, 
   eachDayOfInterval, isSameMonth, isSameDay, isToday, 
   startOfWeek, endOfWeek 
 } from 'date-fns';
+import { useQuery } from '@tanstack/react-query';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { 
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, List, 
   Film, Tv, Bell, CheckCircle, Star, Info, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Media } from '../types';
-import { discoverMedia, getDetails } from '../services/tmdb';
-import { getImageUrl } from '../services/tmdb';
+import { discoverMedia, getDetails, getImageUrl } from '../services/tmdb';
 import { db, Reminder } from '../db';
 import Focusable from '../components/Focusable';
 import { useNavigate } from 'react-router-dom';
@@ -145,42 +146,32 @@ const CalendarPage = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [filter, setFilter] = useState<FilterType>('all');
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [reminders, setReminders] = useState<Reminder[]>([]);
   
   // Hover State
   const [hoveredEvent, setHoveredEvent] = useState<{ event: CalendarEvent; position: { x: number; y: number } } | null>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const loadReminders = useCallback(async () => {
-    const allReminders = await db.reminders.toArray();
-    setReminders(allReminders);
-  }, []);
+  const reminders = useLiveQuery(() => db.reminders.toArray(), []) || [];
 
-  const fetchEvents = useCallback(async () => {
-    setLoading(true);
-    const start = startOfMonth(currentDate);
-    const end = endOfMonth(currentDate);
-    
-    // Format dates for API (YYYY-MM-DD)
-    const gte = format(subMonths(start, 0), 'yyyy-MM-dd'); // Fetch a bit more?
-    const lte = format(addMonths(end, 0), 'yyyy-MM-dd');
+  const { data: events = [], isLoading: loading } = useQuery({
+    queryKey: ['calendar-events', format(startOfMonth(currentDate), 'yyyy-MM'), filter],
+    queryFn: async () => {
+      const start = startOfMonth(currentDate);
+      const end = endOfMonth(currentDate);
+      
+      const gte = format(subMonths(start, 0), 'yyyy-MM-dd');
+      const lte = format(addMonths(end, 0), 'yyyy-MM-dd');
 
-    try {
       let fetchedEvents: CalendarEvent[] = [];
 
       // 1. Fetch Watchlist Next Episodes (Priority)
       if (filter === 'all' || filter === 'tv') {
-        const watchlist = await db.watchlist.filter(item => item.media_type === 'tv').toArray();
+        const watchlist = await db.library.filter(item => item.media_type === 'tv').toArray();
         const watchlistPromises = watchlist.map(async (show) => {
           try {
-            // Only fetch if we suspect it might have a new episode (e.g. ongoing)
-            // For now, fetch all TV shows in watchlist to be safe
             const details = await getDetails('tv', show.id);
             if (details.next_episode_to_air) {
                const airDate = new Date(details.next_episode_to_air.air_date);
-               // Check if within current view range
                if (airDate >= start && airDate <= end) {
                  return {
                    ...show,
@@ -208,7 +199,7 @@ const CalendarPage = () => {
         const movies = await discoverMedia('movie', {
           'primary_release_date.gte': gte,
           'primary_release_date.lte': lte,
-          sort_by: 'popularity.desc' // Sort by popularity to show better movies
+          sort_by: 'popularity.desc'
         });
         fetchedEvents = [...fetchedEvents, ...movies.map(m => ({ ...m, releaseDate: new Date(m.release_date!) } as CalendarEvent))];
       }
@@ -223,31 +214,19 @@ const CalendarPage = () => {
       }
 
       // Process and sort
-      const processedEvents = fetchedEvents
+      return fetchedEvents
         .filter(e => !isNaN(e.releaseDate.getTime()))
-        // Remove duplicates by ID + Date (if any)
         .filter((v, i, a) => a.findIndex(t => t.id === v.id && t.releaseDate.getTime() === v.releaseDate.getTime()) === i)
-        .sort((a, b) => b.popularity - a.popularity); // Sort by popularity for rendering priority
-
-      setEvents(processedEvents);
-    } catch (error) {
-      console.error('Error fetching calendar events:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentDate, filter]);
-
-  useEffect(() => {
-    fetchEvents();
-    loadReminders();
-  }, [fetchEvents, loadReminders]);
+        .sort((a, b) => b.popularity - a.popularity);
+    },
+    staleTime: 1000 * 60 * 60, // 1 hour
+  });
 
   const toggleReminder = async (event: CalendarEvent) => {
     const existing = reminders.find(r => r.mediaId === event.id && r.mediaType === event.media_type);
     
     if (existing) {
       await db.reminders.delete(existing.id!);
-      setReminders(prev => prev.filter(r => r.id !== existing.id));
       // TODO: Cancel notification
     } else {
       const reminder: Reminder = {
@@ -259,8 +238,7 @@ const CalendarPage = () => {
         remindAt: event.releaseDate.getTime() - (24 * 60 * 60 * 1000) // 24 hours before
       };
       
-      const id = await db.reminders.add(reminder);
-      setReminders(prev => [...prev, { ...reminder, id } as Reminder]);
+      await db.reminders.add(reminder);
       
       // Schedule notification
       if ('Notification' in window && Notification.permission === 'granted') {

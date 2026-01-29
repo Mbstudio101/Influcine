@@ -1,25 +1,25 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Download, Trash2, Play } from 'lucide-react';
-import { downloadService, DownloadItem } from '../../services/downloadService';
+import { downloadService } from '../../services/downloadService';
 import Focusable from '../Focusable';
 import { useToast } from '../../context/toast';
 
 const DownloadList: React.FC = () => {
-  const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const { showToast } = useToast();
 
-  useEffect(() => {
-    loadDownloads();
-  }, []);
-
-  const loadDownloads = async () => {
-    const items = await downloadService.getDownloads();
-    setDownloads([...items]);
-  };
+  const { data: downloads = [], refetch } = useQuery({
+    queryKey: ['downloads'],
+    queryFn: async () => {
+      const items = await downloadService.getDownloads();
+      return [...items];
+    },
+    refetchInterval: 1000, // Poll every second for progress updates
+  });
 
   const handleDelete = async (id: string) => {
     await downloadService.removeDownload(id);
-    await loadDownloads();
+    refetch();
     showToast('Download removed', 'info');
   };
 

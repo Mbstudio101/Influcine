@@ -1,23 +1,35 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import SplashScreen from './components/SplashScreen';
-import Home from './pages/Home';
-import Search from './pages/Search';
-import Watchlist from './pages/Watchlist';
-import Player from './pages/Player';
-import Profile from './pages/Profile';
-import Settings from './pages/Settings';
-import Details from './pages/Details';
-import Calendar from './pages/Calendar';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
-import ProfileSelection from './pages/ProfileSelection';
 import { useAuth } from './context/useAuth';
 import { checkForUpdates, getPlatformDownloadLink, skipUpdate } from './services/updateService';
 import UpdateModal from './components/UpdateModal';
 import { AppVersion } from './types';
 import pkg from '../package.json';
+import { migrateDatabaseIds } from './services/migration';
+import { CleanupAgent } from './services/CleanupAgent';
+import { PlayerProvider } from './context/PlayerContext';
+import GlobalPlayer from './components/GlobalPlayer';
+
+// Lazy load pages for better performance
+const Home = lazy(() => import('./pages/Home'));
+const Search = lazy(() => import('./pages/Search'));
+const Watchlist = lazy(() => import('./pages/Watchlist'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Details = lazy(() => import('./pages/Details'));
+const Calendar = lazy(() => import('./pages/Calendar'));
+const Login = lazy(() => import('./pages/Login'));
+const Signup = lazy(() => import('./pages/Signup'));
+const ProfileSelection = lazy(() => import('./pages/ProfileSelection'));
+const Genre = lazy(() => import('./pages/Genre'));
+
+const LoadingFallback = () => (
+  <div className="h-screen w-full bg-black flex items-center justify-center">
+    <div className="w-16 h-16 border-4 border-white/20 border-t-primary rounded-full animate-spin" />
+  </div>
+);
 
 const ProtectedRoute = ({ children, requireProfile = true }: { children: JSX.Element, requireProfile?: boolean }) => {
   const { isAuthenticated, profile, isLoading } = useAuth();
@@ -53,8 +65,28 @@ const PublicOnlyRoute = ({ children }: { children: JSX.Element }) => {
 function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [updateAvailable, setUpdateAvailable] = useState<AppVersion | null>(null);
+  const initialized = useRef(false);
 
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
+    // Run DB migrations
+    migrateDatabaseIds();
+
+    // Run automatic cleanup
+    CleanupAgent.runCleanup().then(report => {
+      const totalRemoved = 
+        report.libraryRemoved + 
+        report.historyRemoved + 
+        report.episodeProgressRemoved + 
+        report.sourceMemoryRemoved;
+
+      if (totalRemoved > 0) {
+        // console.log('[AutoCleanup] Cleanup Report:', report);
+      }
+    });
+
     const check = async () => {
       try {
         const update = await checkForUpdates(pkg.version);
@@ -62,7 +94,9 @@ function App() {
           setUpdateAvailable(update);
         }
       } catch (error) {
-        console.error('Update check failed', error);
+        if (import.meta.env.DEV) {
+          console.error('Update check failed', error);
+        }
       }
     };
     check();
@@ -83,62 +117,63 @@ function App() {
   }
 
   return (
-    <>
-      {updateAvailable && (
-        <UpdateModal 
-          update={updateAvailable} 
-          onClose={() => {
-            skipUpdate(updateAvailable.latest);
-            setUpdateAvailable(null);
-          }}
-          onUpdate={handleUpdate}
-        />
-      )}
-      <Router>
-        <Routes>
-        <Route path="/" element={<Navigate to="/browse" replace />} />
-        <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
-        <Route path="/signup" element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>} />
-        
-        <Route 
-          path="/profiles" 
-          element={
-            <ProtectedRoute requireProfile={false}>
-              <ProfileSelection />
-            </ProtectedRoute>
-          } 
-        />
-
-        <Route 
-          path="/watch/:type/:id" 
-          element={
-            <ProtectedRoute>
-              <Player />
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route
-          path="*"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Routes>
-                  <Route path="/browse" element={<Home />} />
-                  <Route path="/search" element={<Search />} />
-                  <Route path="/calendar" element={<Calendar />} />
-                  <Route path="/watchlist" element={<Watchlist />} />
-                  <Route path="/profile" element={<Profile />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/details/:type/:id" element={<Details />} />
-                </Routes>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
-    </Router>
-    </>
+    <PlayerProvider>
+      <>
+        {updateAvailable && (
+          <UpdateModal 
+            update={updateAvailable} 
+            onClose={() => {
+              skipUpdate(updateAvailable.latest);
+              setUpdateAvailable(null);
+            }}
+            onUpdate={handleUpdate}
+          />
+        )}
+        <Router>
+          <GlobalPlayer />
+          <div className="h-screen w-full bg-black text-white overflow-hidden flex flex-col select-none">
+            {/* Custom Title Bar (Mac Style) */}
+            <Suspense fallback={<LoadingFallback />}>
+              <Routes>
+            <Route path="/" element={<Navigate to="/browse" replace />} />
+            <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+            <Route path="/signup" element={<PublicOnlyRoute><Signup /></PublicOnlyRoute>} />
+            
+            <Route 
+              path="/profiles" 
+              element={
+                <ProtectedRoute requireProfile={false}>
+                  <ProfileSelection />
+                </ProtectedRoute>
+              } 
+            />
+            
+            <Route
+              path="*"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Routes>
+                      <Route path="/browse" element={<Home />} />
+                      <Route path="/search" element={<Search />} />
+                      <Route path="/calendar" element={<Calendar />} />
+                      <Route path="/watchlist" element={<Watchlist />} />
+                      <Route path="/profile" element={<Profile />} />
+                      <Route path="/settings" element={<Settings />} />
+                      <Route path="/details/:type/:id" element={<Details />} />
+                      <Route path="/genre/:id" element={<Genre />} />
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+              </Routes>
+            </Suspense>
+          </div>
+        </Router>
+      </>
+    </PlayerProvider>
   );
 }
 

@@ -1,5 +1,4 @@
 import { MediaDetails } from '../types';
-import { sourceResolver } from './sourceResolver';
 
 export interface DownloadItem {
   id: string;
@@ -26,7 +25,7 @@ export const downloadService = {
       throw new Error('Already downloaded');
     }
 
-    console.log('Starting download for:', media.title);
+    // console.log('Starting download for:', media.title);
 
     const newItem: DownloadItem = {
       id: downloadId,
@@ -40,35 +39,9 @@ export const downloadService = {
     };
     downloads.push(newItem);
     
-    try {
-      const source = await sourceResolver.resolveSource(media, season, episode);
-      
-      if (!source) {
-        throw new Error('No direct source found for this title');
-      }
-
-      newItem.status = 'downloading';
-      
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 5;
-        newItem.progress = progress;
-        
-        if (progress >= 100) {
-          clearInterval(interval);
-          newItem.status = 'completed';
-          newItem.filePath = source.url;
-          newItem.size = 15 * 1024 * 1024;
-        }
-      }, 200);
-
-    } catch (error: unknown) {
-      newItem.status = 'failed';
-      if (error instanceof Error) {
-        throw new Error(error.message || 'Download failed');
-      }
-      throw new Error('Download failed');
-    }
+    // Downloads are disabled for Embed-only mode
+    newItem.status = 'failed';
+    throw new Error('Downloads are not supported with the current player.');
   },
 
   async getDownloads(): Promise<DownloadItem[]> {

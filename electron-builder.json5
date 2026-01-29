@@ -14,6 +14,12 @@
     "dist",
     "dist-electron"
   ],
+  "extraResources": [
+    {
+      "from": "local-data/imdb.db",
+      "to": "imdb.db"
+    }
+  ],
   "mac": {
     "target": [
       "dmg"

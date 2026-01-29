@@ -95,3 +95,22 @@ body {
     -ms-overflow-style: none;
     scrollbar-width: none;
 }
+
+/* Performance Optimizations */
+.gpu-accelerated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Reduce paint cost for glassmorphism */
+.glass-panel {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  will-change: transform, opacity;
+}
+
+/* Optimize image decoding */
+img {
+  content-visibility: auto;
+}

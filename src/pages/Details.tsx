@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { getDetails, getCredits, getSimilar, getImageUrl, getSeasonDetails } from '../services/tmdb';
-import { MediaDetails, Episode } from '../types';
+import React, { useState, useMemo } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { getDetails, getCredits, getSimilar, getImageUrl, getSeasonDetails, findMediaByImdbId } from '../services/tmdb';
+import { MediaDetails, Episode, CastMember } from '../types';
 import { Play, Plus, Check, Star, ArrowLeft, X, Youtube, ExternalLink, Download } from 'lucide-react';
 import { db } from '../db';
 import { useAuth } from '../context/useAuth';
+import { usePlayer } from '../context/PlayerContext';
 import ContentRow from '../components/ContentRow';
 import Focusable from '../components/Focusable';
 import { useWatchlist } from '../hooks/useWatchlist';
@@ -15,99 +18,145 @@ import { downloadService } from '../services/downloadService';
 const Details: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
-  const [details, setDetails] = useState<MediaDetails | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [credits, setCredits] = useState<any>(null);
+  const { play } = usePlayer();
   const [showTrailer, setShowTrailer] = useState(false);
-  const [selectedSeason, setSelectedSeason] = useState<number>(1);
-  const [episodes, setEpisodes] = useState<Episode[]>([]);
-  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+  const [userSelectedSeason, setUserSelectedSeason] = useState<number | null>(null);
   const { profile } = useAuth();
-  const [episodeProgress, setEpisodeProgress] = useState<Record<number, number>>({});
   
+  const { data: mediaData, isLoading, error: queryError } = useQuery({
+    queryKey: ['media', type, id, location.state],
+    queryFn: async () => {
+      if (!type || !id) throw new Error('Missing parameters');
+      
+      let numericId = parseInt(id);
+      
+      // Handle local IMDB items (id=0)
+      if (numericId === 0) {
+        const stateImdbId = location.state?.imdb_id;
+        if (stateImdbId) {
+          const resolved = await findMediaByImdbId(stateImdbId);
+          if (resolved) {
+             numericId = resolved.id;
+             // Update URL without reload to reflect real ID
+             window.history.replaceState(null, '', `/details/${type}/${numericId}`);
+          } else {
+             // Fallback: Display minimal details from state if resolution fails
+             return {
+               details: {
+                id: 0,
+                title: location.state?.title || 'Unknown Title',
+                name: location.state?.title || 'Unknown Title',
+                overview: location.state?.overview || 'No overview available.',
+                poster_path: null,
+                backdrop_path: null,
+                vote_average: location.state?.vote_average || 0,
+                media_type: type,
+                genres: [],
+                videos: { results: [] }
+               } as MediaDetails,
+               credits: null
+             };
+          }
+        }
+      }
+
+      const [detailData, creditsData] = await Promise.all([
+        getDetails(type, numericId),
+        getCredits(type, numericId)
+      ]);
+      return { details: detailData, credits: creditsData };
+    },
+    enabled: !!type && !!id,
+    staleTime: 1000 * 60 * 30, // 30 minutes
+  });
+
+  const details = mediaData?.details || null;
+  const credits = mediaData?.credits || null;
+  const error = queryError ? 'Failed to load details' : null;
+
   const { isSaved, toggleWatchlist } = useWatchlist(details ? {
     ...details,
     media_type: (type as 'movie' | 'tv') || details.media_type
   } : null);
   const effectiveType: 'movie' | 'tv' | undefined = (details?.media_type as 'movie' | 'tv') || type;
 
-  useEffect(() => {
-    if (type && id) {
-      const fetchData = async () => {
-        try {
-          const detailData = await getDetails(type, parseInt(id));
-          const creditsData = await getCredits(type, parseInt(id));
-          setDetails(detailData);
-          setCredits(creditsData);
-        } catch (error) {
-          console.error('Failed to fetch details:', error);
-        }
-      };
-      fetchData();
-      window.scrollTo(0, 0);
+  // History for progress tracking
+  const historyItem = useLiveQuery(
+    () => (effectiveType === 'tv' && id) ? db.history.get(parseInt(id)) : undefined,
+    [effectiveType, id]
+  );
+
+  const activeSeason = useMemo(() => {
+    if (userSelectedSeason !== null) return userSelectedSeason;
+    if (historyItem?.progress?.season) return historyItem.progress.season;
+    if (details?.seasons && details.seasons.length > 0) {
+      const s = details.seasons.find(sea => (sea.season_number ?? 1) >= 1);
+      return (s?.season_number ?? 1);
     }
-  }, [type, id]);
+    return 1;
+  }, [userSelectedSeason, historyItem, details]);
 
-  useEffect(() => {
-    const initSeason = async () => {
-      if (effectiveType === 'tv' && id) {
-        try {
-          const hist = await db.history.get(parseInt(id));
-          if (hist?.progress?.season) {
-            setSelectedSeason(hist.progress.season);
-          } else if (details?.seasons && details.seasons.length > 0) {
-            const s = details.seasons.find(sea => (sea.season_number ?? 1) >= 1);
-            setSelectedSeason((s?.season_number ?? 1) || 1);
-          }
-        } catch {
-          setSelectedSeason(1);
-        }
-      }
-    };
-    initSeason();
-  }, [effectiveType, id, details]);
+  // Fetch Episodes for Selected Season
+  const { data: seasonData, isLoading: loadingEpisodes } = useQuery({
+    queryKey: ['season', id, activeSeason],
+    queryFn: () => getSeasonDetails(parseInt(id!), activeSeason),
+    enabled: effectiveType === 'tv' && !!id && !!activeSeason,
+    staleTime: 1000 * 60 * 30,
+  });
+  
+  const episodes = seasonData?.episodes || [];
 
-  useEffect(() => {
-    const loadEpisodes = async () => {
-      if (effectiveType !== 'tv' || !id) return;
-      setLoadingEpisodes(true);
-      try {
-        const data = await getSeasonDetails(parseInt(id), selectedSeason);
-        setEpisodes(data.episodes || []);
-        if (profile?.id) {
-          const rows = await db.episodeProgress
-            .where(['profileId', 'showId'])
-            .equals([profile.id, parseInt(id)])
-            .filter(r => r.season === selectedSeason)
-            .toArray();
-          const map: Record<number, number> = {};
-          rows.forEach(r => { map[r.episode] = r.percentage; });
-          setEpisodeProgress(map);
-        } else {
-          setEpisodeProgress({});
-        }
-      } catch (error) {
-        console.error('Failed to load episodes:', error);
-        setEpisodes([]);
-        setEpisodeProgress({});
-      } finally {
-        setLoadingEpisodes(false);
-      }
-    };
-    loadEpisodes();
-  }, [effectiveType, id, selectedSeason, profile]);
+  // Live Query for Episode Progress
+  const episodeProgressList = useLiveQuery(
+    () => (profile?.id && effectiveType === 'tv' && id) ?
+      db.episodeProgress
+        .where(['profileId', 'showId'])
+        .equals([profile.id, parseInt(id)])
+        .filter(r => r.season === activeSeason)
+        .toArray() : [],
+    [profile?.id, id, activeSeason, effectiveType]
+  );
+  
+  const defaultList = useMemo(() => [], []);
+  const safeEpisodeProgressList = episodeProgressList || defaultList;
+
+  const episodeProgress = useMemo(() => {
+    const map: Record<number, number> = {};
+    safeEpisodeProgressList.forEach(r => { map[r.episode] = r.percentage; });
+    return map;
+  }, [safeEpisodeProgressList]);
+
 
   const trailer = details?.videos?.results?.find(v => v.type === 'Trailer' && v.site === 'YouTube') || details?.videos?.results?.find(v => v.site === 'YouTube');
 
   const handleWatch = async () => {
     if (!details) return;
     try {
-      await db.history.put({ ...details, savedAt: Date.now() });
+      // Explicitly construct to avoid Dexie errors
+      await db.history.put({ 
+        id: Number(details.id),
+        title: details.title,
+        name: details.name,
+        poster_path: details.poster_path,
+        backdrop_path: details.backdrop_path,
+        overview: details.overview,
+        vote_average: details.vote_average,
+        media_type: details.media_type,
+        savedAt: Date.now() 
+      });
     } catch (error) {
       console.error('Failed to save history:', error);
     }
-    if (effectiveType) navigate(`/watch/${effectiveType}/${details.id}`);
+    
+    if (effectiveType === 'tv') {
+        const s = historyItem?.progress?.season || 1;
+        const e = historyItem?.progress?.episode || 1;
+        play(details, s, e);
+    } else {
+        play(details);
+    }
   };
 
   const handleDownload = async () => {
@@ -138,10 +187,26 @@ const Details: React.FC = () => {
     } catch (error) {
       console.error('Failed to set episode for playback:', error);
     }
-    if (effectiveType) navigate(`/watch/${effectiveType}/${details.id}?season=${season}&episode=${episode}`);
+    if (effectiveType && details) {
+      play(details, season, episode);
+    }
   };
 
-  if (!details) return <div className="flex items-center justify-center h-full text-white">Loading...</div>;
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-white gap-6">
+        <p className="text-xl text-red-400 font-medium">{error}</p>
+        <button 
+          onClick={() => navigate(-1)} 
+          className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-lg transition-colors font-semibold"
+        >
+          Go Back
+        </button>
+      </div>
+    );
+  }
+
+  if (isLoading || !details) return <div className="flex items-center justify-center h-full text-white">Loading...</div>;
 
   return (
     <div className="h-full overflow-y-auto pb-20 relative scrollbar-hide">
@@ -200,9 +265,16 @@ const Details: React.FC = () => {
       <div className="relative w-full h-[70vh]">
         <div className="absolute inset-0">
           <img
-            src={getImageUrl(details.backdrop_path, 'original')}
+            src={getImageUrl(details.backdrop_path, 'w1280')}
+            srcSet={`
+              ${getImageUrl(details.backdrop_path, 'w780')} 780w,
+              ${getImageUrl(details.backdrop_path, 'w1280')} 1280w,
+              ${getImageUrl(details.backdrop_path, 'original')} 1920w
+            `}
+            sizes="100vw"
             alt={details.title || details.name}
             className="w-full h-full object-cover"
+            loading="eager"
           />
           <div className="absolute inset-0 bg-linear-to-t from-background via-background/60 to-transparent" />
           <div className="absolute inset-0 bg-linear-to-r from-background via-background/80 to-transparent" />
@@ -219,7 +291,7 @@ const Details: React.FC = () => {
           </div>
 
           <div className="flex-1">
-            <h1 className="text-5xl font-black mb-2 drop-shadow-2xl leading-tight text-white tracking-tight">
+            <h1 className="text-5xl font-black mb-2 drop-shadow-2xl leading-tight text-white tracking-tight line-clamp-2">
               {details.title || details.name}
             </h1>
             
@@ -237,33 +309,35 @@ const Details: React.FC = () => {
                </div>
             </div>
 
-            <p className="text-lg text-gray-200 mb-8 line-clamp-3 drop-shadow-md leading-relaxed font-medium">
-              {details.overview}
-            </p>
+            <div className="max-h-[20vh] overflow-y-auto scrollbar-hide mb-8">
+              <p className="text-lg text-gray-200 drop-shadow-md leading-relaxed font-medium">
+                {details.overview}
+              </p>
+            </div>
 
-            <div className="flex gap-4">
+            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
               <button
                 onClick={handleWatch}
-                className="bg-primary hover:bg-primary-hover text-white px-8 py-3 rounded-lg font-bold flex items-center gap-3 transition-all hover:scale-105 shadow-[0_0_30px_rgba(124,58,237,0.4)] text-lg"
+                className="bg-linear-to-r from-primary to-purple-600 hover:from-primary-hover hover:to-purple-500 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 hover:scale-105 shadow-[0_0_20px_rgba(124,58,237,0.5)] hover:shadow-[0_0_30px_rgba(124,58,237,0.7)] text-lg shrink-0 border border-white/10 uppercase tracking-wide group"
               >
-                <Play fill="currentColor" size={20} />
+                <Play fill="currentColor" size={20} className="group-hover:animate-pulse" />
                 Watch Now
               </button>
               {trailer && (
                 <button 
                   onClick={() => setShowTrailer(true)}
-                  className="bg-white/10 hover:bg-red-600 hover:border-red-600 text-white px-8 py-3 rounded-lg font-bold flex items-center gap-3 transition-all backdrop-blur-md border border-white/10 hover:scale-105 text-lg"
+                  className="bg-white/5 hover:bg-white/10 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 backdrop-blur-md border border-white/10 hover:border-white/30 hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] text-lg shrink-0"
                 >
-                  <Youtube size={20} />
+                  <Youtube size={20} className="text-red-500" />
                   Trailer
                 </button>
               )}
               <button 
                 onClick={toggleWatchlist}
-                className={`px-8 py-3 rounded-lg font-bold flex items-center gap-3 transition-all backdrop-blur-md border border-white/10 hover:scale-105 text-lg ${
+                className={`px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 backdrop-blur-md border hover:scale-105 text-lg shrink-0 ${
                   isSaved 
-                    ? 'bg-primary border-primary text-white' 
-                    : 'bg-white/10 hover:bg-white/20 text-white'
+                    ? 'bg-primary border-primary text-white shadow-[0_0_20px_rgba(124,58,237,0.4)]' 
+                    : 'bg-white/5 hover:bg-white/10 text-white border-white/10 hover:border-white/30 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]'
                 }`}
               >
                 {isSaved ? <Check size={20} /> : <Plus size={20} />}
@@ -272,7 +346,7 @@ const Details: React.FC = () => {
               
               <button 
                 onClick={handleDownload}
-                className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-3 transition-all backdrop-blur-md border border-white/10 hover:scale-105 text-lg"
+                className="bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 backdrop-blur-md border border-white/10 hover:border-white/30 hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] text-lg shrink-0"
               >
                 <Download size={20} />
                 Download
@@ -292,9 +366,9 @@ const Details: React.FC = () => {
                   <Focusable
                     key={s}
                     as="button"
-                    onClick={() => setSelectedSeason(s)}
+                    onClick={() => setUserSelectedSeason(s)}
                     className={`px-3 py-1 rounded-full text-sm border ${
-                      selectedSeason === s ? 'bg-primary text-white border-primary' : 'bg-white/5 text-gray-300 border-white/10'
+                      activeSeason === s ? 'bg-primary text-white border-primary' : 'bg-white/5 text-gray-300 border-white/10'
                     }`}
                     activeClassName="ring-2 ring-primary"
                   >
@@ -321,7 +395,7 @@ const Details: React.FC = () => {
           ) : (
             <AnimatePresence mode="wait">
               <motion.div
-                key={`season-${selectedSeason}`}
+                key={`season-${activeSeason}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
@@ -331,7 +405,7 @@ const Details: React.FC = () => {
                 {(() => {
                   const progressed = Object.entries(episodeProgress).sort((a, b) => b[1] - a[1])[0];
                   const autoFocusEp = progressed ? Number(progressed[0]) : 1;
-                  return episodes.map(ep => {
+                  return episodes.map((ep: Episode) => {
                     const pct = episodeProgress[ep.episode_number] || 0;
                     const showBar = pct >= 2;
                     const completed = pct >= 90;
@@ -339,7 +413,7 @@ const Details: React.FC = () => {
                       <Focusable
                         key={ep.id}
                         as={motion.button}
-                        onClick={() => handlePlayEpisode(selectedSeason, ep.episode_number)}
+                        onClick={() => handlePlayEpisode(activeSeason, ep.episode_number)}
                         className="min-w-[260px] bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 overflow-hidden text-left"
                         activeClassName="ring-2 ring-primary scale-[1.02]"
                         autoFocus={ep.episode_number === autoFocusEp}
@@ -381,8 +455,7 @@ const Details: React.FC = () => {
         <div className="px-10 py-8">
           <h2 className="text-xl font-bold mb-4 text-white">Top Cast</h2>
           <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-            {credits.cast.slice(0, 10).map((actor: any) => (
+            {credits.cast.slice(0, 10).map((actor: CastMember) => (
               <div key={actor.id} className="min-w-[100px] flex flex-col items-center gap-2 text-center">
                 <div className="w-20 h-20 rounded-full overflow-hidden border border-white/10">
                   <img 
@@ -391,9 +464,9 @@ const Details: React.FC = () => {
                     className="w-full h-full object-cover" 
                   />
                 </div>
-                <div>
-                  <p className="text-sm font-bold text-white leading-tight">{actor.name}</p>
-                  <p className="text-xs text-gray-400 leading-tight">{actor.character}</p>
+                <div className="w-full">
+                  <p className="text-sm font-bold text-white leading-tight truncate px-1">{actor.name}</p>
+                  <p className="text-xs text-gray-400 leading-tight truncate px-1">{actor.character}</p>
                 </div>
               </div>
             ))}

@@ -1,5 +1,6 @@
 export interface Media {
   id: number;
+  imdb_id?: string;
   title?: string;
   name?: string; // TV shows have 'name' instead of 'title'
   poster_path: string | null;
@@ -77,4 +78,38 @@ export interface Episode {
   runtime?: number;
   air_date?: string;
   vote_average?: number;
+}
+
+export interface StreamSource {
+  url: string;
+  quality: '4k' | '1080p' | '720p' | '480p' | '360p' | 'auto';
+  format: 'mp4' | 'm3u8' | 'webm';
+  subtitles?: {
+    lang: string;
+    url: string;
+    label: string;
+  }[];
+  headers?: Record<string, string>;
+}
+
+export interface CastMember {
+  id: number;
+  name: string;
+  character: string;
+  profile_path: string | null;
+  order: number;
+}
+
+export interface CrewMember {
+  id: number;
+  name: string;
+  job: string;
+  department: string;
+  profile_path: string | null;
+}
+
+export interface Credits {
+  id: number;
+  cast: CastMember[];
+  crew: CrewMember[];
 }

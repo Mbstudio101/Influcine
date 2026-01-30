@@ -22,6 +22,11 @@ export default defineConfig({
             rollupOptions: {
               external: ['better-sqlite3'],
               output: {
+                manualChunks: {
+                  'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+                  'ui-vendor': ['framer-motion', 'lucide-react', 'clsx', 'tailwind-merge'],
+                  'data-vendor': ['@tanstack/react-query', 'axios', 'dexie', 'dexie-react-hooks', 'date-fns'],
+                },
                 banner: `
 import { createRequire as topLevelCreateRequire } from 'node:module';
 import { fileURLToPath as topLevelFileURLToPath } from 'node:url';

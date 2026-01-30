@@ -18,7 +18,8 @@ const ProfileSelection: React.FC = () => {
     async (profileId: number) => {
       try {
         await switchProfile(profileId);
-        navigate('/browse');
+        // Small delay to ensure state updates settle and provide visual feedback
+        setTimeout(() => navigate('/browse'), 50);
       } catch (error) {
         console.error('Failed to switch profile:', error);
       }

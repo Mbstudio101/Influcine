@@ -186,7 +186,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
       }
     }
-  }, [userId, profileId]);
+  }, [userId]);
 
   useEffect(() => {
     const initAuth = async () => {

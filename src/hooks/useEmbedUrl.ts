@@ -7,9 +7,10 @@ interface UseEmbedUrlProps {
   season?: number;
   episode?: number;
   startTime?: number;
+  autoPlay?: boolean;
 }
 
-export const useEmbedUrl = ({ type, id, season, episode, startTime = 0 }: UseEmbedUrlProps) => {
+export const useEmbedUrl = ({ type, id, season, episode, startTime = 0, autoPlay = true }: UseEmbedUrlProps) => {
   const { themeColor, autoplay: autoPlayNext } = useSettings();
 
   const embedUrl = useMemo(() => {
@@ -23,7 +24,7 @@ export const useEmbedUrl = ({ type, id, season, episode, startTime = 0 }: UseEmb
 
     let url = '';
     const params = new URLSearchParams({
-      autoPlay: 'true',
+      autoPlay: String(autoPlay),
       theme: theme,
     });
 
@@ -42,7 +43,7 @@ export const useEmbedUrl = ({ type, id, season, episode, startTime = 0 }: UseEmb
     }
     
     return url;
-  }, [themeColor, type, id, season, episode, autoPlayNext, startTime]);
+  }, [themeColor, type, id, season, episode, autoPlayNext, startTime, autoPlay]);
 
   return embedUrl;
 };

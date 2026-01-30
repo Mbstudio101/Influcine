@@ -34,20 +34,66 @@ interface GitHubRelease {
   assets: GitHubAsset[];
 }
 
+const isElectron = typeof window !== 'undefined' && (window.ipcRenderer || navigator.userAgent.includes('Electron'));
+
+export const downloadUpdate = async () => {
+  if (isElectron && window.ipcRenderer) {
+    return window.ipcRenderer.invoke('update-download');
+  }
+  throw new Error('Not supported');
+};
+
+export const installUpdate = async () => {
+  if (isElectron && window.ipcRenderer) {
+    return window.ipcRenderer.invoke('update-install');
+  }
+  throw new Error('Not supported');
+};
+
+export const onUpdateProgress = (callback: (progress: { percent: number }) => void) => {
+  if (isElectron && window.ipcRenderer) {
+    const listener = (_event: unknown, progress: { percent: number }) => callback(progress);
+    window.ipcRenderer.on('update-progress', listener);
+    return () => window.ipcRenderer?.off('update-progress', listener); // Use optional chaining for cleanup safety
+  }
+  return () => {};
+};
+
+export const onUpdateDownloaded = (callback: () => void) => {
+  if (isElectron && window.ipcRenderer) {
+    const listener = () => callback();
+    window.ipcRenderer.on('update-downloaded', listener);
+    return () => window.ipcRenderer?.off('update-downloaded', listener);
+  }
+  return () => {};
+};
+
 export const checkForUpdates = async (currentVersion: string): Promise<AppVersion | null> => {
+  const now = Date.now();
   try {
     // Offline check
     if (!navigator.onLine) return null;
 
-    // Check cool-down period (unless in dev mode)
-    // Removed strict cooldown to ensure users see updates when relaunching
-    // const lastChecked = localStorage.getItem(STORAGE_KEY_LAST_CHECK);
-    const now = Date.now();
-    // if (!import.meta.env.DEV && lastChecked && (now - parseInt(lastChecked)) < CHECK_INTERVAL_MS) {
-    //   console.log('Update check skipped: Cooldown active');
-    //   return null;
-    // }
+    // 1. Electron Native Check
+    if (isElectron && window.ipcRenderer) {
+      try {
+        const result = await window.ipcRenderer.invoke('update-check');
+        if (result.update) {
+          return {
+            latest: result.version,
+            forceUpdate: false, 
+            releaseNotes: result.releaseNotes || 'Update available',
+            platforms: { macos: 'ipc', windows: 'ipc', linux: 'ipc' } // Marker for IPC handling
+          };
+        }
+        return null; // No update
+      } catch (err) {
+        console.warn('Electron update check failed, falling back to GitHub API', err);
+        // Fallback to GitHub API below
+      }
+    }
 
+    // 2. GitHub API Check (Web / Fallback)
     const response = await fetch(GITHUB_API_URL, { 
       headers: {
         'Accept': 'application/vnd.github.v3+json'

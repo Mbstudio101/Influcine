@@ -22,6 +22,56 @@ if (!app.isPackaged) {
 // Configure logging
 log.transports.file.level = 'info';
 autoUpdater.logger = log;
+autoUpdater.autoDownload = false; // Disable auto download to support user flow: Check -> Prompt -> Download
+
+// IPC Handlers for Update Flow
+ipcMain.handle('update-check', async () => {
+  if (!app.isPackaged) return { update: false };
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { 
+      update: !!(result && result.downloadPromise === undefined), // true if update available
+      version: result?.updateInfo.version,
+      releaseNotes: result?.updateInfo.releaseNotes
+    };
+  } catch (error) {
+    log.error('Check for updates failed', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('update-download', () => {
+  autoUpdater.downloadUpdate();
+});
+
+ipcMain.handle('update-install', () => {
+  autoUpdater.quitAndInstall();
+});
+
+// Update events
+autoUpdater.on('update-available', (info) => {
+  log.info('Update available:', info);
+  win?.webContents.send('update-available', info);
+});
+
+autoUpdater.on('update-not-available', () => {
+  log.info('Update not available');
+  win?.webContents.send('update-not-available');
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  win?.webContents.send('update-progress', progressObj);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  log.info('Update downloaded', info);
+  win?.webContents.send('update-downloaded', info);
+});
+
+autoUpdater.on('error', (err) => {
+  log.error('Update error:', err);
+  win?.webContents.send('update-error', err.message);
+});
 
 // The built directory structure
 //

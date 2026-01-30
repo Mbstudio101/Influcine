@@ -59,9 +59,10 @@ export const searchMulti = async (query: string): Promise<Media[]> => {
   return filterBroken(response.data.results);
 };
 
-export const getDetails = async (type: 'movie' | 'tv', id: number): Promise<MediaDetails> => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const getDetails = async (type: 'movie' | 'tv', id: number, params?: Record<string, any>): Promise<MediaDetails> => {
   const response = await tmdb.get(`/${type}/${id}`, {
-    params: { append_to_response: 'videos,credits,similar' }
+    params: params || { append_to_response: 'videos,credits,similar' }
   });
   return { ...response.data, media_type: type };
 };

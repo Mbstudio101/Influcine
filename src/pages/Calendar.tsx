@@ -169,7 +169,7 @@ const CalendarPage = () => {
         const watchlist = await db.library.filter(item => item.media_type === 'tv').toArray();
         const watchlistPromises = watchlist.map(async (show) => {
           try {
-            const details = await getDetails('tv', show.id);
+            const details = await getDetails('tv', show.id, {});
             if (details.next_episode_to_air) {
                const airDate = new Date(details.next_episode_to_air.air_date);
                if (airDate >= start && airDate <= end) {

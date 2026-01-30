@@ -8,10 +8,26 @@ interface UpdateModalProps {
   update: AppVersion;
   onClose: () => void;
   onUpdate: () => void;
+  downloading?: boolean;
+  progress?: number;
+  readyToInstall?: boolean;
 }
 
-const UpdateModal: React.FC<UpdateModalProps> = ({ update, onClose, onUpdate }) => {
+const UpdateModal: React.FC<UpdateModalProps> = ({ 
+  update, 
+  onClose, 
+  onUpdate, 
+  downloading = false, 
+  progress = 0, 
+  readyToInstall = false 
+}) => {
   const isForced = update.forceUpdate;
+
+  const getButtonText = () => {
+    if (readyToInstall) return 'Restart & Install';
+    if (downloading) return `Downloading ${Math.round(progress)}%`;
+    return isForced ? 'Update Now' : 'Download Update';
+  };
 
   return (
     <AnimatePresence>
@@ -67,28 +83,44 @@ const UpdateModal: React.FC<UpdateModalProps> = ({ update, onClose, onUpdate }) 
               </p>
             </div>
 
-            <div className="flex gap-3">
-              <Focusable
-                as="button"
-                onClick={onUpdate}
-                className="flex-1 bg-primary hover:bg-primary-hover text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-primary/25 hover:scale-[1.02]"
-                activeClassName="ring-4 ring-primary/50"
-                autoFocus
-              >
-                <Download size={20} />
-                {isForced ? 'Update Now' : 'Download Update'}
-              </Focusable>
+            <div className="flex flex-col gap-3">
+              {downloading && (
+                <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden mb-2">
+                  <motion.div 
+                    className="h-full bg-primary"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ type: "spring", stiffness: 100, damping: 20 }}
+                  />
+                </div>
+              )}
 
-              {!isForced && (
+              <div className="flex gap-3">
                 <Focusable
                   as="button"
-                  onClick={onClose}
-                  className="px-6 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-xl font-bold transition-all border border-white/5"
-                  activeClassName="ring-4 ring-white/20"
+                  onClick={onUpdate}
+                  disabled={downloading && !readyToInstall}
+                  className={`flex-1 bg-primary hover:bg-primary-hover text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-primary/25 hover:scale-[1.02] ${
+                    downloading && !readyToInstall ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                  activeClassName="ring-4 ring-primary/50"
+                  autoFocus
                 >
-                  Later
+                  <Download size={20} className={downloading ? 'animate-bounce' : ''} />
+                  {getButtonText()}
                 </Focusable>
-              )}
+
+                {!isForced && !downloading && !readyToInstall && (
+                  <Focusable
+                    as="button"
+                    onClick={onClose}
+                    className="px-6 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-xl font-bold transition-all border border-white/5"
+                    activeClassName="ring-4 ring-white/20"
+                  >
+                    Later
+                  </Focusable>
+                )}
+              </div>
             </div>
           </div>
         </motion.div>

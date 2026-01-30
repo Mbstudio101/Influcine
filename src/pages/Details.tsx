@@ -14,6 +14,7 @@ import { useWatchlist } from '../hooks/useWatchlist';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../context/toast';
 import { downloadService } from '../services/downloadService';
+import { useEmbedUrl } from '../hooks/useEmbedUrl';
 
 const Details: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
@@ -97,6 +98,48 @@ const Details: React.FC = () => {
     }
     return 1;
   }, [userSelectedSeason, historyItem, details]);
+
+  const activeEpisode = useMemo(() => {
+    if (historyItem?.progress?.episode) return historyItem.progress.episode;
+    return 1;
+  }, [historyItem]);
+
+  // Prefetch Video URL (Headless Warmup)
+  const prefetchUrl = useEmbedUrl({
+    type: effectiveType || 'movie',
+    id: id || '',
+    season: activeSeason,
+    episode: activeEpisode,
+    autoPlay: false
+  });
+
+  React.useEffect(() => {
+    if (prefetchUrl) {
+      const link = document.createElement('link');
+      link.rel = 'prefetch';
+      link.href = prefetchUrl;
+      link.as = 'document';
+      document.head.appendChild(link);
+      
+      try {
+        const url = new URL(prefetchUrl);
+        const preconnect = document.createElement('link');
+        preconnect.rel = 'preconnect';
+        preconnect.href = url.origin;
+        preconnect.crossOrigin = 'anonymous';
+        document.head.appendChild(preconnect);
+        
+        return () => {
+          if (document.head.contains(link)) document.head.removeChild(link);
+          if (document.head.contains(preconnect)) document.head.removeChild(preconnect);
+        };
+      } catch (e) {
+        return () => {
+          if (document.head.contains(link)) document.head.removeChild(link);
+        };
+      }
+    }
+  }, [prefetchUrl]);
 
   // Fetch Episodes for Selected Season
   const { data: seasonData, isLoading: loadingEpisodes } = useQuery({

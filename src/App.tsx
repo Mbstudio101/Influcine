@@ -3,14 +3,24 @@ import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'reac
 import Layout from './components/Layout';
 import SplashScreen from './components/SplashScreen';
 import { useAuth } from './context/useAuth';
-import { checkForUpdates, getPlatformDownloadLink, skipUpdate } from './services/updateService';
-import UpdateModal from './components/UpdateModal';
+import { 
+  checkForUpdates, 
+  getPlatformDownloadLink, 
+  skipUpdate, 
+  downloadUpdate, 
+  installUpdate, 
+  onUpdateProgress, 
+  onUpdateDownloaded 
+} from './services/updateService';
 import { AppVersion } from './types';
 import pkg from '../package.json';
 import { migrateDatabaseIds } from './services/migration';
 import { CleanupAgent } from './services/CleanupAgent';
 import { PlayerProvider } from './context/PlayerContext';
 import GlobalPlayer from './components/GlobalPlayer';
+
+// Lazy load components
+const UpdateModal = lazy(() => import('./components/UpdateModal'));
 
 // Lazy load pages for better performance
 const Home = lazy(() => import('./pages/Home'));
@@ -65,27 +75,60 @@ const PublicOnlyRoute = ({ children }: { children: JSX.Element }) => {
 function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [updateAvailable, setUpdateAvailable] = useState<AppVersion | null>(null);
+  const [updateDownloading, setUpdateDownloading] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState(0);
+  const [updateReady, setUpdateReady] = useState(false);
   const initialized = useRef(false);
+
+  useEffect(() => {
+    // Listen for update progress
+    const cleanupProgress = onUpdateProgress((progress) => {
+      setUpdateDownloading(true);
+      setUpdateProgress(progress.percent);
+    });
+
+    // Listen for update downloaded
+    const cleanupDownloaded = onUpdateDownloaded(() => {
+      setUpdateDownloading(false);
+      setUpdateReady(true);
+      setUpdateProgress(100);
+    });
+
+    return () => {
+      cleanupProgress();
+      cleanupDownloaded();
+    };
+  }, []);
 
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
 
-    // Run DB migrations
-    migrateDatabaseIds();
+    // Defer heavy DB operations to improve TTI
+    const runMaintenance = async () => {
+      // Run DB migrations
+      await migrateDatabaseIds();
+      
+      // Run automatic cleanup
+      CleanupAgent.runCleanup().then(report => {
+        const totalRemoved = 
+          report.libraryRemoved + 
+          report.historyRemoved + 
+          report.episodeProgressRemoved + 
+          report.sourceMemoryRemoved;
 
-    // Run automatic cleanup
-    CleanupAgent.runCleanup().then(report => {
-      const totalRemoved = 
-        report.libraryRemoved + 
-        report.historyRemoved + 
-        report.episodeProgressRemoved + 
-        report.sourceMemoryRemoved;
+        if (totalRemoved > 0) {
+          // console.log('[AutoCleanup] Cleanup Report:', report);
+        }
+      });
+    };
 
-      if (totalRemoved > 0) {
-        // console.log('[AutoCleanup] Cleanup Report:', report);
-      }
-    });
+    if ('requestIdleCallback' in window) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).requestIdleCallback(() => runMaintenance());
+    } else {
+      setTimeout(runMaintenance, 2000);
+    }
 
     const check = async () => {
       try {
@@ -102,13 +145,32 @@ function App() {
     check();
   }, []);
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!updateAvailable) return;
-    const link = getPlatformDownloadLink(updateAvailable);
-    if (link) {
-      window.open(link, '_blank');
-    } else {
-      alert('Update available but no download link found for your platform.');
+
+    if (updateReady) {
+      try {
+        await installUpdate();
+      } catch (error) {
+        console.error('Failed to install update:', error);
+      }
+      return;
+    }
+
+    // Try Electron IPC download first
+    try {
+      await downloadUpdate();
+      setUpdateDownloading(true);
+      return;
+    } catch (e) {
+      // Fallback to browser download if not supported/failed
+      console.warn('IPC download not supported, falling back to browser', e);
+      const link = getPlatformDownloadLink(updateAvailable);
+      if (link) {
+        window.open(link, '_blank');
+      } else {
+        alert('Update available but no download link found for your platform.');
+      }
     }
   };
 
@@ -127,6 +189,9 @@ function App() {
               setUpdateAvailable(null);
             }}
             onUpdate={handleUpdate}
+            downloading={updateDownloading}
+            progress={updateProgress}
+            readyToInstall={updateReady}
           />
         )}
         <Router>

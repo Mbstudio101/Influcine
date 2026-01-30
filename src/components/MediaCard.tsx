@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Media, MediaDetails } from '../types';
 import { getImageUrl } from '../services/tmdb';
 import { useNavigate } from 'react-router-dom';
@@ -22,7 +22,7 @@ interface SavedMediaWithProgress extends Media {
   };
 }
 
-const MediaCard: React.FC<MediaCardProps> = ({ media, onClick }) => {
+const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
   const { isSaved, toggleWatchlist } = useWatchlist(media);
   const { play } = usePlayer();
   const navigate = useNavigate();
@@ -120,6 +120,6 @@ const MediaCard: React.FC<MediaCardProps> = ({ media, onClick }) => {
       </div>
     </Focusable>
   );
-};
+});
 
 export default MediaCard;

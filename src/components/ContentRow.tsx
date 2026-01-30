@@ -4,6 +4,7 @@ import { Media } from '../types';
 import MediaCard from './MediaCard';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Focusable from './Focusable';
+import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 
 interface ContentRowProps {
   title: string;
@@ -15,13 +16,15 @@ interface ContentRowProps {
 
 const ContentRow: React.FC<ContentRowProps> = ({ title, fetcher, data, cardSize = 'medium', staleTime = 1000 * 60 * 15 }) => {
   const rowRef = useRef<HTMLDivElement>(null);
+  const [containerRef, isVisible] = useIntersectionObserver({ freezeOnceVisible: true, rootMargin: '200px' });
+  
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(true);
 
-  const { data: fetchedMedia = [], isLoading: isFetching, error } = useQuery({
+  const { data: fetchedMedia = [], isFetching, error } = useQuery({
     queryKey: ['content-row', title],
     queryFn: fetcher || (() => Promise.resolve([])),
-    enabled: !!fetcher && !data,
+    enabled: !!fetcher && !data && isVisible,
     staleTime,
   });
 
@@ -64,10 +67,12 @@ const ContentRow: React.FC<ContentRowProps> = ({ title, fetcher, data, cardSize 
   };
 
   if (loading) return <div className="h-40 animate-pulse bg-white/5 rounded-xl my-6 mx-10"></div>;
-  if (media.length === 0) return null;
+  if (media.length === 0 && !loading) return (
+    <div ref={containerRef} className="h-1" />
+  );
 
   return (
-    <div className="mb-10 group/row relative px-10">
+    <div ref={containerRef} className="mb-10 group/row relative px-10">
       <h2 className="text-2xl font-bold mb-5 text-white flex items-center gap-2 group/title cursor-pointer">
         <Focusable as="span" className="bg-linear-to-r from-white to-white/70 bg-clip-text text-transparent group-hover/title:from-primary group-hover/title:to-purple-500 transition-all duration-300">
           {title}

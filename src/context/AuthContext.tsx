@@ -101,7 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
            const profileName = metadata.full_name || metadata.name || session.user.email?.split('@')[0] || 'My Profile';
            const avatarId = metadata.avatar_id || 'human-m-1';
            const settings = metadata.settings || { autoplay: true, subtitleSize: 'medium', subtitleColor: 'white' };
-           const stats = metadata.stats || {
+           const defaultStats = {
               totalXP: 0,
               level: 1,
               streak: 0,
@@ -110,6 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               moviesWatched: 0,
               seriesWatched: 0
            };
+           const stats = metadata.stats;
 
            let userProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
            
@@ -130,10 +131,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                }
 
                if (toDelete.length > 0) {
-                   // console.log('Removing duplicate profiles:', toDelete);
-                   await db.profiles.bulkDelete(toDelete);
-                   userProfiles = uniqueProfiles;
+                  await db.profiles.bulkDelete(toDelete);
                }
+               userProfiles = uniqueProfiles;
            }
            
            if (userProfiles.length === 0) {
@@ -143,36 +143,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   avatarId: avatarId,
                   isKid: false,
                   settings: settings,
-                  stats: stats
+                  stats: stats || defaultStats
                 });
            } else {
                // Update the primary profile
                const primaryProfile = userProfiles[0];
-               await db.profiles.update(primaryProfile.id!, { 
+               const updates: Partial<Profile> = { 
                    name: profileName,
                    avatarId: avatarId,
-                   settings: settings,
-                   stats: stats
-               });
+                   settings: settings
+               };
+               if (stats) {
+                   updates.stats = stats;
+               }
+               await db.profiles.update(primaryProfile.id!, updates);
            }
-
-           // Auto-select profile if none selected - DISABLED to force "Who's watching?" screen
-           // if (!profileId) {
-           //    const lastProfileId = localStorage.getItem('influcine_profile_id');
-           //    // We need to fetch fresh profiles because we might have just added one
-           //    // But here we can just use userProfiles which is reasonably fresh (minus the add/update above if we didn't re-fetch)
-           //    // To be safe, let's just use the first one or the saved one.
-           //    // Since this is async, the useLiveQuery 'profiles' might not have updated yet in this render cycle.
-           //    const freshProfiles = await db.profiles.where('userId').equals(userRecord.id!).toArray();
-           //    
-           //    const lastProfile = lastProfileId ? freshProfiles.find(p => p.id === parseInt(lastProfileId)) : null;
-           //    
-           //    if (lastProfile) {
-           //        setProfileId(lastProfile.id!);
-           //    } else if (freshProfiles.length > 0) {
-           //        setProfileId(freshProfiles[0].id!);
-           //    }
-           // }
       }
    } else {
       // Sign out if it was a supabase user
@@ -207,14 +192,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await handleSession(session);
         } else {
            // Fallback to local auth if needed
-           // userId is already initialized from localStorage, so useLiveQuery will handle fetching the user object.
-           // We just need to ensure profile selection.
            if (userId && !profileId) {
              // Just ensure we have the user loaded, but don't auto-select profile
-             // const userProfiles = await db.profiles.where('userId').equals(userId).toArray();
-             // if (userProfiles.length > 0) {
-             //    setProfileId(userProfiles[0].id!);
-             // }
            }
         }
       } catch (error) {
@@ -249,7 +228,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (error) {
       if (isSupabaseConfigured) {
-        console.warn("Supabase login failed, trying local fallback:", error.message);
+        // console.warn("Supabase login failed, trying local fallback:", error.message);
       }
       
       const hashPassword = async (p: string) => {

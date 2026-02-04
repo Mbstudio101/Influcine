@@ -39,26 +39,24 @@ const filterBroken = (items: Media[]): Media[] => {
 tmdb.interceptors.response.use(
   response => response,
   error => {
-    console.error('TMDB API Error:', {
-      url: error.config?.url,
-      status: error.response?.status,
-      message: error.message
-    });
+    // console.error('TMDB API Error:', {
+    //   url: error.config?.url,
+    //   status: error.response?.status,
+    //   message: error.message
+    // });
     return Promise.reject(error);
   }
 );
 
 // Generic GET with caching
-const getCached = async <T>(url: string, params?: Record<string, any>): Promise<T> => {
+const getCached = async <T>(url: string, params?: Record<string, unknown>): Promise<T> => {
   const cacheKey = tmdbCache.generateKey(url, params);
   const cached = tmdbCache.get<T>(cacheKey);
   
   if (cached) {
-    // console.log(`[Cache Hit] ${url}`);
     return cached;
   }
 
-  // console.log(`[Cache Miss] ${url}`);
   const response = await tmdb.get(url, { params });
   tmdbCache.set(cacheKey, response.data);
   return response.data;
@@ -74,8 +72,8 @@ export const searchMulti = async (query: string): Promise<Media[]> => {
   return filterBroken(data.results);
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const getDetails = async (type: 'movie' | 'tv', id: number, params?: Record<string, any>): Promise<MediaDetails> => {
+export const getDetails = async (type: 'movie' | 'tv', id: number, params?: Record<string, unknown>): Promise<MediaDetails> => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data = await getCached<any>(`/${type}/${id}`, 
     params || { append_to_response: 'videos,credits,similar' }
   );
@@ -101,7 +99,7 @@ export const findMediaByImdbId = async (imdbId: string): Promise<Media | null> =
     return results.length > 0 ? results[0] : null;
   } catch (error) {
     if (import.meta.env.DEV) {
-      console.warn('Failed to resolve IMDB ID:', error);
+      // console.warn('Failed to resolve IMDB ID:', error);
     }
     return null;
   }
@@ -126,7 +124,8 @@ export const getTVShowsByCategory = async (category: 'popular' | 'top_rated' | '
   return filterBroken(items);
 };
 
-export const getCredits = async (type: 'movie' | 'tv', id: number) => {
+export const getCredits = async (type: 'movie' | 'tv', id: number): Promise<any> => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data = await getCached<any>(`/${type}/${id}/credits`);
   return data;
 };
@@ -161,7 +160,8 @@ export const getSimilar = async (type: 'movie' | 'tv', id: number): Promise<Medi
   return filterBroken(items);
 };
 
-export const getSeasonDetails = async (tvId: number, seasonNumber: number) => {
+export const getSeasonDetails = async (tvId: number, seasonNumber: number): Promise<any> => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data = await getCached<any>(`/tv/${tvId}/season/${seasonNumber}`);
   return data;
 };

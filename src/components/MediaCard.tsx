@@ -42,10 +42,14 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
   const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    if (mediaType === 'tv') {
-        play(media as unknown as MediaDetails, progress?.season || 1, progress?.episode || 1);
-    } else {
-        play(media as unknown as MediaDetails);
+    try {
+      if (mediaType === 'tv') {
+          play(media as unknown as MediaDetails, progress?.season || 1, progress?.episode || 1);
+      } else {
+          play(media as unknown as MediaDetails);
+      }
+    } catch (err) {
+      // console.error('Failed to play media:', err);
     }
   };
 
@@ -53,6 +57,11 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
     e.stopPropagation();
     e.preventDefault();
     try {
+      if (trailerKey) {
+        setShowTrailer(true);
+        return;
+      }
+
       const videos = await getVideos(mediaType as 'movie' | 'tv', media.id);
       const trailer = findBestTrailer(videos);
       
@@ -61,7 +70,23 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
         setShowTrailer(true);
       }
     } catch (e) {
-      console.error('Failed to fetch trailer', e);
+      // console.error('Failed to fetch trailer', e);
+    }
+  };
+
+  // Prefetch trailer on hover
+  const handleMouseEnter = () => {
+    if (!trailerKey) {
+       getVideos(mediaType as 'movie' | 'tv', media.id).then(videos => {
+         const trailer = findBestTrailer(videos);
+         if (trailer) {
+           setTrailerKey(trailer.key);
+           // Prefetch the actual video URL if backend supports it
+           if (window.ipcRenderer) {
+              window.ipcRenderer.invoke('trailer-prefetch', trailer.key).catch(() => {});
+           }
+         }
+       }).catch(() => {});
     }
   };
 
@@ -76,6 +101,7 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
       }}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
+      onMouseEnter={handleMouseEnter}
     >
       <div className="block w-full h-full relative">
         <img
@@ -87,8 +113,9 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
           `}
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
           alt={media.title || media.name}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover bg-gray-900"
           loading="lazy"
+          decoding="async"
         />
         
         {/* Progress Bar (Always visible if exists) */}

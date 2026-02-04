@@ -208,8 +208,8 @@ const Details: React.FC = () => {
         media_type: details.media_type,
         savedAt: Date.now()
       });
-    } catch (error) {
-      console.error('Failed to save history:', error);
+    } catch {
+      // console.error('Failed to save history:', error);
     }
 
     if (effectiveType === 'tv') {
@@ -246,8 +246,8 @@ const Details: React.FC = () => {
           episode
         }
       });
-    } catch (error) {
-      console.error('Failed to set episode for playback:', error);
+    } catch {
+      // console.error('Failed to set episode for playback:', error);
     }
     if (effectiveType && details) {
       play(details, season, episode);
@@ -305,11 +305,11 @@ const Details: React.FC = () => {
                 loop
                 playsInline
                 onCanPlay={() => setIsTrailerReady(true)}
-                onError={(e) => {
-                  console.warn('Trailer playback unavailable, falling back.', {
-                    src: cachedTrailerUrl,
-                    error: e
-                  });
+                onError={() => {
+                  // console.warn('Trailer playback unavailable, falling back.', {
+                  //   src: cachedTrailerUrl,
+                  //   error: e
+                  // });
                   setIsTrailerReady(false);
                   
                   // Invalidate cache
@@ -322,7 +322,6 @@ const Details: React.FC = () => {
                     const remaining = details.videos.results.filter(v => v.key !== activeTrailerKey && v.site === 'YouTube');
                     const nextBest = findBestTrailer(remaining);
                     if (nextBest) {
-                      console.log('Falling back to next trailer:', nextBest.key);
                       setActiveTrailerKey(nextBest.key);
                     } else {
                       setActiveTrailerKey(null);
@@ -335,6 +334,8 @@ const Details: React.FC = () => {
                   src={getImageUrl(details.backdrop_path, 'original')}
                   className="absolute inset-0 w-full h-full object-cover object-top"
                   alt=""
+                  loading="eager"
+                  decoding="async"
                 />
               )}
               <div className="absolute inset-0 bg-black/20" />
@@ -351,6 +352,7 @@ const Details: React.FC = () => {
               alt={details.title || details.name}
               className="w-full h-full object-cover object-top"
               loading="eager"
+              decoding="async"
             />
           )}
           <div className="absolute inset-0 bg-linear-to-t from-background via-background/60 to-transparent" />
@@ -364,6 +366,8 @@ const Details: React.FC = () => {
               src={getImageUrl(details.poster_path)}
               alt={details.title || details.name}
               className="w-full h-full object-cover"
+              loading="lazy"
+              decoding="async"
             />
           </div>
 

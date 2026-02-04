@@ -187,8 +187,8 @@ const CalendarPage = () => {
                  } as CalendarEvent;
                }
             }
-          } catch (e) {
-            console.warn(`Failed to fetch details for ${show.name}`, e);
+          } catch {
+            // console.warn(`Failed to fetch details for ${show.name}`, e);
           }
           return null;
         });
@@ -230,7 +230,6 @@ const CalendarPage = () => {
     
     if (existing) {
       await db.reminders.delete(existing.id!);
-      // TODO: Cancel notification
     } else {
       const reminder: Reminder = {
         mediaId: event.id,

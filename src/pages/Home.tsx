@@ -51,8 +51,8 @@ const Home: React.FC = () => {
           } else {
             setBackgroundVideoKey(null);
           }
-        } catch (e) {
-          console.error('Failed to fetch background trailer', e);
+        } catch {
+          // console.error('Failed to fetch background trailer', e);
           setBackgroundVideoKey(null);
         }
       };
@@ -93,80 +93,91 @@ const Home: React.FC = () => {
         setTrailerKey(trailer.key);
         setShowTrailer(true);
       } else {
-        // Fallback or toast could go here
-        console.log('No trailer found');
+        // console.warn('No trailer found');
       }
-    } catch (e) {
-      console.error('Failed to fetch trailer', e);
+    } catch {
+      // console.error('Failed to fetch trailer', e);
     }
   };
+
+  // Memoize content sections to prevent unnecessary re-renders
+  const moviesContent = React.useMemo(() => (
+    <>
+      <ContentRow title="Popular Movies" fetcher={() => getMoviesByCategory('popular')} />
+      <ContentRow title="Top Rated Movies" fetcher={() => getMoviesByCategory('top_rated')} />
+      <ContentRow title="New Releases" fetcher={() => getMoviesByCategory('now_playing')} />
+      <ContentRow title="Upcoming" fetcher={() => getMoviesByCategory('upcoming')} />
+      <ContentRow title="Action Movies" fetcher={() => discoverMedia('movie', { with_genres: '28' })} />
+      <ContentRow title="Comedy Movies" fetcher={() => discoverMedia('movie', { with_genres: '35' })} />
+      <ContentRow title="Sci-Fi Movies" fetcher={() => discoverMedia('movie', { with_genres: '878' })} />
+    </>
+  ), []);
+
+  const tvShowsContent = React.useMemo(() => (
+    <>
+      <ContentRow title="Popular TV Shows" fetcher={() => getTVShowsByCategory('popular')} />
+      <ContentRow title="Top Rated TV Shows" fetcher={() => getTVShowsByCategory('top_rated')} />
+      <ContentRow title="On The Air" fetcher={() => getTVShowsByCategory('on_the_air')} />
+      <ContentRow title="Action & Adventure" fetcher={() => discoverMedia('tv', { with_genres: '10759' })} />
+      <ContentRow title="Comedy Series" fetcher={() => discoverMedia('tv', { with_genres: '35' })} />
+      <ContentRow title="Drama Series" fetcher={() => discoverMedia('tv', { with_genres: '18' })} />
+    </>
+  ), []);
+
+  const animeContent = React.useMemo(() => (
+    <>
+      <ContentRow title="Popular Anime" fetcher={() => discoverMedia('tv', { with_genres: '16', with_original_language: 'ja', sort_by: 'popularity.desc' })} />
+      <ContentRow title="Top Rated Anime" fetcher={() => discoverMedia('tv', { with_genres: '16', with_original_language: 'ja', sort_by: 'vote_average.desc', 'vote_count.gte': 100 })} />
+      <ContentRow title="Anime Movies" fetcher={() => discoverMedia('movie', { with_genres: '16', with_original_language: 'ja', sort_by: 'popularity.desc' })} />
+      <ContentRow title="New Anime Releases" fetcher={() => discoverMedia('tv', { with_genres: '16', with_original_language: 'ja', 'first_air_date.gte': new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], sort_by: 'popularity.desc' })} />
+    </>
+  ), []);
+
+  const documentaryContent = React.useMemo(() => (
+    <>
+      <ContentRow title="Popular Documentaries" fetcher={() => discoverMedia('movie', { with_genres: '99', sort_by: 'popularity.desc' })} />
+      <ContentRow title="Docuseries" fetcher={() => discoverMedia('tv', { with_genres: '99', sort_by: 'popularity.desc' })} />
+      <ContentRow title="Nature & Science" fetcher={() => discoverMedia('movie', { with_genres: '99', sort_by: 'vote_average.desc', 'vote_count.gte': 50 })} />
+    </>
+  ), []);
 
   const content = React.useMemo(() => {
     switch (selectedCategory) {
       case 'Movies':
-        return (
-          <>
-            <ContentRow title="Popular Movies" fetcher={() => getMoviesByCategory('popular')} />
-            <ContentRow title="Top Rated Movies" fetcher={() => getMoviesByCategory('top_rated')} />
-            <ContentRow title="New Releases" fetcher={() => getMoviesByCategory('now_playing')} />
-            <ContentRow title="Upcoming" fetcher={() => getMoviesByCategory('upcoming')} />
-            <ContentRow title="Action Movies" fetcher={() => discoverMedia('movie', { with_genres: '28' })} />
-            <ContentRow title="Comedy Movies" fetcher={() => discoverMedia('movie', { with_genres: '35' })} />
-            <ContentRow title="Sci-Fi Movies" fetcher={() => discoverMedia('movie', { with_genres: '878' })} />
-          </>
-        );
+        return moviesContent;
       case 'TV Shows':
-        return (
-          <>
-            <ContentRow title="Popular TV Shows" fetcher={() => getTVShowsByCategory('popular')} />
-            <ContentRow title="Top Rated TV Shows" fetcher={() => getTVShowsByCategory('top_rated')} />
-            <ContentRow title="On The Air" fetcher={() => getTVShowsByCategory('on_the_air')} />
-            <ContentRow title="Action & Adventure" fetcher={() => discoverMedia('tv', { with_genres: '10759' })} />
-            <ContentRow title="Comedy Series" fetcher={() => discoverMedia('tv', { with_genres: '35' })} />
-            <ContentRow title="Drama Series" fetcher={() => discoverMedia('tv', { with_genres: '18' })} />
-          </>
-        );
+        return tvShowsContent;
       case 'Anime':
-        return (
-          <>
-            <ContentRow title="Popular Anime" fetcher={() => discoverMedia('tv', { with_genres: '16', with_original_language: 'ja', sort_by: 'popularity.desc' })} />
-            <ContentRow title="Top Rated Anime" fetcher={() => discoverMedia('tv', { with_genres: '16', with_original_language: 'ja', sort_by: 'vote_average.desc', 'vote_count.gte': 100 })} />
-            <ContentRow title="Anime Movies" fetcher={() => discoverMedia('movie', { with_genres: '16', with_original_language: 'ja', sort_by: 'popularity.desc' })} />
-            <ContentRow title="New Anime Releases" fetcher={() => discoverMedia('tv', { with_genres: '16', with_original_language: 'ja', 'first_air_date.gte': new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], sort_by: 'popularity.desc' })} />
-          </>
-        );
+        return animeContent;
       case 'Documentary':
+        return documentaryContent;
+      default:
         return (
           <>
-            <ContentRow title="Popular Documentaries" fetcher={() => discoverMedia('movie', { with_genres: '99', sort_by: 'popularity.desc' })} />
-            <ContentRow title="Docuseries" fetcher={() => discoverMedia('tv', { with_genres: '99', sort_by: 'popularity.desc' })} />
-            <ContentRow title="Nature & Science" fetcher={() => discoverMedia('movie', { with_genres: '99', sort_by: 'vote_average.desc', 'vote_count.gte': 50 })} />
-            <ContentRow title="History" fetcher={() => discoverMedia('movie', { with_genres: '99,36', sort_by: 'popularity.desc' })} />
-          </>
-        );
-      default: // 'All'
-        return (
-          <>
-            {/* AI Recommendations */}
-            {recommendations.map((rec, index) => (
+            {history.length > 0 && (
+              <ContentRow 
+                title="Continue Watching" 
+                data={history}
+              />
+            )}
+            
+            {recommendations.length > 0 && recommendations.map((rec, index) => (
               <ContentRow
-                key={`rec-${index}`}
-                title={rec.type === 'wildcard' ? `✨ ${rec.title}` : rec.title}
+                key={`${rec.type}-${index}`}
+                title={rec.title}
                 data={rec.items}
               />
             ))}
 
-            <ContentRow title="Continue Watching" data={history} cardSize="small" />
-            <ContentRow title="Trending Now" fetcher={() => getTrending('week')} />
+            <ContentRow title="Trending Now" fetcher={() => getTrending('day')} />
             <ContentRow title="Popular Movies" fetcher={() => getMoviesByCategory('popular')} />
-            <ContentRow title="Top Rated Movies" fetcher={() => getMoviesByCategory('top_rated')} />
             <ContentRow title="Popular TV Shows" fetcher={() => getTVShowsByCategory('popular')} />
-            <ContentRow title="New Releases" fetcher={() => getMoviesByCategory('now_playing')} />
-            <ContentRow title="On The Air" fetcher={() => getTVShowsByCategory('on_the_air')} />
+            <ContentRow title="Top Rated" fetcher={() => getTrending('week')} />
+            <ContentRow title="Action Movies" fetcher={() => discoverMedia('movie', { with_genres: '28' })} />
           </>
         );
     }
-  }, [selectedCategory, recommendations, history]);
+  }, [selectedCategory, history, recommendations, moviesContent, tvShowsContent, animeContent, documentaryContent]);
 
   if (featuredLoading) return <div className="flex items-center justify-center h-full text-white">Loading...</div>;
   if (!featured) return <div className="flex items-center justify-center h-full text-white">No content available</div>;
@@ -202,7 +213,6 @@ const Home: React.FC = () => {
                     autoPlay muted loop playsInline
                     onCanPlay={() => setIsVideoReady(true)}
                     onError={() => {
-                      console.warn('Background video failed to play:', backgroundVideoKey);
                       setIsVideoReady(false);
                       
                       // Try next available trailer
@@ -210,7 +220,6 @@ const Home: React.FC = () => {
                       const fallbacks = window.availableTrailers || [];
                       if (fallbacks.length > 0) {
                         const next = fallbacks.shift();
-                        console.log('Falling back to next trailer:', next.key);
                         setBackgroundVideoKey(next.key);
                       } else {
                         setBackgroundVideoKey(null); // Fallback to image
@@ -269,7 +278,7 @@ const Home: React.FC = () => {
                         const details = await getDetails(featured.media_type, featured.id);
                         play(details);
                       } catch (e) {
-                        console.error('Failed to play featured item', e);
+                        // console.error('Failed to play featured item', e);
                       }
                     }
                   }}
@@ -282,6 +291,14 @@ const Home: React.FC = () => {
 
                 <Focusable
                   onClick={handlePlayTrailer}
+                  onMouseEnter={() => {
+                    if (featured) {
+                      getVideos(featured.media_type || 'movie', featured.id).then(videos => {
+                        const trailer = findBestTrailer(videos);
+                        if (trailer) window.ipcRenderer?.invoke('trailer-prefetch', trailer.key).catch(() => {});
+                      });
+                    }
+                  }}
                   className="bg-white/10 hover:bg-white/20 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all duration-300 backdrop-blur-md border border-white/10 hover:border-white/30 hover:scale-105 cursor-pointer shrink-0"
                 >
                   <Youtube size={20} className="text-red-500" />

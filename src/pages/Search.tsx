@@ -48,14 +48,14 @@ const Search: React.FC = () => {
         }
       });
     } catch (e) {
-      console.warn('Recent search save failed:', e);
+      // console.warn('Recent search save failed:', e);
     }
   }, []);
 
   // Handle errors via toast
   useEffect(() => {
     if (error) {
-      console.error('Search failed:', error);
+      // console.error('Search failed:', error);
       showToast('Search failed. Please check your connection and try again.', 'error');
     }
   }, [error, showToast]);

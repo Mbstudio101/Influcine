@@ -11,6 +11,23 @@ export default defineConfig({
   server: {
     host: true, // Listen on all local IPs
   },
+  build: {
+    rollupOptions: {
+      onwarn(warning, warn) {
+        if (warning.code === 'MODULE_LEVEL_DIRECTIVE') {
+          return;
+        }
+        warn(warning);
+      },
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'ui-vendor': ['framer-motion', 'lucide-react', 'clsx', 'tailwind-merge'],
+          'data-vendor': ['@tanstack/react-query', 'axios', 'dexie', 'dexie-react-hooks', 'date-fns'],
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     process.env.npm_lifecycle_event !== 'build:web' && electron({
@@ -22,11 +39,6 @@ export default defineConfig({
             rollupOptions: {
               external: ['better-sqlite3'],
               output: {
-                manualChunks: {
-                  'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-                  'ui-vendor': ['framer-motion', 'lucide-react', 'clsx', 'tailwind-merge'],
-                  'data-vendor': ['@tanstack/react-query', 'axios', 'dexie', 'dexie-react-hooks', 'date-fns'],
-                },
                 banner: `
 import { createRequire as topLevelCreateRequire } from 'node:module';
 import { fileURLToPath as topLevelFileURLToPath } from 'node:url';

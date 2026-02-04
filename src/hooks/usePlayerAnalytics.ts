@@ -99,7 +99,7 @@ export const usePlayerAnalytics = ({
         }
       }
     } catch (err) {
-      console.error('Error saving history on play:', err);
+      // console.error('Error saving history on play:', err);
     }
   }, [profile, type, season, episode, details]);
 

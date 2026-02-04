@@ -70,7 +70,7 @@ export const usePlayerProgress = ({
           }
         }
       } catch (error) {
-        console.error('Failed to load progress:', error);
+        // console.error('Failed to load progress:', error);
       } finally {
         setIsLoadingProgress(false);
       }
@@ -129,7 +129,7 @@ export const usePlayerProgress = ({
         await db.episodeProgress.put(cleanEpisode);
       }
     } catch (err) {
-      console.error('Error saving progress:', err);
+      // console.error('Error saving progress:', err);
     }
   }, []);
 

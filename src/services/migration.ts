@@ -9,12 +9,12 @@ export async function migrateDatabaseIds() {
     if (!db.isOpen()) {
       await db.open().catch(err => {
         // If it's a version error, we might need to delete and recreate, but let's just log for now
-        console.error('[Migration] Database failed to open during check:', err);
+        // console.error('[Migration] Database failed to open during check:', err);
         throw err;
       });
     }
 
-    console.log('[Migration] Starting ID migration...');
+    // console.log('[Migration] Starting ID migration...');
     
     // 1. Migrate Library (formerly Watchlist)
     const watchlistItems = await db.library.toArray();
@@ -65,12 +65,12 @@ export async function migrateDatabaseIds() {
     }
 
     if (watchlistFixed > 0 || historyFixed > 0) {
-      console.log(`[Migration] Completed. Fixed ${watchlistFixed} watchlist items and ${historyFixed} history items.`);
+      // console.log(`[Migration] Completed. Fixed ${watchlistFixed} watchlist items and ${historyFixed} history items.`);
     } else {
-      console.log('[Migration] No string IDs found. Database is clean.');
+      // console.log('[Migration] No string IDs found. Database is clean.');
     }
 
   } catch (error) {
-    console.error('[Migration] Failed to migrate database IDs:', error);
+    // console.error('[Migration] Failed to migrate database IDs:', error);
   }
 }

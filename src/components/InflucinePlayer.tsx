@@ -48,6 +48,12 @@ interface ExtendedAudioTrackList {
   [index: number]: ExtendedAudioTrack;
 }
 
+interface SubtitleFile {
+  url: string;
+  lang: string;
+  label: string;
+}
+
 const InflucinePlayer: React.FC<InflucinePlayerProps> = ({ 
   src, 
   embedSrc,
@@ -65,19 +71,34 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const iframeRef = useRef<any>(null);
+  const iframeRef = useRef<HTMLIFrameElement | any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [adblockPath, setAdblockPath] = useState<string>('');
 
   useEffect(() => {
     // Get adblock script path
-    window.ipcRenderer.invoke('get-adblock-path').then(setAdblockPath).catch(console.error);
+    window.ipcRenderer.invoke('get-adblock-path').then(setAdblockPath).catch(() => {});
   }, []);
+
+  // Fetch External Subtitles
+  useEffect(() => {
+    if (src && src.startsWith('trailer://')) {
+      // Extract video ID from trailer://VIDEO_ID.mp4
+      const videoId = src.replace('trailer://', '').replace('.mp4', '');
+      window.ipcRenderer.invoke('get-subtitles', videoId)
+        .then((subs: SubtitleFile[]) => {
+          setExternalSubtitles(subs);
+        })
+        .catch(() => setExternalSubtitles([]));
+    } else {
+      setExternalSubtitles([]);
+    }
+  }, [src]);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
-      console.log('InflucinePlayer mounted with:', { src, embedSrc, title });
+      // console.log('InflucinePlayer mounted with:', { src, embedSrc, title });
     }
   }, [src, embedSrc, title]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -108,6 +129,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     }
   }, [isEmbed]);
   const [availableSubtitles, setAvailableSubtitles] = useState<TextTrack[]>([]);
+  const [externalSubtitles, setExternalSubtitles] = useState<SubtitleFile[]>([]);
   const [activeSubtitleIndex, setActiveSubtitleIndex] = useState<number>(-1); // -1 = Off
   const [audioEngineReady, setAudioEngineReady] = useState(false);
   
@@ -156,15 +178,53 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       compressorRef.current = compressor;
 
       setAudioEngineReady(true);
-      console.log('[Influcine Audio] Cinema Audio Engine initialized');
-    } catch (e) {
-      console.warn('[Influcine Audio] Failed to init Web Audio API (likely CORS):', e);
+    } catch {
+      // console.warn('[Influcine Audio] Failed to init Web Audio API (likely CORS):', e);
       // Fallback gracefully
       setAudioMode('standard');
       setAudioFormat('Standard Stereo');
       setAudioEngineReady(false);
     }
   }, [src, isEmbed]);
+
+  // Sync textTracks when they change (e.g. external subtitles loaded)
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || isEmbed) return;
+
+    const updateSubtitles = () => {
+      const subs: TextTrack[] = [];
+      let activeIndex = -1;
+      if (video.textTracks) {
+        for (let i = 0; i < video.textTracks.length; i++) {
+          const track = video.textTracks[i];
+          subs.push(track);
+          if (track.mode === 'showing') {
+            activeIndex = i;
+          }
+        }
+      }
+      setAvailableSubtitles(subs);
+      setActiveSubtitleIndex(activeIndex);
+    };
+
+    // Initial check
+    updateSubtitles();
+
+    // Listen for changes
+    const tracks = video.textTracks;
+    if (tracks) {
+      tracks.addEventListener('addtrack', updateSubtitles);
+      tracks.addEventListener('removetrack', updateSubtitles);
+      tracks.addEventListener('change', updateSubtitles);
+      
+      return () => {
+        tracks.removeEventListener('addtrack', updateSubtitles);
+        tracks.removeEventListener('removetrack', updateSubtitles);
+        tracks.removeEventListener('change', updateSubtitles);
+      };
+    }
+  }, [isEmbed, externalSubtitles]); // Re-run when external subtitles might have caused a DOM update
 
   // Handle Audio Mode Switching
   useEffect(() => {
@@ -258,7 +318,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
             .catch(error => {
               // Auto-play was prevented or interrupted
               if (error.name !== 'AbortError') {
-                 console.warn('[InflucinePlayer] Playback prevented:', error);
+                 // console.warn('[InflucinePlayer] Playback prevented:', error);
               }
               setIsPlaying(false);
             });
@@ -481,8 +541,8 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
                  // We don't upgrade to Atmos blindly, but we acknowledge the capability
               }
             }
-          } catch (e) {
-            console.debug('[Influcine Audio] Capability check failed', e);
+          } catch {
+            // console.debug('[Influcine Audio] Capability check failed', e);
           }
         }
 
@@ -592,6 +652,10 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       'https://vidfast.cloud',
       'https://vidfast.cc',
       'https://vidfast.info',
+      'https://vidlink.pro',
+      'https://vidlink.io',
+      'https://vidlink.to',
+      'https://vidlink.net',
     ];
 
     const handleMessage = (event: MessageEvent) => {
@@ -642,9 +706,10 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleNewWindow = (e: any) => {
-      console.warn('Blocked renderer webview popup:', e.url);
+      // console.warn('Blocked renderer webview popup:', e.url);
       e.preventDefault();
     };
+
 
     // 'new-window' is the event for webview tag
     webview.addEventListener('new-window', handleNewWindow);
@@ -652,7 +717,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   }, [isEmbed]);
 
   const handleVideoError = () => {
-    console.error('Native playback error. Switching to embed if available.');
+    // console.error('Native playback error. Switching to embed if available.');
     if (embedSrc) {
       setForceEmbed(true);
     }
@@ -693,7 +758,18 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
           }}
           onPause={onPause}
           onEnded={onEnded}
-        />
+        >
+          {externalSubtitles.map((sub, index) => (
+            <track
+              key={sub.url}
+              kind="subtitles"
+              src={sub.url}
+              srcLang={sub.lang}
+              label={sub.label}
+              default={index === 0}
+            />
+          ))}
+        </video>
       )}
 
       {/* Loading Spinner */}

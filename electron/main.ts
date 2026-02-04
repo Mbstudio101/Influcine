@@ -28,11 +28,11 @@ async function ensureYtDlp() {
     if (stats.size > 10 * 1024 * 1024) {
       return;
     }
-    console.log('[yt-dlp] Existing binary is too small (likely a script). Re-downloading...');
+    // console.log('[yt-dlp] Existing binary is too small (likely a script). Re-downloading...');
     fs.unlinkSync(YTDLP_PATH);
   }
   
-  console.log('[yt-dlp] Binary not found or invalid. Downloading...');
+  // console.log('[yt-dlp] Binary not found or invalid. Downloading...');
   try {
     // Determine asset name
     let assetName = 'yt-dlp'; // Fallback
@@ -49,9 +49,9 @@ async function ensureYtDlp() {
     const buffer = await response.arrayBuffer();
     fs.writeFileSync(YTDLP_PATH, Buffer.from(buffer));
     fs.chmodSync(YTDLP_PATH, '755');
-    console.log('[yt-dlp] Downloaded successfully to:', YTDLP_PATH);
-  } catch (e) {
-    console.error('[yt-dlp] Download failed:', e);
+    // console.log('[yt-dlp] Downloaded successfully to:', YTDLP_PATH);
+  } catch {
+    // console.error('[yt-dlp] Download failed:', e);
     // Attempt to use YTDlpWrap's downloader as fallback if my logic fails
     // await YTDlpWrap.downloadFromGithub(YTDLP_PATH);
   }
@@ -82,7 +82,7 @@ autoUpdater.autoDownload = false; // Disable auto download to support user flow:
 const ADBLOCK_SCRIPT = `
 // Influcine AdBlock & Anti-Sandblock Script
 (function() {
-  console.log("[Influcine] AdBlocker Active");
+  // console.log("[Influcine] AdBlocker Active");
   
   // IPC Bridge for Player Control
   try {
@@ -91,12 +91,12 @@ const ADBLOCK_SCRIPT = `
       // console.log("[Influcine] Forwarding command:", data);
       window.postMessage(data, '*');
     });
-  } catch (e) {
-    console.warn("[Influcine] Failed to init IPC bridge:", e);
+  } catch {
+    // console.warn("[Influcine] Failed to init IPC bridge:", e);
   }
 
   // 1. Popup Blocking (Aggressive)
-  const noop = () => { console.log("[Influcine] Blocked Popup/Alert"); return null; };
+  const noop = () => { /* console.log("[Influcine] Blocked Popup/Alert"); */ return null; };
   window.open = noop;
   window.alert = noop;
   window.confirm = () => true; // Auto-confirm to bypass some checks
@@ -115,7 +115,7 @@ const ADBLOCK_SCRIPT = `
       
       // Remove High Z-Index Overlays (likely ads)
       // We assume legitimate player controls are < 10000 or specific classes
-      if (zIndex > 99999 && !el.className.includes('player') && !el.className.includes('control')) {
+      if (zIndex > 99999 && !String(el.className).includes('player') && !String(el.className).includes('control')) {
         // console.log("[Influcine] Removed High-Z Element:", el);
         el.remove();
       }
@@ -127,7 +127,7 @@ const ADBLOCK_SCRIPT = `
       }
       
       // Remove common ad iframes inside the player
-      if (el.tagName === 'IFRAME' && !el.src.includes('vidfast') && !el.src.includes('youtube')) {
+      if (el.tagName === 'IFRAME' && !el.src.includes('vidfast') && !el.src.includes('vidlink') && !el.src.includes('youtube')) {
          // Check size - small iframes are often tracking pixels or hidden ads
          if (el.offsetWidth < 10 && el.offsetHeight < 10) {
            el.remove();
@@ -139,7 +139,7 @@ const ADBLOCK_SCRIPT = `
   // Run cleaner periodically
   setInterval(cleanDOM, 1000);
   
-  // 4. Specific Site Fixes (VidFast / 2Embed)
+  // 4. Specific Site Fixes (VidFast / VidLink / 2Embed)
   window.addEventListener('DOMContentLoaded', () => {
     // Force video to be visible if hidden by anti-adblock
     const video = document.querySelector('video');
@@ -155,8 +155,8 @@ const ADBLOCK_SCRIPT = `
 const ADBLOCK_PATH = path.join(app.getPath('userData'), 'adblock.js');
 try {
   fs.writeFileSync(ADBLOCK_PATH, ADBLOCK_SCRIPT);
-} catch (e) {
-  console.error('Failed to write adblock script:', e);
+} catch {
+  // console.error('Failed to write adblock script:', e);
 }
 
 // IPC Handlers for Trailer Caching
@@ -182,7 +182,7 @@ ipcMain.handle('trailer-check', async (_event, videoId) => {
       // A 2-minute 1080p trailer should be 30MB+ typically. 720p muxed might be 10-20MB.
       // Let's be aggressive: If < 10MB, kill it.
       if (stats.size < 10 * 1024 * 1024) {
-         console.log(`[Trailer] File too small (${stats.size} bytes), likely low quality. Re-downloading: ${videoId}`);
+         // console.log(`[Trailer] File too small (${stats.size} bytes), likely low quality. Re-downloading: ${videoId}`);
          try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
          return null;
       }
@@ -206,10 +206,9 @@ ipcMain.handle('log-error', async (_event, errorData) => {
   
   try {
     fs.appendFileSync(logFile, logEntry);
-    // console.log('[Agent] Error logged:', errorData.message);
     return true;
-  } catch (e) {
-    console.error('Failed to write to log file:', e);
+  } catch {
+    // console.error('Failed to write to log file:', e);
     return false;
   }
 });
@@ -222,11 +221,11 @@ ipcMain.handle('trailer-invalidate', async (_event, videoId) => {
   const filePath = path.join(TRAILERS_DIR, `${videoId}.mp4`);
   if (fs.existsSync(filePath)) {
     try {
-      console.log(`[Trailer] Invalidating corrupted/incompatible file: ${videoId}`);
+      // console.log(`[Trailer] Invalidating corrupted/incompatible file: ${videoId}`);
       fs.unlinkSync(filePath);
       return true;
-    } catch (e) {
-      console.error(`[Trailer] Failed to invalidate file: ${videoId}`, e);
+    } catch {
+      // console.error(`[Trailer] Failed to invalidate file: ${videoId}`, e);
     }
   }
   return false;
@@ -246,6 +245,7 @@ ipcMain.handle('trailer-download', async (_event, videoId) => {
       `https://www.youtube.com/watch?v=${videoId}`,
       '-f', 'bv*[ext=mp4][height>=1080]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b',
       '-o', filePath,
+      '--write-subs', '--write-auto-subs', '--sub-format', 'vtt', '--sub-langs', 'en,.*',
       '--no-playlist',
       '--force-ipv4',
       '--no-check-certificates',
@@ -258,7 +258,7 @@ ipcMain.handle('trailer-download', async (_event, videoId) => {
       ytDlpArgs.push('--ffmpeg-location', actualFfmpegPath);
     }
 
-    console.log(`[Trailer] Downloading ${videoId} with yt-dlp...`);
+    // console.log(`[Trailer] Downloading ${videoId} with yt-dlp...`);
     
     // Execute yt-dlp
     await new Promise<void>((resolve, reject) => {
@@ -275,9 +275,50 @@ ipcMain.handle('trailer-download', async (_event, videoId) => {
 
     return `trailer://${videoId}`;
   } catch (error) {
-    console.error(`[Trailer] Download failed for ${videoId}:`, error);
+    // console.error(`[Trailer] Download failed for ${videoId}:`, error);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     throw error;
+  }
+});
+
+ipcMain.handle('get-subtitles', async (_event, videoId) => {
+  try {
+    if (!fs.existsSync(TRAILERS_DIR)) return [];
+    
+    const files = fs.readdirSync(TRAILERS_DIR);
+    // Filter for VTT files that start with the videoId
+    // Note: yt-dlp might name them "VIDEOID.en.vtt"
+    const subtitleFiles = files.filter(f => f.startsWith(videoId) && f.endsWith('.vtt'));
+    
+    return subtitleFiles.map(f => {
+      // Simple parsing: ID.LANG.vtt
+      const parts = f.split('.');
+      // Default
+      let lang = 'en';
+      let label = 'English';
+
+      // If format is ID.LANG.vtt (3 parts or more)
+      if (parts.length >= 3) {
+        const langCode = parts[parts.length - 2];
+        lang = langCode;
+        try {
+          label = new Intl.DisplayNames(['en'], { type: 'language' }).of(langCode) || langCode;
+        } catch {
+          label = langCode;
+        }
+      }
+      
+      // Capitalize label
+      label = label.charAt(0).toUpperCase() + label.slice(1);
+
+      return {
+        url: `trailer://${f}`,
+        lang,
+        label
+      };
+    });
+  } catch {
+    return [];
   }
 });
 
@@ -382,17 +423,19 @@ function initImdbDb() {
 
     if (fs.existsSync(dbPath)) {
       imdbDb = new Database(dbPath, { readonly: true });
-      console.log('IMDB Database connected at', dbPath);
+      // console.log('IMDB Database connected at', dbPath);
     } else {
-      console.log('IMDB Database not found. Checked:', { desktopPath, devPath, prodPath });
+      // console.log('IMDB Database not found. Checked:', { desktopPath, devPath, prodPath });
     }
-  } catch (err) {
-    console.error('Failed to init IMDB DB:', err);
+  } catch {
+    // console.error('Failed to init IMDB DB:', err);
   }
 }
 
 // IPC Handler for IMDB Search
 ipcMain.handle('imdb-search', (_event, { query }) => {
+  if (!query || query.length < 2) return { results: [] };
+
   if (!imdbDb) {
     initImdbDb();
     if (!imdbDb) return { results: [], error: 'Database not loaded' };
@@ -407,10 +450,10 @@ ipcMain.handle('imdb-search', (_event, { query }) => {
       ORDER BY r.numVotes DESC NULLS LAST
       LIMIT 20
     `);
-    const results = stmt.all(`%${query}%`);
+    const results = stmt.all(`${query}%`);
     return { results };
   } catch (err: unknown) {
-    if (!app.isPackaged) console.error('IMDB Search Error:', err);
+    // if (!app.isPackaged) console.error('IMDB Search Error:', err);
     return { results: [], error: 'Query failed' };
   }
 });
@@ -582,22 +625,22 @@ function createWindow() {
     if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('github.com')) {
       try {
         shell.openExternal(url);
-      } catch (err) {
-        console.error('Failed to open external link:', err);
+      } catch {
+        // console.error('Failed to open external link:', err);
       }
       return { action: 'deny' };
     }
 
     // Strictly block all other popups (ads)
-    console.log('Blocked popup:', url)
+    // console.log('Blocked popup:', url)
     return { action: 'deny' }
   })
 
   // IMPORTANT: Also block popups from WebViews (where the ads actually live)
   win.webContents.on('did-attach-webview', (_event, webContents) => {
     // Block new windows from the webview
-    webContents.setWindowOpenHandler(({ url }) => {
-      console.log('Blocked WebView popup:', url);
+    webContents.setWindowOpenHandler(() => {
+      // console.log('Blocked WebView popup:', url);
       return { action: 'deny' };
     });
 
@@ -652,40 +695,25 @@ app.on('activate', () => {
   }
 })
 
+// Stream URL Cache
+const streamUrlCache = new Map<string, { url: string, expiry: number }>();
+
 app.whenReady().then(() => {
   initImdbDb();
 
-  // Handle 'trailer://' protocol
-  protocol.handle('trailer', async (request) => {
+  // IPC to prefetch trailer URL
+  ipcMain.handle('trailer-prefetch', async (_event, videoId) => {
     try {
-      // Robust URL parsing
-      const url = request.url;
-      const videoId = url.replace('trailer://', '').replace(/\/$/, ''); // Remove protocol and trailing slash
-      const decodedId = decodeURIComponent(videoId);
-
-      // Sanitize ID to prevent directory traversal
-      const safeId = path.basename(decodedId);
-      const filePath = path.join(TRAILERS_DIR, `${safeId}.mp4`);
-
-      // 1. If file exists and is valid, serve it (High Quality 1080p)
-      if (fs.existsSync(filePath)) {
-        const stats = fs.statSync(filePath);
-        if (stats.size > 0) {
-           const fileUrl = pathToFileURL(filePath).toString();
-           return net.fetch(fileUrl);
-        }
+      if (streamUrlCache.has(videoId)) {
+        const cached = streamUrlCache.get(videoId);
+        if (cached && cached.expiry > Date.now()) return true;
       }
 
-      // 2. If file missing, STREAM from YouTube (Instant 720p Fallback)
-      // This allows the video to play immediately while the high-quality version downloads in background
-      console.log(`[Trailer Protocol] Stream fallback for ${safeId}`);
-      
       await ensureYtDlp();
-
-      // Get direct stream URL (best single file, usually 720p)
       const ytDlpArgs = [
-        `https://www.youtube.com/watch?v=${safeId}`,
-        '-f', 'best[ext=mp4]/best',
+        `https://www.youtube.com/watch?v=${videoId}`,
+        '-f', 'best[ext=mp4]/best[ext=webm]/best',
+        '-S', 'res,ext:mp4:m4a',
         '-g',
         '--force-ipv4',
         '--no-check-certificates',
@@ -698,18 +726,104 @@ app.whenReady().then(() => {
         ytDlp.exec(ytDlpArgs)
           .on('data', (data: string | Buffer) => output += data.toString())
           .on('error', (err: Error) => reject(err))
-          .on('close', () => resolve(output.trim().split('\n')[0])); // Take first URL
+          .on('close', () => resolve(output.trim().split('\n')[0]));
       });
 
       if (directUrl && directUrl.startsWith('http')) {
-        // Proxy the remote stream
-        return net.fetch(directUrl);
+        streamUrlCache.set(videoId, { url: directUrl, expiry: Date.now() + 3600000 }); // 1h cache
+        return true;
+      }
+    } catch {
+      // console.error('Prefetch failed');
+    }
+    return false;
+  });
+
+  // Handle 'trailer://' protocol
+  protocol.handle('trailer', async (request) => {
+    try {
+      // Robust URL parsing
+      const url = request.url;
+      const videoId = url.replace('trailer://', '').replace(/\/$/, ''); // Remove protocol and trailing slash
+      const decodedId = decodeURIComponent(videoId);
+
+      // Sanitize ID to prevent directory traversal
+      const safeId = path.basename(decodedId);
+      
+      // Check extension to support VTT subtitles
+      const isVtt = safeId.endsWith('.vtt');
+      const filePath = isVtt 
+         ? path.join(TRAILERS_DIR, safeId)
+         : path.join(TRAILERS_DIR, `${safeId}.mp4`);
+
+      // 1. If file exists and is valid, serve it (High Quality 1080p or VTT)
+      if (fs.existsSync(filePath)) {
+        const stats = fs.statSync(filePath);
+        if (stats.size > 0) {
+           return net.fetch(pathToFileURL(filePath).toString());
+        }
+      }
+
+      // 2. If VTT is missing, try to download it
+      if (isVtt) {
+         // Extract video ID from "VIDEOID.LANG.vtt"
+         await ensureYtDlp();
+         // ... (download logic for subs could go here, but usually main video download handles it)
+         return new Response('Subtitle not found', { status: 404 });
+      }
+
+      // 3. Fallback to Stream URL (WebM/MP4) via yt-dlp -g
+      // Check memory cache first
+      let directUrl: string | undefined;
+      
+      if (streamUrlCache.has(safeId)) {
+         const cached = streamUrlCache.get(safeId);
+         if (cached && cached.expiry > Date.now()) {
+            directUrl = cached.url;
+         }
+      }
+
+      if (!directUrl) {
+        await ensureYtDlp();
+        const ytDlpArgs = [
+          `https://www.youtube.com/watch?v=${safeId}`,
+          '-f', 'best[ext=mp4]/best[ext=webm]/best', // Allow WebM for faster start
+          '-S', 'res,ext:mp4:m4a', // Prefer resolution, then mp4
+          '-g',
+          '--force-ipv4',
+          '--no-check-certificates',
+          '--extractor-args', 'youtube:player_client=android'
+        ];
+
+        directUrl = await new Promise<string>((resolve, reject) => {
+          let output = '';
+          const ytDlp = new YTDlpWrap(YTDLP_PATH);
+          ytDlp.exec(ytDlpArgs)
+            .on('data', (data: string | Buffer) => output += data.toString())
+            .on('error', (err: Error) => reject(err))
+            .on('close', () => resolve(output.trim().split('\n')[0])); // Take first URL
+        });
+        
+        if (directUrl && directUrl.startsWith('http')) {
+           streamUrlCache.set(safeId, { url: directUrl, expiry: Date.now() + 3600000 });
+        }
+      }
+
+      if (directUrl && directUrl.startsWith('http')) {
+        // Proxy the remote stream with headers (Range, etc.)
+        const headers = new Headers();
+        // Forward Range header if present
+        if (request.headers.has('Range')) {
+          headers.set('Range', request.headers.get('Range')!);
+        }
+        
+        return net.fetch(directUrl, { headers });
       }
       
       return new Response('Video unavailable', { status: 404 });
 
     } catch (err) {
-      console.error('[Trailer Protocol] Error:', err);
+      // console.error('[Trailer Protocol] Error:', err);
       return new Response('Internal Server Error', { status: 500 });
     }
   });

@@ -38,26 +38,26 @@ export class VideoAgentService {
           query: userQuery
         };
       }
-    } catch (cacheError) {
-      console.warn('VideoAgent: Cache lookup failed, proceeding to fetch', cacheError);
+    } catch {
+      // console.warn('VideoAgent: Cache lookup failed, proceeding to fetch', cacheError);
     }
 
     // 2. Fetch from External Sources (TMDB + Local IMDB)
     try {
       if (import.meta.env.DEV) {
-        console.log(`VideoAgent: Fetching fresh content for "${userQuery}"`);
+        // console.log(`VideoAgent: Fetching fresh content for "${userQuery}"`);
       }
       
       const [tmdbResults, localImdbResults] = await Promise.all([
-        searchMulti(userQuery).catch(e => {
+        searchMulti(userQuery).catch(() => {
           if (import.meta.env.DEV) {
-            console.error('TMDB Search failed', e);
+            // console.error('TMDB Search failed', e);
           }
           return [] as Media[];
         }),
-        searchLocalIMDB(userQuery).catch(e => {
+        searchLocalIMDB(userQuery).catch(() => {
           if (import.meta.env.DEV) {
-            console.warn('Local IMDB Search failed', e);
+            // console.warn('Local IMDB Search failed', e);
           }
           return [];
         })
@@ -115,8 +115,8 @@ export class VideoAgentService {
 
         // Cleanup old cache asynchronously
         this.cleanupCache();
-      } catch (cacheWriteError) {
-        console.warn('VideoAgent: Failed to cache results, but search succeeded', cacheWriteError);
+      } catch {
+        // console.warn('VideoAgent: Failed to cache results, but search succeeded', cacheWriteError);
       }
 
       return {
@@ -126,8 +126,8 @@ export class VideoAgentService {
         query: userQuery
       };
 
-    } catch (error) {
-      console.error('VideoAgent: Search failed', error);
+    } catch {
+      // console.error('VideoAgent: Search failed', error);
       // Return empty or fallback
       return {
         results: [],

@@ -32,15 +32,15 @@ export function useWatchlist(media: Media | null | undefined) {
 
     if (!media || stableId == null || isNaN(stableId)) {
       if (import.meta.env.DEV) {
-        console.error('Failed to toggle library item: no valid id found.', media, stableId);
+        // console.error('Failed to toggle library item: no valid id found.', media, stableId);
       }
       showToast('We could not identify this item.', 'error');
       return;
     }
 
     if (import.meta.env.DEV) {
-      console.log('[useWatchlist] Toggling item:', stableId, typeof stableId);
-      console.log('[useWatchlist] DB Schema for library:', db.library.schema.primKey);
+      // console.log('[useWatchlist] Toggling item:', stableId, typeof stableId);
+      // console.log('[useWatchlist] DB Schema for library:', db.library.schema.primKey);
     }
 
     try {
@@ -72,39 +72,15 @@ export function useWatchlist(media: Media | null | undefined) {
             payload.tmdbId = Number(mediaWithTmdb.tmdbId);
         }
 
-        console.log('[useWatchlist] Saving payload:', payload);
-
-        // Attempt to save
-        try {
-            await db.library.put(payload);
-        } catch (innerError) {
-            // Fallback: If put fails (e.g. type mismatch), try deleting first
-            console.warn('First save attempt failed, trying delete+put...', innerError);
-            try {
-              await db.library.delete(stableId);
-              // Force clean object
-              const cleanPayload = JSON.parse(JSON.stringify(payload));
-              await db.library.put(cleanPayload);
-            } catch (retryError) {
-              console.error('Retry failed:', retryError);
-              throw retryError;
-            }
-        }
+        // console.log('[useWatchlist] Saving payload:', payload);
+        await db.library.put(payload);
         
         showToast('Added to your library.', 'success');
       }
-    } catch (error) {
-      if (import.meta.env.DEV) {
-        console.error('Failed to update library:', error);
-        // More descriptive error for debugging (visible in console)
-        if (error instanceof Error) {
-          console.error('Error name:', error.name);
-          console.error('Error message:', error.message);
-        }
-      }
-      showToast('Failed to update your library. Please try again.', 'error');
+    } catch {
+      showToast('Could not update library.', 'error');
     }
-  }, [media, stableId, isSaved, showToast]);
+  }, [media, isSaved, showToast, stableId]);
 
   return { isSaved, toggleWatchlist };
 }

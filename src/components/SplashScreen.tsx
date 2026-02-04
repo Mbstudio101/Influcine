@@ -28,7 +28,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       } catch (error: unknown) {
         // Ignore AbortError which happens if component unmounts quickly (e.g. React StrictMode)
         if (error instanceof Error && error.name !== 'AbortError') {
-          console.error("Audio playback failed:", error);
+          // console.error("Audio playback failed:", error);
         }
       }
     };

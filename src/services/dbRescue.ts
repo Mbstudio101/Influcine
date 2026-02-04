@@ -17,30 +17,30 @@ export async function rescueDatabase(_dbName: string): Promise<boolean> {
 }
 
 export async function performRescue(dbName: string): Promise<boolean> {
-  console.error('[Rescue] Database is reported broken. Initiating rescue operation...');
+  // console.error('[Rescue] Database is reported broken. Initiating rescue operation...');
   
   try {
     // 1. Backup Data via Raw IndexedDB
     const backup = await backupDataRaw(dbName, ['library', 'history']);
     if (import.meta.env.DEV) {
-      console.log(`[Rescue] Backed up ${backup.library?.length || 0} library items and ${backup.history?.length || 0} history items.`);
+      // console.log(`[Rescue] Backed up ${backup.library?.length || 0} library items and ${backup.history?.length || 0} history items.`);
     }
 
     // 2. Delete Database
     await Dexie.delete(dbName);
     if (import.meta.env.DEV) {
-      console.log('[Rescue] Database deleted.');
+      // console.log('[Rescue] Database deleted.');
     }
 
     // 3. Save backup to temp DB
     await saveBackupToTempDB(backup);
     if (import.meta.env.DEV) {
-      console.log('[Rescue] Backup saved to temporary storage.');
+      // console.log('[Rescue] Backup saved to temporary storage.');
     }
     
     return true;
-  } catch (rescueErr) {
-    console.error('[Rescue] Critical failure during rescue:', rescueErr);
+  } catch {
+    // console.error('[Rescue] Critical failure during rescue:', rescueErr);
     return false;
   }
 }
@@ -79,7 +79,7 @@ async function backupDataRaw(dbName: string, stores: string[]): Promise<Record<s
           }
         };
         getAll.onerror = () => {
-          console.warn(`[Rescue] Failed to read store ${storeName}`);
+          // console.warn(`[Rescue] Failed to read store ${storeName}`);
           completed++;
           if (completed === availableStores.length) {
             db.close();
@@ -120,19 +120,19 @@ export async function restoreFromRescueDB(targetDb: Dexie) {
     await tempDb.close();
 
     if (libraryBackup && libraryBackup.data && Array.isArray(libraryBackup.data)) {
-       await targetDb.table('library').bulkPut(libraryBackup.data).catch(e => console.warn('Restore library partial fail', e));
-       console.log(`[Rescue] Restored ${libraryBackup.data.length} library items.`);
+       await targetDb.table('library').bulkPut(libraryBackup.data).catch(() => { /* console.warn('Restore library partial fail', e) */ });
+       // console.log(`[Rescue] Restored ${libraryBackup.data.length} library items.`);
     }
 
     if (historyBackup && historyBackup.data && Array.isArray(historyBackup.data)) {
-       await targetDb.table('history').bulkPut(historyBackup.data).catch(e => console.warn('Restore history partial fail', e));
-       console.log(`[Rescue] Restored ${historyBackup.data.length} history items.`);
+       await targetDb.table('history').bulkPut(historyBackup.data).catch(() => { /* console.warn('Restore history partial fail', e) */ });
+       // console.log(`[Rescue] Restored ${historyBackup.data.length} history items.`);
     }
     
     // Clean up temp DB
     await Dexie.delete('InflucineRescueDB');
 
   } catch (e) {
-    console.error('[Rescue] Failed to restore from backup:', e);
+    // console.error('[Rescue] Failed to restore from backup:', e);
   }
 }

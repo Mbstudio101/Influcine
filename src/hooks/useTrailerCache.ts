@@ -23,10 +23,15 @@ export const useTrailerCache = (videoId: string | undefined) => {
         if (mounted) setCachedUrl(url);
 
         // Trigger background download to upgrade to 1080p for next time
-        window.ipcRenderer.invoke('trailer-download', videoId).catch(console.warn);
+        // Add a delay to prioritize immediate playback bandwidth
+        setTimeout(() => {
+          if (mounted) {
+             window.ipcRenderer.invoke('trailer-download', videoId).catch(() => {});
+          }
+        }, 15000); // 15s delay
           
       } catch (error) {
-        console.error('Trailer cache error:', error);
+        // console.error('Trailer cache error:', error);
       }
     };
 

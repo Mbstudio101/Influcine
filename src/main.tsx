@@ -37,7 +37,7 @@ const initApp = async () => {
     // If successful, we can verify if a previous rescue needs restoration
     await restoreFromRescueDB(db);
   } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-    console.error('[Main] Database open failed:', err);
+    // console.error('[Main] Database open failed:', err);
     if (err.name === 'DexieError' || err.name === 'UpgradeError' || err.name === 'VersionError' || err.message?.includes('primary key') || err.name === 'DexieError2') {
        wasRescued = await performRescue('InflucineDB');
     }
@@ -52,8 +52,8 @@ const initApp = async () => {
         // Reload page to ensure clean state
         window.location.reload();
         return; // Stop execution here
-    } catch (e) {
-        console.error('Failed to reopen DB after rescue:', e);
+    } catch {
+        // console.error('Failed to reopen DB after rescue:', e);
     }
   }
 
@@ -79,8 +79,8 @@ initApp();
 
 
 // Use contextBridge
-window.ipcRenderer?.on('main-process-message', (_event, message: unknown) => {
+window.ipcRenderer?.on('main-process-message', () => {
   if (import.meta.env.DEV) {
-    console.log(message)
+    // console.log(message)
   }
 })

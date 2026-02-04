@@ -88,7 +88,7 @@ export const checkForUpdates = async (currentVersion: string): Promise<AppVersio
         }
         return null; // No update
       } catch (err) {
-        console.warn('Electron update check failed, falling back to GitHub API', err);
+        // console.warn('Electron update check failed, falling back to GitHub API', err);
         // Fallback to GitHub API below
       }
     }
@@ -102,7 +102,7 @@ export const checkForUpdates = async (currentVersion: string): Promise<AppVersio
     
     if (!response.ok) {
       if (response.status === 403 || response.status === 429) {
-        console.warn('GitHub API rate limit reached');
+        // console.warn('GitHub API rate limit reached');
       }
       return null;
     }
@@ -152,7 +152,7 @@ export const checkForUpdates = async (currentVersion: string): Promise<AppVersio
     // Fallback: If no assets match, check if version.json exists in repo
     // This handles the case where we just released but assets are uploading
     if (Object.keys(platforms).length === 0) {
-      console.warn('No platform assets found in GitHub release');
+      // console.warn('No platform assets found in GitHub release');
     }
 
     return {
@@ -163,7 +163,7 @@ export const checkForUpdates = async (currentVersion: string): Promise<AppVersio
     };
 
   } catch (error) {
-    console.error('Failed to check for updates:', error);
+    // console.error('Failed to check for updates:', error);
     return null;
   }
 };

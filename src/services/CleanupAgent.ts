@@ -31,7 +31,7 @@ export const CleanupAgent = {
          if (!db.isOpen()) return report; // Abort if still closed
       }
 
-      console.log('CleanupAgent: Starting cleanup...');
+      // console.log('CleanupAgent: Starting cleanup...');
 
       // Helper to check if an image path is valid
       const isValidImage = (path: string | null | undefined) => {
@@ -65,9 +65,7 @@ export const CleanupAgent = {
         if (validIds.length > 0) {
           await db.library.bulkDelete(validIds);
           report.libraryRemoved = validIds.length;
-          if (import.meta.env.DEV) {
-            console.log(`CleanupAgent: Removed ${validIds.length} broken items from Library`);
-          }
+          // console.log(`CleanupAgent: Removed ${validIds.length} broken items from Library`);
         }
       }
 
@@ -82,7 +80,7 @@ export const CleanupAgent = {
         if (validIds.length > 0) {
           await db.history.bulkDelete(validIds);
           report.historyRemoved = validIds.length;
-          console.log(`CleanupAgent: Removed ${validIds.length} broken items from History`);
+          // console.log(`CleanupAgent: Removed ${validIds.length} broken items from History`);
         }
       }
 
@@ -113,12 +111,48 @@ export const CleanupAgent = {
       if (progressToDelete.length > 0) {
         await db.episodeProgress.bulkDelete(progressToDelete);
         report.episodeProgressRemoved = progressToDelete.length;
-        console.log(`CleanupAgent: Removed ${progressToDelete.length} duplicate episode progress items`);
+        // console.log(`CleanupAgent: Removed ${progressToDelete.length} duplicate episode progress items`);
+      }
+
+      // 4. Clean Source Memory (Duplicates)
+      const sourceMemoryItems = await db.sourceMemory.toArray();
+      const sourceMemoryToDelete: number[] = [];
+      const sourceMemoryGroups = new Map<string, typeof sourceMemoryItems>();
+
+      for (const item of sourceMemoryItems) {
+        let key = '';
+        if (item.season !== undefined && item.episode !== undefined) {
+          key = `tv-${item.tmdbId}-${item.season}-${item.episode}`;
+        } else {
+          key = `movie-${item.tmdbId}`;
+        }
+        
+        if (key) {
+          const group = sourceMemoryGroups.get(key) || [];
+          group.push(item);
+          sourceMemoryGroups.set(key, group);
+        }
+      }
+
+      for (const group of sourceMemoryGroups.values()) {
+        if (group.length > 1) {
+          // Keep latest (by ID)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          group.sort((a: any, b: any) => (b.id || 0) - (a.id || 0));
+          for (let i = 1; i < group.length; i++) {
+            if (group[i].id) sourceMemoryToDelete.push(group[i].id!);
+          }
+        }
+      }
+
+      if (sourceMemoryToDelete.length > 0) {
+        await db.sourceMemory.bulkDelete(sourceMemoryToDelete);
+        report.sourceMemoryRemoved = sourceMemoryToDelete.length;
       }
 
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error during cleanup';
-      console.error('CleanupAgent error:', error);
+      // console.error('CleanupAgent error:', error);
       report.errors.push(errorMessage);
     }
 

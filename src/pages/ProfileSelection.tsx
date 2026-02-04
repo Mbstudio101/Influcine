@@ -29,7 +29,7 @@ const ProfileSelection: React.FC = () => {
         setTargetProfileId(profileId);
         await switchProfile(profileId);
       } catch (error) {
-        console.error('Failed to switch profile:', error);
+        // console.error('Failed to switch profile:', error);
         setTargetProfileId(null);
       }
     },
@@ -46,7 +46,7 @@ const ProfileSelection: React.FC = () => {
       setNewProfileName('');
       setSelectedAvatar(AVATARS[0].id);
     } catch (error) {
-      console.error('Failed to add profile:', error);
+      // console.error('Failed to add profile:', error);
     }
   };
 

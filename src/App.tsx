@@ -138,7 +138,7 @@ function App() {
         }
       } catch (error) {
         if (import.meta.env.DEV) {
-          console.error('Update check failed', error);
+          // console.error('Update check failed', error);
         }
       }
     };
@@ -152,7 +152,7 @@ function App() {
       try {
         await installUpdate();
       } catch (error) {
-        console.error('Failed to install update:', error);
+        // console.error('Failed to install update:', error);
       }
       return;
     }
@@ -164,7 +164,7 @@ function App() {
       return;
     } catch (e) {
       // Fallback to browser download if not supported/failed
-      console.warn('IPC download not supported, falling back to browser', e);
+      // console.warn('IPC download not supported, falling back to browser', e);
       const link = getPlatformDownloadLink(updateAvailable);
       if (link) {
         window.open(link, '_blank');

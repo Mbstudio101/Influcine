@@ -100,7 +100,7 @@ class InflucineDB extends Dexie {
   users!: Table<User>;
   profiles!: Table<Profile>;
   achievements!: Table<Achievement>;
-  // sourceMemory!: Table<SourceMemory>;
+  sourceMemory!: Table<SourceMemory>;
   reminders!: Table<Reminder>;
   cachedReleases!: Table<CachedRelease>;
   queryCache!: Table<QueryCache>;
@@ -179,14 +179,14 @@ class InflucineDB extends Dexie {
                 if (items && items.length > 0) {
                     // Write to new library table
                     // We can use tx.table('library') because it exists in this version
-                    tx.table('library').bulkPut(items).catch(err => {
-                        console.error('Migration bulkPut failed:', err);
+                    tx.table('library').bulkPut(items).catch(() => {
+                        // console.error('Migration bulkPut failed:', err);
                     });
                 }
              };
         }
-      } catch (err) {
-        console.error('Migration from watchlist to library failed:', err);
+      } catch {
+        // console.error('Migration from watchlist to library failed:', err);
       }
     });
 

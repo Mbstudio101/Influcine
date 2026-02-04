@@ -100,7 +100,7 @@ const Profile: React.FC = () => {
       showToast('You have been signed out.', 'info');
       navigate('/login');
     } catch (error) {
-      console.error('Failed to logout:', error);
+      // console.error('Failed to logout:', error);
       showToast('Failed to logout. Please try again.', 'error');
     }
   };

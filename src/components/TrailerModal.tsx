@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ExternalLink, Search } from 'lucide-react';
+import { X, ExternalLink, Search, Loader2 } from 'lucide-react';
 import Focusable from './Focusable';
 import { createPortal } from 'react-dom';
 import { useTrailerCache } from '../hooks/useTrailerCache';
@@ -13,12 +13,22 @@ interface TrailerModalProps {
 const TrailerModal: React.FC<TrailerModalProps> = ({ videoKey, title, onClose }) => {
   const cachedUrl = useTrailerCache(videoKey);
   const [hasError, setHasError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   if (!videoKey) return null;
 
   const handleSearchYoutube = () => {
     const query = encodeURIComponent(`${title || 'movie'} trailer`);
     window.open(`https://www.youtube.com/results?search_query=${query}`, '_blank');
+  };
+
+  const handleLoad = () => {
+    setIsLoading(false);
+  };
+
+  const handleError = () => {
+    setIsLoading(false);
+    setHasError(true);
   };
 
   return createPortal(
@@ -35,6 +45,12 @@ const TrailerModal: React.FC<TrailerModalProps> = ({ videoKey, title, onClose })
       
       <div className="w-full max-w-5xl flex flex-col gap-4 relative animate-in zoom-in-95 duration-200">
         <div className="aspect-video rounded-xl overflow-hidden shadow-2xl bg-black border border-white/10 relative group">
+          {isLoading && !hasError && (
+            <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
+              <Loader2 className="animate-spin text-primary" size={48} />
+            </div>
+          )}
+
           {hasError ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 text-white p-8 text-center">
               <div className="mb-4 text-white/50">
@@ -57,11 +73,12 @@ const TrailerModal: React.FC<TrailerModalProps> = ({ videoKey, title, onClose })
           ) : cachedUrl ? (
             <video
               src={cachedUrl}
-              className="w-full h-full"
+              className={`w-full h-full ${isLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
               controls
               autoPlay
               playsInline
-              onError={() => setHasError(true)}
+              onLoadedData={handleLoad}
+              onError={handleError}
             />
           ) : (
             <iframe
@@ -72,8 +89,9 @@ const TrailerModal: React.FC<TrailerModalProps> = ({ videoKey, title, onClose })
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
-              className="w-full h-full"
-              onError={() => setHasError(true)}
+              className={`w-full h-full ${isLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
+              onLoad={handleLoad}
+              onError={handleError}
             ></iframe>
           )}
         </div>

@@ -45,16 +45,15 @@ class ErrorAgent {
     };
 
     this.isInitialized = true;
-    console.log('[ErrorAgent] Initialized and watching for errors.');
   }
 
   public async log(error: ErrorLog) {
     // Console log for dev
     if (import.meta.env.DEV) {
-      console.groupCollapsed(`[ErrorAgent] ${error.type || 'ERROR'}: ${error.message}`);
-      console.error(error.stack);
-      console.log(error.context);
-      console.groupEnd();
+      // console.groupCollapsed(`[ErrorAgent] ${error.type || 'ERROR'}: ${error.message}`);
+      // console.error(error.stack);
+      // console.log(error.context);
+      // console.groupEnd();
     }
 
     // Send to Main Process
@@ -63,7 +62,7 @@ class ErrorAgent {
         await window.ipcRenderer.invoke('log-error', error);
       }
     } catch (e) {
-      console.error('[ErrorAgent] Failed to send log to main process:', e);
+      // console.error('[ErrorAgent] Failed to send log to main process:', e);
     }
   }
 

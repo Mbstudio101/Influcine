@@ -64,8 +64,16 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   isPip = false
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const iframeRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const [adblockPath, setAdblockPath] = useState<string>('');
+
+  useEffect(() => {
+    // Get adblock script path
+    window.ipcRenderer.invoke('get-adblock-path').then(setAdblockPath).catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -223,10 +231,15 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 
   const togglePlay = useCallback(() => {
     if (isEmbed) {
-      const win = iframeRef.current?.contentWindow;
-      if (win) {
-        win.postMessage({ command: isPlaying ? 'pause' : 'play' }, '*');
+      if (iframeRef.current?.send) {
+        iframeRef.current.send('player-command', { command: isPlaying ? 'pause' : 'play' });
         setIsPlaying(!isPlaying);
+      } else {
+        const win = iframeRef.current?.contentWindow;
+        if (win) {
+          win.postMessage({ command: isPlaying ? 'pause' : 'play' }, '*');
+          setIsPlaying(!isPlaying);
+        }
       }
       return;
     }
@@ -302,7 +315,10 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const changeSpeed = useCallback((speed: number) => {
     if (isEmbed) {
       setPlaybackSpeed(speed);
-      if (iframeRef.current?.contentWindow) {
+      if (iframeRef.current?.send) {
+        iframeRef.current.send('player-command', { command: 'setSpeed', speed });
+        iframeRef.current.send('player-command', { command: 'ratechange', playbackRate: speed });
+      } else if (iframeRef.current?.contentWindow) {
         // Try common embed player commands
         iframeRef.current.contentWindow.postMessage({ command: 'setSpeed', speed }, '*');
         iframeRef.current.contentWindow.postMessage({ command: 'ratechange', playbackRate: speed }, '*');
@@ -498,7 +514,11 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value);
     if (isEmbed) {
-      iframeRef.current?.contentWindow?.postMessage({ command: 'seek', time }, '*');
+      if (iframeRef.current?.send) {
+        iframeRef.current.send('player-command', { command: 'seek', time });
+      } else {
+        iframeRef.current?.contentWindow?.postMessage({ command: 'seek', time }, '*');
+      }
       setCurrentTime(time);
       return;
     }
@@ -615,6 +635,22 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     return () => window.removeEventListener('message', handleMessage);
   }, [isEmbed, onTimeUpdate, onPlay, onPause, onEnded, startTime, hasResumed]);
 
+  // Block popups from the webview in the renderer process as an extra layer of defense
+  useEffect(() => {
+    const webview = iframeRef.current;
+    if (!webview || !isEmbed) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleNewWindow = (e: any) => {
+      console.warn('Blocked renderer webview popup:', e.url);
+      e.preventDefault();
+    };
+
+    // 'new-window' is the event for webview tag
+    webview.addEventListener('new-window', handleNewWindow);
+    return () => webview.removeEventListener('new-window', handleNewWindow);
+  }, [isEmbed]);
+
   const handleVideoError = () => {
     console.error('Native playback error. Switching to embed if available.');
     if (embedSrc) {
@@ -629,13 +665,14 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       onDoubleClick={toggleFullscreen}
     >
       {isEmbed ? (
-        <iframe
+        <webview
           ref={iframeRef}
           src={embedSrc}
           className="w-full h-full border-0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; bluetooth"
-          allowFullScreen
-          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
+          preload={`file://${adblockPath}`}
+          webpreferences="contextIsolation=true, nodeIntegration=false"
+          useragent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+          allowpopups="false"
         />
       ) : (
         <video

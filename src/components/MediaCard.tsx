@@ -1,11 +1,13 @@
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import { Media, MediaDetails } from '../types';
-import { getImageUrl } from '../services/tmdb';
+import { getImageUrl, getVideos } from '../services/tmdb';
+import { findBestTrailer } from '../utils/videoUtils';
 import { useNavigate } from 'react-router-dom';
-import { Play, Plus, Check, Star } from 'lucide-react';
+import { Play, Plus, Check, Star, Youtube } from 'lucide-react';
 import Focusable from './Focusable';
 import { usePlayer } from '../context/PlayerContext';
 import { useWatchlist } from '../hooks/useWatchlist';
+import TrailerModal from './TrailerModal';
 
 interface MediaCardProps {
   media: Media;
@@ -26,7 +28,11 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
   const { isSaved, toggleWatchlist } = useWatchlist(media);
   const { play } = usePlayer();
   const navigate = useNavigate();
-  const [isFocused, setIsFocused] = React.useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  
+  // Trailer State
+  const [showTrailer, setShowTrailer] = useState(false);
+  const [trailerKey, setTrailerKey] = useState<string | null>(null);
   
   const mediaType = media.media_type || (media.title ? 'movie' : 'tv');
   
@@ -43,8 +49,25 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
     }
   };
 
+  const handlePlayTrailer = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    try {
+      const videos = await getVideos(mediaType as 'movie' | 'tv', media.id);
+      const trailer = findBestTrailer(videos);
+      
+      if (trailer) {
+        setTrailerKey(trailer.key);
+        setShowTrailer(true);
+      }
+    } catch (e) {
+      console.error('Failed to fetch trailer', e);
+    }
+  };
+
   return (
-    <Focusable
+    <>
+      <Focusable
       className="relative aspect-2/3 rounded-xl overflow-hidden bg-surface group cursor-pointer shadow-lg ring-1 ring-white/5 transition-transform duration-300 hover:scale-105 hover:z-10 hover:shadow-[0_20px_25px_-5px_rgb(0_0_0/0.5),0_0_20px_rgba(124,58,237,0.3)]"
       activeClassName="ring-4 ring-primary scale-105 z-10 shadow-[0_20px_25px_-5px_rgb(0_0_0/0.5),0_0_20px_rgba(124,58,237,0.3)]"
       onClick={() => {
@@ -109,6 +132,13 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
               <Play size={14} fill="currentColor" /> {hasProgress ? 'Resume' : 'Play'}
             </button>
             <button
+              onClick={handlePlayTrailer}
+              className="p-2.5 bg-white/10 backdrop-blur-md border border-white/10 rounded-xl text-white hover:bg-white/20 transition-colors shrink-0"
+              title="Watch Trailer"
+            >
+              <Youtube size={16} />
+            </button>
+            <button
               onClick={toggleWatchlist}
               className="p-2.5 bg-white/10 backdrop-blur-md border border-white/10 rounded-xl text-white hover:bg-white/20 transition-colors shrink-0"
               title={isSaved ? "Remove from Library" : "Add to Library"}
@@ -119,6 +149,15 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
         </div>
       </div>
     </Focusable>
+    {/* Trailer Modal */}
+    {showTrailer && trailerKey && (
+      <TrailerModal 
+        videoKey={trailerKey} 
+        title={media.title || media.name}
+        onClose={() => setShowTrailer(false)} 
+      />
+    )}
+    </>
   );
 });
 

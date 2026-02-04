@@ -13,7 +13,9 @@ import {
   Shield,
   FileText,
   Lock,
-  Sparkles
+  Sparkles,
+  Download,
+  Server
 } from 'lucide-react';
 import { db } from '../db';
 import { CleanupAgent } from '../services/CleanupAgent';
@@ -22,11 +24,84 @@ import { useAuth } from '../context/useAuth';
 import { Avatar } from '../components/Avatars';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { 
+  checkForUpdates, 
+  downloadUpdate, 
+  installUpdate, 
+  onUpdateProgress, 
+  onUpdateDownloaded 
+} from '../services/updateService';
+import pkg from '../../package.json';
+import { AppVersion } from '../types';
 
 const Settings: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'appearance' | 'player' | 'account' | 'storage' | 'privacy'>('appearance');
+  const [activeTab, setActiveTab] = useState<'appearance' | 'player' | 'account' | 'storage' | 'privacy' | 'system'>('appearance');
   const navigate = useNavigate();
   const { user, profile: authProfile } = useAuth();
+  
+  const [updateAvailable, setUpdateAvailable] = useState<AppVersion | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'up-to-date' | 'downloading' | 'ready' | 'error'>('idle');
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const handleCheckUpdate = async () => {
+    setUpdateStatus('checking');
+    setErrorMessage('');
+    try {
+      const update = await checkForUpdates(pkg.version);
+      if (update) {
+        setUpdateAvailable(update);
+        setUpdateStatus('available');
+      } else {
+        setUpdateStatus('up-to-date');
+      }
+    } catch (error) {
+      console.error('Update check failed:', error);
+      const err = error as Error;
+      // Handle the specific "Cannot find latest-mac.yml" or 404 as "Up to date"
+      if (err?.message?.includes('404') || err?.message?.includes('Cannot find latest')) {
+         setUpdateStatus('up-to-date');
+         return;
+      }
+      setUpdateStatus('error');
+      setErrorMessage('Failed to check for updates. Please try again.');
+    }
+  };
+
+  const handleDownloadUpdate = async () => {
+    if (!updateAvailable) return;
+    try {
+      setUpdateStatus('downloading');
+      
+      // Setup listeners
+      const cleanupProgress = onUpdateProgress((p) => {
+        setDownloadProgress(p.percent);
+      });
+      
+      const cleanupDownloaded = onUpdateDownloaded(() => {
+        setUpdateStatus('ready');
+        cleanupProgress();
+        cleanupDownloaded();
+      });
+
+      await downloadUpdate();
+    } catch (error) {
+      console.error('Download failed:', error);
+      setUpdateStatus('error');
+      setErrorMessage('Failed to download update.');
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    try {
+      await installUpdate();
+    } catch (error) {
+      console.error('Install failed:', error);
+      setUpdateStatus('error');
+      setErrorMessage('Failed to restart and install.');
+    }
+  };
+
   
   const { 
     themeColor, 
@@ -105,6 +180,7 @@ Removed ${report.sourceMemoryRemoved} duplicate source items`);
           <TabButton id="account" icon={User} label="Account" />
           <TabButton id="storage" icon={Database} label="Storage & Data" />
           <TabButton id="privacy" icon={Shield} label="Privacy & Terms" />
+          <TabButton id="system" icon={Server} label="System & Updates" />
         </div>
 
         {/* Content Area */}
@@ -476,6 +552,113 @@ Removed ${report.sourceMemoryRemoved} duplicate source items`);
               </div>
             </div>
           )}
+
+          {/* System & Updates Tab */}
+          {activeTab === 'system' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <section>
+                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                  <Server className="text-primary" /> System Status
+                </h2>
+                
+                <div className="bg-linear-to-br from-white/5 to-white/0 rounded-2xl p-8 border border-white/10 relative overflow-hidden">
+                  {/* Background Glow */}
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+                  
+                  <div className="relative z-10">
+                    <div className="flex items-start justify-between mb-8">
+                      <div>
+                        <h3 className="text-3xl font-black text-white mb-2">Influcine Desktop</h3>
+                        <p className="text-gray-400 font-medium">Version {pkg.version}</p>
+                        <div className="flex items-center gap-2 mt-4">
+                          <span className={`w-2 h-2 rounded-full ${updateStatus === 'error' ? 'bg-red-500' : 'bg-green-500'}`} />
+                          <span className="text-sm text-gray-400">
+                            {updateStatus === 'checking' ? 'Checking for updates...' : 
+                             updateStatus === 'available' ? 'Update Available' : 
+                             updateStatus === 'downloading' ? 'Downloading Update...' :
+                             updateStatus === 'ready' ? 'Ready to Install' :
+                             updateStatus === 'error' ? 'Update Error' :
+                             'System Operational'}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {updateStatus === 'idle' || updateStatus === 'up-to-date' || updateStatus === 'error' || updateStatus === 'checking' ? (
+                        <button 
+                          onClick={handleCheckUpdate}
+                          disabled={updateStatus === 'checking'}
+                          className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-xl font-bold transition-all flex items-center gap-2 disabled:opacity-50"
+                        >
+                          <RefreshCw size={20} className={updateStatus === 'checking' ? 'animate-spin' : ''} />
+                          {updateStatus === 'checking' ? 'Checking...' : 'Check for Updates'}
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {errorMessage && (
+                       <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-red-200 text-sm font-medium flex items-center gap-3">
+                         <Shield size={18} />
+                         {errorMessage}
+                       </div>
+                    )}
+
+                    {updateAvailable && (
+                      <div className="bg-black/30 rounded-xl p-6 border border-white/5 backdrop-blur-sm">
+                        <div className="flex items-start justify-between mb-4">
+                           <div>
+                             <h4 className="text-xl font-bold text-white mb-1">New Version Available</h4>
+                             <p className="text-primary font-bold text-lg">v{updateAvailable.latest}</p>
+                           </div>
+                           {updateStatus === 'available' && (
+                             <button 
+                               onClick={handleDownloadUpdate}
+                               className="px-6 py-2 bg-primary hover:bg-primary-dark rounded-lg font-bold transition-all shadow-lg shadow-primary/25 flex items-center gap-2"
+                             >
+                               <Download size={18} />
+                               Download Update
+                             </button>
+                           )}
+                        </div>
+                        
+                        <div className="prose prose-invert max-w-none mb-6">
+                          <p className="text-gray-300 text-sm whitespace-pre-line bg-white/5 p-4 rounded-lg border border-white/5">
+                            {updateAvailable.releaseNotes || 'No release notes available.'}
+                          </p>
+                        </div>
+
+                        {updateStatus === 'downloading' && (
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-sm text-gray-400">
+                              <span>Downloading...</span>
+                              <span>{Math.round(downloadProgress)}%</span>
+                            </div>
+                            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${downloadProgress}%` }}
+                                className="h-full bg-primary"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {updateStatus === 'ready' && (
+                           <button 
+                             onClick={handleInstallUpdate}
+                             className="w-full py-4 bg-green-500 hover:bg-green-600 rounded-xl font-bold text-white transition-all shadow-lg shadow-green-500/25 flex items-center justify-center gap-2 animate-pulse"
+                           >
+                             <Sparkles size={20} />
+                             Restart & Install Update
+                           </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+
         </div>
       </div>
     </div>

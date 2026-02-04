@@ -1,31 +1,72 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { getTrending, getImageUrl, getMoviesByCategory, getTVShowsByCategory, discoverMedia, getDetails } from '../services/tmdb';
+import { getTrending, getImageUrl, getMoviesByCategory, getTVShowsByCategory, discoverMedia, getDetails, getVideos } from '../services/tmdb';
 import { getPersonalizedRecommendations } from '../services/recommendations';
-import { Play, Plus, Check } from 'lucide-react';
+import { findBestTrailer } from '../utils/videoUtils';
+import { Play, Plus, Check, Youtube } from 'lucide-react';
 import { db } from '../db';
 import { useWatchlist } from '../hooks/useWatchlist';
-import { usePlayer } from '../context/PlayerContext';
 import ContentRow from '../components/ContentRow';
+import { Media } from '../types';
+import { usePlayer } from '../context/PlayerContext';
 import RightSidebar from '../components/RightSidebar';
 import Focusable from '../components/Focusable';
+import TrailerModal from '../components/TrailerModal';
+
+import { useTrailerCache } from '../hooks/useTrailerCache';
 
 const Home: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const { play } = usePlayer();
-  
+
+  // Trailer State
+  const [showTrailer, setShowTrailer] = useState(false);
+  const [trailerKey, setTrailerKey] = useState<string | null>(null);
+  const [backgroundVideoKey, setBackgroundVideoKey] = useState<string | null>(null);
+  const [isVideoReady, setIsVideoReady] = useState(false);
+  const cachedBackgroundUrl = useTrailerCache(backgroundVideoKey || undefined);
+
   const { data: featured, isLoading: featuredLoading } = useQuery({
-    queryKey: ['featured-home'],
+    queryKey: ['featured'],
     queryFn: async () => {
-      const data = await getTrending('day');
-      if (data.length > 0) {
-        return data[Math.floor(Math.random() * 5)];
-      }
-      return null;
+      const trending = await getTrending('day');
+      return trending[0];
     },
-    staleTime: 1000 * 60 * 60, // 1 hour
+    staleTime: 1000 * 60 * 30
   });
+
+  // Fetch background trailer when featured changes
+  React.useEffect(() => {
+    if (featured) {
+      const fetchBackgroundTrailer = async () => {
+        try {
+          const videos = await getVideos(featured.media_type || 'movie', featured.id);
+          const trailer = findBestTrailer(videos);
+          if (trailer) {
+            setBackgroundVideoKey(trailer.key);
+            // Store fallback options
+            // @ts-expect-error - Storing global fallbacks
+            window.availableTrailers = videos.filter(v => v.site === 'YouTube' && v.key !== trailer.key);
+          } else {
+            setBackgroundVideoKey(null);
+          }
+        } catch (e) {
+          console.error('Failed to fetch background trailer', e);
+          setBackgroundVideoKey(null);
+        }
+      };
+      fetchBackgroundTrailer();
+    } else {
+      setBackgroundVideoKey(null);
+      setIsVideoReady(false);
+    }
+  }, [featured]);
+
+  // Reset video ready state when URL changes
+  React.useEffect(() => {
+    setIsVideoReady(false);
+  }, [cachedBackgroundUrl]);
 
   const { data: recommendations = [] } = useQuery({
     queryKey: ['recommendations-home'],
@@ -34,12 +75,31 @@ const Home: React.FC = () => {
   });
 
   const historyQuery = useLiveQuery(
-    () => db.history.orderBy('savedAt').reverse().toArray()
+    () => db.history.orderBy('savedAt').reverse().limit(10).toArray()
   );
-  const defaultHistory = React.useMemo(() => [], []);
+
+  const defaultHistory: Media[] = [];
   const history = historyQuery ?? defaultHistory;
 
-  const { isSaved: isFeaturedSaved, toggleWatchlist: toggleFeaturedWatchlist } = useWatchlist(featured);
+  const { isSaved: isFeaturedSaved, toggleWatchlist: toggleFeaturedWatchlist } = useWatchlist(featured || { id: 0, media_type: 'movie' } as unknown as Media);
+
+  const handlePlayTrailer = async () => {
+    if (!featured) return;
+    try {
+      const videos = await getVideos(featured.media_type || 'movie', featured.id);
+      const trailer = findBestTrailer(videos);
+
+      if (trailer) {
+        setTrailerKey(trailer.key);
+        setShowTrailer(true);
+      } else {
+        // Fallback or toast could go here
+        console.log('No trailer found');
+      }
+    } catch (e) {
+      console.error('Failed to fetch trailer', e);
+    }
+  };
 
   const content = React.useMemo(() => {
     switch (selectedCategory) {
@@ -89,11 +149,11 @@ const Home: React.FC = () => {
           <>
             {/* AI Recommendations */}
             {recommendations.map((rec, index) => (
-               <ContentRow 
-                 key={`rec-${index}`} 
-                 title={rec.type === 'wildcard' ? `✨ ${rec.title}` : rec.title} 
-                 data={rec.items}
-               />
+              <ContentRow
+                key={`rec-${index}`}
+                title={rec.type === 'wildcard' ? `✨ ${rec.title}` : rec.title}
+                data={rec.items}
+              />
             ))}
 
             <ContentRow title="Continue Watching" data={history} cardSize="small" />
@@ -115,12 +175,12 @@ const Home: React.FC = () => {
     <div className="flex h-full overflow-hidden">
       {/* Main Dashboard Area */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20 scrollbar-hide">
-        
+
         {/* Brand/Category Quick Links */}
         <div className="flex gap-4 px-10 pt-20 pb-4 overflow-x-auto scrollbar-hide">
           {['All', 'Movies', 'TV Shows', 'Anime', 'Documentary'].map((cat) => (
-            <Focusable 
-              key={cat} 
+            <Focusable
+              key={cat}
               onClick={() => setSelectedCategory(cat)}
               className={`px-6 py-2 rounded-full text-sm font-bold border transition-all cursor-pointer ${selectedCategory === cat ? 'bg-white text-black border-white' : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30 hover:text-white'}`}
               activeClassName="ring-2 ring-primary scale-105 bg-white text-black"
@@ -134,26 +194,61 @@ const Home: React.FC = () => {
         <div className="px-10 mb-8">
           <div className="relative w-full h-[60vh] rounded-3xl overflow-hidden shadow-2xl border border-white/5 group">
             <div className="absolute inset-0">
-              <img
-                src={getImageUrl(featured.backdrop_path, 'w1280')}
-                srcSet={`
-                  ${getImageUrl(featured.backdrop_path, 'w780')} 780w,
-                  ${getImageUrl(featured.backdrop_path, 'w1280')} 1280w,
-                  ${getImageUrl(featured.backdrop_path, 'original')} 1920w
-                `}
-                sizes="(max-width: 1024px) 100vw, 80vw"
-                alt={featured.title || featured.name}
-                className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
-                loading="eager"
-              />
+              {backgroundVideoKey && cachedBackgroundUrl ? (
+                <div className="w-full h-full relative pointer-events-none">
+                  <video
+                    className={`w-full h-full object-cover object-top transition-opacity duration-1000 ${isVideoReady ? 'opacity-100' : 'opacity-0'}`}
+                    src={cachedBackgroundUrl}
+                    autoPlay muted loop playsInline
+                    onCanPlay={() => setIsVideoReady(true)}
+                    onError={() => {
+                      console.warn('Background video failed to play:', backgroundVideoKey);
+                      setIsVideoReady(false);
+                      
+                      // Try next available trailer
+                      // @ts-expect-error - window.availableTrailers is a custom global
+                      const fallbacks = window.availableTrailers || [];
+                      if (fallbacks.length > 0) {
+                        const next = fallbacks.shift();
+                        console.log('Falling back to next trailer:', next.key);
+                        setBackgroundVideoKey(next.key);
+                      } else {
+                        setBackgroundVideoKey(null); // Fallback to image
+                      }
+                    }}
+                  />
+                  {!isVideoReady && (
+                    <img
+                      src={getImageUrl(featured.backdrop_path, 'original')}
+                      className="absolute inset-0 w-full h-full object-cover object-center"
+                      alt=""
+                    />
+                  )}
+                  {/* Overlay to ensure clicks pass through and darken the video slightly */}
+                  <div className="absolute inset-0 bg-black/20" />
+                </div>
+              ) : (
+                <img
+                  src={getImageUrl(featured.backdrop_path, 'original')}
+                  srcSet={`
+                    ${getImageUrl(featured.backdrop_path, 'w780')} 780w,
+                    ${getImageUrl(featured.backdrop_path, 'w1280')} 1280w,
+                    ${getImageUrl(featured.backdrop_path, 'original')} 1920w
+                  `}
+                  sizes="(max-width: 1024px) 100vw, 80vw"
+                  alt={featured.title || featured.name}
+                  className="w-full h-full object-cover object-center transition-transform duration-1000 group-hover:scale-105"
+                  loading="eager"
+                />
+              )}
               <div className="absolute inset-0 bg-linear-to-t from-black via-black/20 to-transparent" />
               <div className="absolute inset-0 bg-linear-to-r from-black/80 via-transparent to-transparent" />
             </div>
-            
+
             <div className="absolute bottom-0 left-0 p-10 w-full max-w-2xl z-10">
               <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/20 backdrop-blur-md border border-primary/20 text-xs font-bold text-primary uppercase tracking-wider">
-                 <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-                 Trending Now
+                <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                Trending Now
               </div>
               <h1 className="text-5xl font-black mb-4 drop-shadow-2xl leading-tight text-white tracking-tight line-clamp-2">
                 {featured.title || featured.name}
@@ -184,13 +279,21 @@ const Home: React.FC = () => {
                   <Play fill="currentColor" size={20} className="group-hover:animate-pulse" />
                   Watch Now
                 </Focusable>
-                <Focusable 
+
+                <Focusable
+                  onClick={handlePlayTrailer}
+                  className="bg-white/10 hover:bg-white/20 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all duration-300 backdrop-blur-md border border-white/10 hover:border-white/30 hover:scale-105 cursor-pointer shrink-0"
+                >
+                  <Youtube size={20} className="text-red-500" />
+                  Trailer
+                </Focusable>
+
+                <Focusable
                   onClick={toggleFeaturedWatchlist}
-                  className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all duration-300 backdrop-blur-md border hover:scale-105 cursor-pointer shrink-0 ${
-                    isFeaturedSaved
-                      ? 'bg-primary border-primary text-white shadow-[0_0_20px_rgba(124,58,237,0.4)]'
-                      : 'bg-white/5 hover:bg-white/10 text-white border-white/10 hover:border-white/30 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]'
-                  }`}
+                  className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all duration-300 backdrop-blur-md border hover:scale-105 cursor-pointer shrink-0 ${isFeaturedSaved
+                    ? 'bg-primary border-primary text-white shadow-[0_0_20px_rgba(124,58,237,0.4)]'
+                    : 'bg-white/5 hover:bg-white/10 text-white border-white/10 hover:border-white/30 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]'
+                    }`}
                   activeClassName="ring-4 ring-white scale-110 z-20"
                 >
                   {isFeaturedSaved ? <Check size={20} /> : <Plus size={20} />}
@@ -209,6 +312,14 @@ const Home: React.FC = () => {
 
       {/* Right Sidebar - Dashboard Widgets */}
       <RightSidebar />
+      {/* Trailer Modal */}
+      {showTrailer && trailerKey && (
+        <TrailerModal
+          videoKey={trailerKey}
+          title={featured?.title || featured?.name}
+          onClose={() => setShowTrailer(false)}
+        />
+      )}
     </div>
   );
 };

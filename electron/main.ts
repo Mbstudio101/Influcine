@@ -1,15 +1,70 @@
-import { app, BrowserWindow, ipcMain, session, shell } from 'electron'
-import { fileURLToPath } from 'node:url'
+import { app, BrowserWindow, ipcMain, session, shell, protocol, net } from 'electron'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
 import { autoUpdater } from 'electron-updater'
 import log from 'electron-log'
 import Database from 'better-sqlite3'
+import YTDlpWrapModule from 'yt-dlp-wrap'
+// @ts-expect-error - Module type mismatch workaround
+const YTDlpWrap = YTDlpWrapModule.default || YTDlpWrapModule;
+import { ensureDirSync } from 'fs-extra'
+import ffmpeg from 'fluent-ffmpeg'
+import ffmpegPath from 'ffmpeg-static'
 
-// Suppress security warnings in development
-if (process.env.VITE_DEV_SERVER_URL) {
-  process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
+// Set ffmpeg path
+if (ffmpegPath) {
+  ffmpeg.setFfmpegPath(ffmpegPath.replace('app.asar', 'app.asar.unpacked'));
 }
+
+const BIN_DIR = path.join(app.getPath('userData'), 'bin');
+const YTDLP_PATH = path.join(BIN_DIR, process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
+ensureDirSync(BIN_DIR);
+
+async function ensureYtDlp() {
+  if (fs.existsSync(YTDLP_PATH)) {
+    // Check if binary is valid (size check is a simple heuristic: standalone binary is > 10MB)
+    const stats = fs.statSync(YTDLP_PATH);
+    if (stats.size > 10 * 1024 * 1024) {
+      return;
+    }
+    console.log('[yt-dlp] Existing binary is too small (likely a script). Re-downloading...');
+    fs.unlinkSync(YTDLP_PATH);
+  }
+  
+  console.log('[yt-dlp] Binary not found or invalid. Downloading...');
+  try {
+    // Determine asset name
+    let assetName = 'yt-dlp'; // Fallback
+    if (process.platform === 'darwin') assetName = 'yt-dlp_macos';
+    else if (process.platform === 'win32') assetName = 'yt-dlp.exe';
+    else if (process.platform === 'linux') assetName = 'yt-dlp_linux';
+
+    const url = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${assetName}`;
+    
+    // Use net module to download
+    const response = await net.fetch(url);
+    if (!response.ok) throw new Error(`Failed to download yt-dlp: ${response.statusText}`);
+    
+    const buffer = await response.arrayBuffer();
+    fs.writeFileSync(YTDLP_PATH, Buffer.from(buffer));
+    fs.chmodSync(YTDLP_PATH, '755');
+    console.log('[yt-dlp] Downloaded successfully to:', YTDLP_PATH);
+  } catch (e) {
+    console.error('[yt-dlp] Download failed:', e);
+    // Attempt to use YTDlpWrap's downloader as fallback if my logic fails
+    // await YTDlpWrap.downloadFromGithub(YTDLP_PATH);
+  }
+}
+
+// Ensure trailers directory exists
+const TRAILERS_DIR = path.join(app.getPath('userData'), 'trailers');
+ensureDirSync(TRAILERS_DIR);
+
+// Protocol Registration for Trailers
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'trailer', privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: true, stream: true } }
+]);
 
 // Fix for "GPU process exited unexpectedly" and "Network service crashed" during HMR
 // Disabling hardware acceleration improves stability during development at the cost of performance
@@ -24,19 +79,230 @@ log.transports.file.level = 'info';
 autoUpdater.logger = log;
 autoUpdater.autoDownload = false; // Disable auto download to support user flow: Check -> Prompt -> Download
 
+const ADBLOCK_SCRIPT = `
+// Influcine AdBlock & Anti-Sandblock Script
+(function() {
+  console.log("[Influcine] AdBlocker Active");
+  
+  // IPC Bridge for Player Control
+  try {
+    const { ipcRenderer } = require('electron');
+    ipcRenderer.on('player-command', (_event, data) => {
+      // console.log("[Influcine] Forwarding command:", data);
+      window.postMessage(data, '*');
+    });
+  } catch (e) {
+    console.warn("[Influcine] Failed to init IPC bridge:", e);
+  }
+
+  // 1. Popup Blocking (Aggressive)
+  const noop = () => { console.log("[Influcine] Blocked Popup/Alert"); return null; };
+  window.open = noop;
+  window.alert = noop;
+  window.confirm = () => true; // Auto-confirm to bypass some checks
+  
+  // 2. Anti-Adblock Killer (Mocking)
+  // Mock common ad variables to fool detectors
+  window.canRunAds = true;
+  window.isAdBlockActive = false;
+  
+  // 3. Clickjacking & Overlay Remover
+  function cleanDOM() {
+    const elements = document.querySelectorAll('*');
+    elements.forEach(el => {
+      const style = window.getComputedStyle(el);
+      const zIndex = parseInt(style.zIndex);
+      
+      // Remove High Z-Index Overlays (likely ads)
+      // We assume legitimate player controls are < 10000 or specific classes
+      if (zIndex > 99999 && !el.className.includes('player') && !el.className.includes('control')) {
+        // console.log("[Influcine] Removed High-Z Element:", el);
+        el.remove();
+      }
+      
+      // Remove invisible full-screen overlays
+      if (style.position === 'fixed' && style.opacity === '0' && el.tagName === 'DIV') {
+        // console.log("[Influcine] Removed Invisible Overlay:", el);
+        el.remove();
+      }
+      
+      // Remove common ad iframes inside the player
+      if (el.tagName === 'IFRAME' && !el.src.includes('vidfast') && !el.src.includes('youtube')) {
+         // Check size - small iframes are often tracking pixels or hidden ads
+         if (el.offsetWidth < 10 && el.offsetHeight < 10) {
+           el.remove();
+         }
+      }
+    });
+  }
+  
+  // Run cleaner periodically
+  setInterval(cleanDOM, 1000);
+  
+  // 4. Specific Site Fixes (VidFast / 2Embed)
+  window.addEventListener('DOMContentLoaded', () => {
+    // Force video to be visible if hidden by anti-adblock
+    const video = document.querySelector('video');
+    if (video) {
+      video.style.display = 'block';
+      video.style.visibility = 'visible';
+    }
+  });
+})();
+`;
+
+// Initialize AdBlock Script
+const ADBLOCK_PATH = path.join(app.getPath('userData'), 'adblock.js');
+try {
+  fs.writeFileSync(ADBLOCK_PATH, ADBLOCK_SCRIPT);
+} catch (e) {
+  console.error('Failed to write adblock script:', e);
+}
+
+// IPC Handlers for Trailer Caching
+ipcMain.handle('get-adblock-path', () => {
+  return ADBLOCK_PATH;
+});
+
+// IPC Handlers for Trailer Caching
+ipcMain.handle('trailer-check', async (_event, videoId) => {
+  const filePath = path.join(TRAILERS_DIR, `${videoId}.mp4`);
+  
+  // Force clean up old 720p files (simple heuristic: if file is old or just force once)
+  // For now, let's check file size. 1080p trailers are usually > 10MB (very rough guess)
+  // Better: We can store a metadata file side-by-side.
+  // OR: Since we just deployed the fix, let's just assume existing files MIGHT be bad
+  // and if the user complains, we can provide a "Clear Cache" button.
+  // BUT the user specifically asked to fix it NOW.
+  
+  if (fs.existsSync(filePath)) {
+    const stats = fs.statSync(filePath);
+    if (stats.size > 0) {
+      // Temporary: If file is smaller than 5MB, it's likely a low-quality muxed file or broken
+      // A 2-minute 1080p trailer should be 30MB+ typically. 720p muxed might be 10-20MB.
+      // Let's be aggressive: If < 10MB, kill it.
+      if (stats.size < 10 * 1024 * 1024) {
+         console.log(`[Trailer] File too small (${stats.size} bytes), likely low quality. Re-downloading: ${videoId}`);
+         try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
+         return null;
+      }
+      return `trailer://${videoId}`;
+    } else {
+      // Clean up empty file
+      try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
+    }
+  }
+  return null;
+});
+
+// IPC Handler for Error Logging
+ipcMain.handle('log-error', async (_event, errorData) => {
+  const LOGS_DIR = path.join(app.getPath('userData'), 'logs');
+  ensureDirSync(LOGS_DIR);
+  
+  const logFile = path.join(LOGS_DIR, 'app.log');
+  const timestamp = new Date().toISOString();
+  const logEntry = `[${timestamp}] [${errorData.type || 'ERROR'}] ${errorData.message}\nStack: ${errorData.stack || 'N/A'}\nContext: ${JSON.stringify(errorData.context || {})}\n-------------------\n`;
+  
+  try {
+    fs.appendFileSync(logFile, logEntry);
+    // console.log('[Agent] Error logged:', errorData.message);
+    return true;
+  } catch (e) {
+    console.error('Failed to write to log file:', e);
+    return false;
+  }
+});
+
+ipcMain.handle('get-logs-path', () => {
+  return path.join(app.getPath('userData'), 'logs');
+});
+
+ipcMain.handle('trailer-invalidate', async (_event, videoId) => {
+  const filePath = path.join(TRAILERS_DIR, `${videoId}.mp4`);
+  if (fs.existsSync(filePath)) {
+    try {
+      console.log(`[Trailer] Invalidating corrupted/incompatible file: ${videoId}`);
+      fs.unlinkSync(filePath);
+      return true;
+    } catch (e) {
+      console.error(`[Trailer] Failed to invalidate file: ${videoId}`, e);
+    }
+  }
+  return false;
+});
+
+ipcMain.handle('trailer-download', async (_event, videoId) => {
+  const filePath = path.join(TRAILERS_DIR, `${videoId}.mp4`);
+  
+  if (fs.existsSync(filePath)) {
+    return pathToFileURL(filePath).toString();
+  }
+
+  try {
+    await ensureYtDlp(); // Ensure binary is ready
+
+    const ytDlpArgs = [
+      `https://www.youtube.com/watch?v=${videoId}`,
+      '-f', 'bv*[ext=mp4][height>=1080]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b',
+      '-o', filePath,
+      '--no-playlist',
+      '--force-ipv4',
+      '--no-check-certificates',
+      '--extractor-args', 'youtube:player_client=android'
+    ];
+
+    // If we have ffmpeg path, tell yt-dlp where it is
+    if (ffmpegPath) {
+      const actualFfmpegPath = ffmpegPath.replace('app.asar', 'app.asar.unpacked');
+      ytDlpArgs.push('--ffmpeg-location', actualFfmpegPath);
+    }
+
+    console.log(`[Trailer] Downloading ${videoId} with yt-dlp...`);
+    
+    // Execute yt-dlp
+    await new Promise<void>((resolve, reject) => {
+      const ytDlp = new YTDlpWrap(YTDLP_PATH);
+      ytDlp.exec(ytDlpArgs)
+        .on('error', (error: Error) => reject(error))
+        .on('close', () => resolve());
+    });
+    
+    // Verify file exists
+    if (!fs.existsSync(filePath)) {
+        throw new Error('Download finished but file not found');
+    }
+
+    return `trailer://${videoId}`;
+  } catch (error) {
+    console.error(`[Trailer] Download failed for ${videoId}:`, error);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    throw error;
+  }
+});
+
 // IPC Handlers for Update Flow
 ipcMain.handle('update-check', async () => {
   if (!app.isPackaged) return { update: false };
   try {
     const result = await autoUpdater.checkForUpdates();
-    return { 
-      update: !!(result && result.downloadPromise === undefined), // true if update available
+    const isUpdate = result?.updateInfo.version !== app.getVersion();
+    return {
+      update: isUpdate,
       version: result?.updateInfo.version,
       releaseNotes: result?.updateInfo.releaseNotes
     };
   } catch (error) {
-    log.error('Check for updates failed', error);
-    throw error;
+    // Gracefully handle 404 (no update file found yet)
+    const err = error as Error;
+    if (err.message && (err.message.includes('404') || err.message.includes('Cannot find latest'))) {
+      log.warn('Update check: No update manifest found (404). This is expected if no release is published.');
+      return { update: false };
+    }
+
+    log.error('Check for updates failed', err);
+    // Don't throw to avoid crashing the renderer flow
+    return { update: false, error: err.message };
   }
 });
 
@@ -92,9 +358,6 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
 // Set App Name for Dock
-if (process.platform === 'darwin') {
-  app.dock.setIcon(path.join(process.env.VITE_PUBLIC, 'icon.png'));
-}
 app.setName('Influcine');
 
 // Initialize IMDB DB
@@ -105,10 +368,10 @@ function initImdbDb() {
     const desktopPath = path.join(app.getPath('desktop'), 'IMDB', 'imdb.db');
     const devPath = path.join(process.env.APP_ROOT, 'local-data/imdb.db');
     const prodPath = path.join(process.resourcesPath, 'imdb.db');
-    
+
     // Priority: Desktop (User Custom) -> Dev -> Prod
     let dbPath = '';
-    
+
     if (fs.existsSync(desktopPath)) {
       dbPath = desktopPath;
     } else if (process.env.VITE_DEV_SERVER_URL && fs.existsSync(devPath)) {
@@ -116,12 +379,12 @@ function initImdbDb() {
     } else {
       dbPath = prodPath;
     }
-      
+
     if (fs.existsSync(dbPath)) {
       imdbDb = new Database(dbPath, { readonly: true });
       console.log('IMDB Database connected at', dbPath);
     } else {
-       console.log('IMDB Database not found. Checked:', { desktopPath, devPath, prodPath });
+      console.log('IMDB Database not found. Checked:', { desktopPath, devPath, prodPath });
     }
   } catch (err) {
     console.error('Failed to init IMDB DB:', err);
@@ -134,7 +397,7 @@ ipcMain.handle('imdb-search', (_event, { query }) => {
     initImdbDb();
     if (!imdbDb) return { results: [], error: 'Database not loaded' };
   }
-  
+
   try {
     const stmt = imdbDb.prepare(`
       SELECT t.tconst, t.primaryTitle, t.startYear, t.titleType, r.averageRating, r.numVotes
@@ -172,6 +435,7 @@ function createWindow() {
       webSecurity: false,
       autoplayPolicy: 'no-user-gesture-required',
       enableBlinkFeatures: 'AudioTracks,VideoTracks',
+      webviewTag: true,
     },
   })
 
@@ -329,6 +593,22 @@ function createWindow() {
     return { action: 'deny' }
   })
 
+  // IMPORTANT: Also block popups from WebViews (where the ads actually live)
+  win.webContents.on('did-attach-webview', (_event, webContents) => {
+    // Block new windows from the webview
+    webContents.setWindowOpenHandler(({ url }) => {
+      console.log('Blocked WebView popup:', url);
+      return { action: 'deny' };
+    });
+
+    // Block navigations to unwanted domains (optional, but good for redirect ads)
+    webContents.on('will-navigate', () => {
+      // Allow the video host itself, but block suspicious redirects if needed
+      // For now, we trust the embed URL but block others if they drift too far
+      // console.log('WebView navigating to:', url);
+    });
+  });
+
   // Window controls
   ipcMain.on('window-minimize', () => win?.minimize())
   ipcMain.on('window-maximize', () => {
@@ -374,19 +654,79 @@ app.on('activate', () => {
 
 app.whenReady().then(() => {
   initImdbDb();
+
+  // Handle 'trailer://' protocol
+  protocol.handle('trailer', async (request) => {
+    try {
+      // Robust URL parsing
+      const url = request.url;
+      const videoId = url.replace('trailer://', '').replace(/\/$/, ''); // Remove protocol and trailing slash
+      const decodedId = decodeURIComponent(videoId);
+
+      // Sanitize ID to prevent directory traversal
+      const safeId = path.basename(decodedId);
+      const filePath = path.join(TRAILERS_DIR, `${safeId}.mp4`);
+
+      // 1. If file exists and is valid, serve it (High Quality 1080p)
+      if (fs.existsSync(filePath)) {
+        const stats = fs.statSync(filePath);
+        if (stats.size > 0) {
+           const fileUrl = pathToFileURL(filePath).toString();
+           return net.fetch(fileUrl);
+        }
+      }
+
+      // 2. If file missing, STREAM from YouTube (Instant 720p Fallback)
+      // This allows the video to play immediately while the high-quality version downloads in background
+      console.log(`[Trailer Protocol] Stream fallback for ${safeId}`);
+      
+      await ensureYtDlp();
+
+      // Get direct stream URL (best single file, usually 720p)
+      const ytDlpArgs = [
+        `https://www.youtube.com/watch?v=${safeId}`,
+        '-f', 'best[ext=mp4]/best',
+        '-g',
+        '--force-ipv4',
+        '--no-check-certificates',
+        '--extractor-args', 'youtube:player_client=android'
+      ];
+
+      const directUrl = await new Promise<string>((resolve, reject) => {
+        let output = '';
+        const ytDlp = new YTDlpWrap(YTDLP_PATH);
+        ytDlp.exec(ytDlpArgs)
+          .on('data', (data: string | Buffer) => output += data.toString())
+          .on('error', (err: Error) => reject(err))
+          .on('close', () => resolve(output.trim().split('\n')[0])); // Take first URL
+      });
+
+      if (directUrl && directUrl.startsWith('http')) {
+        // Proxy the remote stream
+        return net.fetch(directUrl);
+      }
+      
+      return new Response('Video unavailable', { status: 404 });
+
+    } catch (err) {
+      console.error('[Trailer Protocol] Error:', err);
+      return new Response('Internal Server Error', { status: 500 });
+    }
+  });
+
   createWindow();
-  
+
   // Check for updates only in production
   if (app.isPackaged) {
     autoUpdater.checkForUpdatesAndNotify().catch(err => log.error('Auto-update error:', err));
   }
-  
+
   // Update events
   autoUpdater.on('update-available', () => {
     log.info('Update available.');
     win?.webContents.send('update-message', 'Update available. Downloading...');
   });
-  
+
   autoUpdater.on('update-downloaded', () => {
     log.info('Update downloaded');
     win?.webContents.send('update-message', 'Update downloaded. It will be installed on restart.');

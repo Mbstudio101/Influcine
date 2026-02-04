@@ -8,6 +8,10 @@ import { AuthProvider } from './context/AuthContext'
 import { TVNavigationProvider } from './context/TVNavigationContext'
 import { ToastProvider } from './context/ToastContext'
 import './index.css'
+import { errorAgent } from './services/errorAgent'
+
+// Initialize Error Logging Agent
+errorAgent.init();
 
 import { performRescue, restoreFromRescueDB } from './services/dbRescue';
 import { db } from './db';

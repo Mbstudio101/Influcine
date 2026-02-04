@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDetails, getCredits, getSimilar, getImageUrl, getSeasonDetails, findMediaByImdbId } from '../services/tmdb';
 import { MediaDetails, Episode, CastMember } from '../types';
-import { Play, Plus, Check, Star, ArrowLeft, X, Youtube, ExternalLink, Download } from 'lucide-react';
+import { Play, Plus, Check, Star, ArrowLeft, Download, Youtube } from 'lucide-react';
 import { db } from '../db';
 import { useAuth } from '../context/useAuth';
 import { usePlayer } from '../context/PlayerContext';
@@ -15,6 +15,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../context/toast';
 import { downloadService } from '../services/downloadService';
 import { useEmbedUrl } from '../hooks/useEmbedUrl';
+import { findBestTrailer } from '../utils/videoUtils';
+import { useTrailerCache } from '../hooks/useTrailerCache';
+import TrailerModal from '../components/TrailerModal';
 
 const Details: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
@@ -25,27 +28,27 @@ const Details: React.FC = () => {
   const [showTrailer, setShowTrailer] = useState(false);
   const [userSelectedSeason, setUserSelectedSeason] = useState<number | null>(null);
   const { profile } = useAuth();
-  
+
   const { data: mediaData, isLoading, error: queryError } = useQuery({
     queryKey: ['media', type, id, location.state],
     queryFn: async () => {
       if (!type || !id) throw new Error('Missing parameters');
-      
+
       let numericId = parseInt(id);
-      
+
       // Handle local IMDB items (id=0)
       if (numericId === 0) {
         const stateImdbId = location.state?.imdb_id;
         if (stateImdbId) {
           const resolved = await findMediaByImdbId(stateImdbId);
           if (resolved) {
-             numericId = resolved.id;
-             // Update URL without reload to reflect real ID
-             window.history.replaceState(null, '', `/details/${type}/${numericId}`);
+            numericId = resolved.id;
+            // Update URL without reload to reflect real ID
+            window.history.replaceState(null, '', `/details/${type}/${numericId}`);
           } else {
-             // Fallback: Display minimal details from state if resolution fails
-             return {
-               details: {
+            // Fallback: Display minimal details from state if resolution fails
+            return {
+              details: {
                 id: 0,
                 title: location.state?.title || 'Unknown Title',
                 name: location.state?.title || 'Unknown Title',
@@ -56,9 +59,9 @@ const Details: React.FC = () => {
                 media_type: type,
                 genres: [],
                 videos: { results: [] }
-               } as MediaDetails,
-               credits: null
-             };
+              } as MediaDetails,
+              credits: null
+            };
           }
         }
       }
@@ -120,7 +123,7 @@ const Details: React.FC = () => {
       link.href = prefetchUrl;
       link.as = 'document';
       document.head.appendChild(link);
-      
+
       try {
         const url = new URL(prefetchUrl);
         const preconnect = document.createElement('link');
@@ -128,7 +131,7 @@ const Details: React.FC = () => {
         preconnect.href = url.origin;
         preconnect.crossOrigin = 'anonymous';
         document.head.appendChild(preconnect);
-        
+
         return () => {
           if (document.head.contains(link)) document.head.removeChild(link);
           if (document.head.contains(preconnect)) document.head.removeChild(preconnect);
@@ -148,7 +151,7 @@ const Details: React.FC = () => {
     enabled: effectiveType === 'tv' && !!id && !!activeSeason,
     staleTime: 1000 * 60 * 30,
   });
-  
+
   const episodes = seasonData?.episodes || [];
 
   // Live Query for Episode Progress
@@ -161,7 +164,7 @@ const Details: React.FC = () => {
         .toArray() : [],
     [profile?.id, id, activeSeason, effectiveType]
   );
-  
+
   const defaultList = useMemo(() => [], []);
   const safeEpisodeProgressList = episodeProgressList || defaultList;
 
@@ -172,13 +175,29 @@ const Details: React.FC = () => {
   }, [safeEpisodeProgressList]);
 
 
-  const trailer = details?.videos?.results?.find(v => v.type === 'Trailer' && v.site === 'YouTube') || details?.videos?.results?.find(v => v.site === 'YouTube');
+  const [activeTrailerKey, setActiveTrailerKey] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (details?.videos?.results) {
+      const best = findBestTrailer(details.videos.results);
+      if (best) setActiveTrailerKey(best.key);
+      else setActiveTrailerKey(null);
+    }
+  }, [details]);
+
+  const cachedTrailerUrl = useTrailerCache(activeTrailerKey || undefined);
+  const [isTrailerReady, setIsTrailerReady] = useState(false);
+
+  // Reset trailer ready state when URL changes
+  React.useEffect(() => {
+    setIsTrailerReady(false);
+  }, [cachedTrailerUrl]);
 
   const handleWatch = async () => {
     if (!details) return;
     try {
       // Explicitly construct to avoid Dexie errors
-      await db.history.put({ 
+      await db.history.put({
         id: Number(details.id),
         title: details.title,
         name: details.name,
@@ -187,18 +206,18 @@ const Details: React.FC = () => {
         overview: details.overview,
         vote_average: details.vote_average,
         media_type: details.media_type,
-        savedAt: Date.now() 
+        savedAt: Date.now()
       });
     } catch (error) {
       console.error('Failed to save history:', error);
     }
-    
+
     if (effectiveType === 'tv') {
-        const s = historyItem?.progress?.season || 1;
-        const e = historyItem?.progress?.episode || 1;
-        play(details, s, e);
+      const s = historyItem?.progress?.season || 1;
+      const e = historyItem?.progress?.episode || 1;
+      play(details, s, e);
     } else {
-        play(details);
+      play(details);
     }
   };
 
@@ -239,8 +258,8 @@ const Details: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center h-full text-white gap-6">
         <p className="text-xl text-red-400 font-medium">{error}</p>
-        <button 
-          onClick={() => navigate(-1)} 
+        <button
+          onClick={() => navigate(-1)}
           className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-lg transition-colors font-semibold"
         >
           Go Back
@@ -253,10 +272,10 @@ const Details: React.FC = () => {
 
   return (
     <div className="h-full overflow-y-auto pb-20 relative scrollbar-hide">
-       {/* Back Button */}
-       <Focusable
+      {/* Back Button */}
+      <Focusable
         as="button"
-        onClick={() => navigate(-1)} 
+        onClick={() => navigate(-1)}
         className="absolute top-16 left-6 z-50 p-2 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-primary transition-colors"
         activeClassName="ring-2 ring-primary bg-primary"
         autoFocus
@@ -265,60 +284,75 @@ const Details: React.FC = () => {
       </Focusable>
 
       {/* Trailer Modal */}
-      {showTrailer && trailer && (
-        <div className="fixed inset-0 z-100 bg-black/90 flex items-center justify-center p-4">
-          <Focusable
-            as="button"
-            onClick={() => setShowTrailer(false)}
-            className="absolute top-4 right-4 p-2 bg-white/10 rounded-full hover:bg-white/20 text-white"
-            activeClassName="ring-2 ring-primary bg-white/20"
-            autoFocus
-          >
-            <X size={24} />
-          </Focusable>
-          <div className="w-full max-w-5xl flex flex-col gap-4">
-            <div className="aspect-video rounded-xl overflow-hidden shadow-2xl bg-black">
-              <iframe
-                width="100%"
-                height="100%"
-                src={`https://www.youtube.com/embed/${trailer.key}?autoplay=1`}
-                title="YouTube video player"
-                frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              ></iframe>
-            </div>
-            
-            <div className="flex justify-center">
-              <a 
-                href={`https://www.youtube.com/watch?v=${trailer.key}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 px-6 py-3 rounded-lg font-bold transition-all"
-              >
-                <ExternalLink size={20} />
-                Having trouble? Watch on YouTube
-              </a>
-            </div>
-          </div>
-        </div>
+      {showTrailer && activeTrailerKey && (
+        <TrailerModal
+          videoKey={activeTrailerKey}
+          title={details.title || details.name}
+          onClose={() => setShowTrailer(false)}
+        />
       )}
 
       {/* Hero Section */}
       <div className="relative w-full h-[70vh]">
         <div className="absolute inset-0">
-          <img
-            src={getImageUrl(details.backdrop_path, 'w1280')}
-            srcSet={`
-              ${getImageUrl(details.backdrop_path, 'w780')} 780w,
-              ${getImageUrl(details.backdrop_path, 'w1280')} 1280w,
-              ${getImageUrl(details.backdrop_path, 'original')} 1920w
-            `}
-            sizes="100vw"
-            alt={details.title || details.name}
-            className="w-full h-full object-cover"
-            loading="eager"
-          />
+          {activeTrailerKey && cachedTrailerUrl ? (
+            <div className="w-full h-full relative pointer-events-none">
+              <video
+                className={`w-full h-full object-cover object-top transition-opacity duration-1000 ${isTrailerReady ? 'opacity-100' : 'opacity-0'}`}
+                src={cachedTrailerUrl}
+                autoPlay
+                muted
+                loop
+                playsInline
+                onCanPlay={() => setIsTrailerReady(true)}
+                onError={(e) => {
+                  console.warn('Trailer playback unavailable, falling back.', {
+                    src: cachedTrailerUrl,
+                    error: e
+                  });
+                  setIsTrailerReady(false);
+                  
+                  // Invalidate cache
+                  if (activeTrailerKey) {
+                    window.ipcRenderer?.invoke('trailer-invalidate', activeTrailerKey).catch(() => { });
+                  }
+
+                  // Find next best trailer
+                  if (details?.videos?.results) {
+                    const remaining = details.videos.results.filter(v => v.key !== activeTrailerKey && v.site === 'YouTube');
+                    const nextBest = findBestTrailer(remaining);
+                    if (nextBest) {
+                      console.log('Falling back to next trailer:', nextBest.key);
+                      setActiveTrailerKey(nextBest.key);
+                    } else {
+                      setActiveTrailerKey(null);
+                    }
+                  }
+                }}
+              />
+              {!isTrailerReady && (
+                <img
+                  src={getImageUrl(details.backdrop_path, 'original')}
+                  className="absolute inset-0 w-full h-full object-cover object-top"
+                  alt=""
+                />
+              )}
+              <div className="absolute inset-0 bg-black/20" />
+            </div>
+          ) : (
+            <img
+              src={getImageUrl(details.backdrop_path, 'original')}
+              srcSet={`
+                ${getImageUrl(details.backdrop_path, 'w780')} 780w,
+                ${getImageUrl(details.backdrop_path, 'w1280')} 1280w,
+                ${getImageUrl(details.backdrop_path, 'original')} 1920w
+              `}
+              sizes="100vw"
+              alt={details.title || details.name}
+              className="w-full h-full object-cover object-top"
+              loading="eager"
+            />
+          )}
           <div className="absolute inset-0 bg-linear-to-t from-background via-background/60 to-transparent" />
           <div className="absolute inset-0 bg-linear-to-r from-background via-background/80 to-transparent" />
         </div>
@@ -326,8 +360,8 @@ const Details: React.FC = () => {
         <div className="absolute bottom-0 left-0 p-10 w-full max-w-4xl pb-10 z-10 flex gap-8 items-end">
           {/* Poster */}
           <div className="hidden md:block w-48 rounded-lg overflow-hidden shadow-2xl border border-white/10 rotate-3 transform hover:rotate-0 transition-transform duration-500">
-            <img 
-              src={getImageUrl(details.poster_path)} 
+            <img
+              src={getImageUrl(details.poster_path)}
               alt={details.title || details.name}
               className="w-full h-full object-cover"
             />
@@ -337,19 +371,19 @@ const Details: React.FC = () => {
             <h1 className="text-5xl font-black mb-2 drop-shadow-2xl leading-tight text-white tracking-tight line-clamp-2">
               {details.title || details.name}
             </h1>
-            
+
             <div className="flex items-center gap-4 text-gray-300 mb-6 text-sm font-medium">
-               <span className="flex items-center gap-1 text-yellow-400">
-                 <Star size={16} fill="currentColor" /> {details.vote_average.toFixed(1)}
-               </span>
-               <span>{new Date(details.release_date || details.first_air_date || '').getFullYear()}</span>
-               {details.runtime && <span>{Math.floor(details.runtime / 60)}h {details.runtime % 60}m</span>}
-               {details.number_of_seasons && <span>{details.number_of_seasons} Seasons</span>}
-               <div className="flex gap-2">
-                 {details.genres?.slice(0, 3).map(g => (
-                   <span key={g.id} className="px-2 py-0.5 border border-white/20 rounded-md text-xs">{g.name}</span>
-                 ))}
-               </div>
+              <span className="flex items-center gap-1 text-yellow-400">
+                <Star size={16} fill="currentColor" /> {details.vote_average.toFixed(1)}
+              </span>
+              <span>{new Date(details.release_date || details.first_air_date || '').getFullYear()}</span>
+              {details.runtime && <span>{Math.floor(details.runtime / 60)}h {details.runtime % 60}m</span>}
+              {details.number_of_seasons && <span>{details.number_of_seasons} Seasons</span>}
+              <div className="flex gap-2">
+                {details.genres?.slice(0, 3).map(g => (
+                  <span key={g.id} className="px-2 py-0.5 border border-white/20 rounded-md text-xs">{g.name}</span>
+                ))}
+              </div>
             </div>
 
             <div className="max-h-[20vh] overflow-y-auto scrollbar-hide mb-8">
@@ -366,8 +400,8 @@ const Details: React.FC = () => {
                 <Play fill="currentColor" size={20} className="group-hover:animate-pulse" />
                 Watch Now
               </button>
-              {trailer && (
-                <button 
+              {activeTrailerKey && (
+                <button
                   onClick={() => setShowTrailer(true)}
                   className="bg-white/5 hover:bg-white/10 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 backdrop-blur-md border border-white/10 hover:border-white/30 hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] text-lg shrink-0"
                 >
@@ -375,19 +409,18 @@ const Details: React.FC = () => {
                   Trailer
                 </button>
               )}
-              <button 
+              <button
                 onClick={toggleWatchlist}
-                className={`px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 backdrop-blur-md border hover:scale-105 text-lg shrink-0 ${
-                  isSaved 
-                    ? 'bg-primary border-primary text-white shadow-[0_0_20px_rgba(124,58,237,0.4)]' 
-                    : 'bg-white/5 hover:bg-white/10 text-white border-white/10 hover:border-white/30 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]'
-                }`}
+                className={`px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 backdrop-blur-md border hover:scale-105 text-lg shrink-0 ${isSaved
+                  ? 'bg-primary border-primary text-white shadow-[0_0_20px_rgba(124,58,237,0.4)]'
+                  : 'bg-white/5 hover:bg-white/10 text-white border-white/10 hover:border-white/30 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]'
+                  }`}
               >
                 {isSaved ? <Check size={20} /> : <Plus size={20} />}
                 {isSaved ? 'In Library' : 'Add to Library'}
               </button>
-              
-              <button 
+
+              <button
                 onClick={handleDownload}
                 className="bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 backdrop-blur-md border border-white/10 hover:border-white/30 hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] text-lg shrink-0"
               >
@@ -410,9 +443,8 @@ const Details: React.FC = () => {
                     key={s}
                     as="button"
                     onClick={() => setUserSelectedSeason(s)}
-                    className={`px-3 py-1 rounded-full text-sm border ${
-                      activeSeason === s ? 'bg-primary text-white border-primary' : 'bg-white/5 text-gray-300 border-white/10'
-                    }`}
+                    className={`px-3 py-1 rounded-full text-sm border ${activeSeason === s ? 'bg-primary text-white border-primary' : 'bg-white/5 text-gray-300 border-white/10'
+                      }`}
                     activeClassName="ring-2 ring-primary"
                   >
                     S{s}
@@ -501,10 +533,10 @@ const Details: React.FC = () => {
             {credits.cast.slice(0, 10).map((actor: CastMember) => (
               <div key={actor.id} className="min-w-[100px] flex flex-col items-center gap-2 text-center">
                 <div className="w-20 h-20 rounded-full overflow-hidden border border-white/10">
-                  <img 
-                    src={getImageUrl(actor.profile_path)} 
+                  <img
+                    src={getImageUrl(actor.profile_path)}
                     alt={actor.name}
-                    className="w-full h-full object-cover" 
+                    className="w-full h-full object-cover"
                   />
                 </div>
                 <div className="w-full">
@@ -519,9 +551,9 @@ const Details: React.FC = () => {
 
       {/* Similar Content */}
       <div className="mt-4">
-        <ContentRow 
-          title="More Like This" 
-          fetcher={() => getSimilar(type as 'movie' | 'tv', parseInt(id as string))} 
+        <ContentRow
+          title="More Like This"
+          fetcher={() => getSimilar(type as 'movie' | 'tv', parseInt(id as string))}
         />
       </div>
     </div>

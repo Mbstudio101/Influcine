@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Media } from '../types';
 import MediaCard from './MediaCard';
+import Skeleton from './Skeleton';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Focusable from './Focusable';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
@@ -66,7 +67,20 @@ const ContentRow: React.FC<ContentRowProps> = ({ title, fetcher, data, cardSize 
     }
   };
 
-  if (loading) return <div className="h-40 animate-pulse bg-white/5 rounded-xl my-6 mx-10"></div>;
+  if (loading) return (
+    <div className="mb-10 px-10">
+      <div className="h-8 w-48 bg-white/10 rounded mb-5 animate-pulse" />
+      <div className="flex gap-5 overflow-hidden">
+        {[...Array(6)].map((_, i) => (
+          <Skeleton 
+            key={i} 
+            className={`${getSizeClass()} aspect-2/3`} 
+          />
+        ))}
+      </div>
+    </div>
+  );
+
   if (media.length === 0 && !loading) return (
     <div ref={containerRef} className="h-1" />
   );

@@ -314,9 +314,13 @@ function createWindow() {
 
   // Prevent new windows (Popups) - Aggressive Ad/Popup Blocking
   win.webContents.setWindowOpenHandler(({ url }) => {
-    // Allow legitimate external links (e.g. YouTube trailer fallback)
-    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      shell.openExternal(url);
+    // Allow legitimate external links (e.g. YouTube trailer fallback, GitHub for updates)
+    if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('github.com')) {
+      try {
+        shell.openExternal(url);
+      } catch (err) {
+        console.error('Failed to open external link:', err);
+      }
       return { action: 'deny' };
     }
 

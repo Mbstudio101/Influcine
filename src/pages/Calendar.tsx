@@ -30,12 +30,14 @@ interface CalendarEvent extends Media {
 }
 
 // Genius Hover Card Component
-const GeniusHoverCard = ({ event, position, onClose, onToggleReminder, isReminderSet }: { 
+const GeniusHoverCard = ({ event, position, onClose, onToggleReminder, isReminderSet, onMouseEnter, onMouseLeave }: { 
   event: CalendarEvent; 
   position: { x: number; y: number }; 
   onClose: () => void;
   onToggleReminder: (e: React.MouseEvent) => void;
   isReminderSet: boolean;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }) => {
   const navigate = useNavigate();
   
@@ -50,7 +52,8 @@ const GeniusHoverCard = ({ event, position, onClose, onToggleReminder, isReminde
       exit={{ opacity: 0, scale: 0.9, y: 10 }}
       style={{ left: safeX, top: safeY }}
       className="fixed z-50 w-80 bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden text-left"
-      onMouseLeave={onClose}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave || onClose}
     >
       {/* Backdrop Image Header */}
       <div className="relative h-40 w-full">
@@ -283,6 +286,13 @@ const CalendarPage = () => {
     hoverTimeoutRef.current = setTimeout(() => {
       setHoveredEvent(null);
     }, 300); // Small delay to allow moving to the popup
+  };
+
+  const handleCardMouseEnter = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
   };
 
   return (
@@ -549,6 +559,8 @@ const CalendarPage = () => {
               toggleReminder(hoveredEvent.event);
             }}
             isReminderSet={reminders.some(r => r.mediaId === hoveredEvent.event.id && r.mediaType === hoveredEvent.event.media_type)}
+            onMouseEnter={handleCardMouseEnter}
+            onMouseLeave={handleEventMouseLeave}
           />
         )}
       </AnimatePresence>

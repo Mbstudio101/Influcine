@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { Media, MediaDetails, Video } from '../types';
+import { tmdbCache } from '../utils/apiCache';
 
 const ACCESS_TOKEN = import.meta.env.VITE_TMDB_ACCESS_TOKEN;
 
@@ -47,40 +48,54 @@ tmdb.interceptors.response.use(
   }
 );
 
+// Generic GET with caching
+const getCached = async <T>(url: string, params?: Record<string, any>): Promise<T> => {
+  const cacheKey = tmdbCache.generateKey(url, params);
+  const cached = tmdbCache.get<T>(cacheKey);
+  
+  if (cached) {
+    // console.log(`[Cache Hit] ${url}`);
+    return cached;
+  }
+
+  // console.log(`[Cache Miss] ${url}`);
+  const response = await tmdb.get(url, { params });
+  tmdbCache.set(cacheKey, response.data);
+  return response.data;
+};
+
 export const getTrending = async (timeWindow: 'day' | 'week' = 'week'): Promise<Media[]> => {
-  const response = await tmdb.get(`/trending/all/${timeWindow}`);
-  return filterBroken(response.data.results);
+  const data = await getCached<{ results: Media[] }>(`/trending/all/${timeWindow}`);
+  return filterBroken(data.results);
 };
 
 export const searchMulti = async (query: string): Promise<Media[]> => {
-  const response = await tmdb.get('/search/multi', {
-    params: { query },
-  });
-  return filterBroken(response.data.results);
+  const data = await getCached<{ results: Media[] }>('/search/multi', { query });
+  return filterBroken(data.results);
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const getDetails = async (type: 'movie' | 'tv', id: number, params?: Record<string, any>): Promise<MediaDetails> => {
-  const response = await tmdb.get(`/${type}/${id}`, {
-    params: params || { append_to_response: 'videos,credits,similar' }
-  });
-  return { ...response.data, media_type: type };
+  const data = await getCached<any>(`/${type}/${id}`, 
+    params || { append_to_response: 'videos,credits,similar' }
+  );
+  return { ...data, media_type: type };
 };
 
 export const getVideos = async (type: 'movie' | 'tv', id: number): Promise<Video[]> => {
-  const response = await tmdb.get(`/${type}/${id}/videos`);
-  return response.data.results;
+  const data = await getCached<{ results: Video[] }>(`/${type}/${id}/videos`);
+  return data.results;
 };
 
 export const findMediaByImdbId = async (imdbId: string): Promise<Media | null> => {
   try {
-    const response = await tmdb.get(`/find/${imdbId}`, {
-      params: { external_source: 'imdb_id' }
+    const data = await getCached<{ movie_results: Media[], tv_results: Media[] }>(`/find/${imdbId}`, {
+      external_source: 'imdb_id'
     });
     
     const results = [
-      ...(response.data.movie_results || []),
-      ...(response.data.tv_results || [])
+      ...(data.movie_results || []),
+      ...(data.tv_results || [])
     ];
     
     return results.length > 0 ? results[0] : null;
@@ -98,22 +113,22 @@ export const getImageUrl = (path: string | null, size: 'w92' | 'w154' | 'w185' |
 };
 
 export const getMoviesByCategory = async (category: 'popular' | 'top_rated' | 'now_playing' | 'upcoming'): Promise<Media[]> => {
-  const response = await tmdb.get(`/movie/${category}`);
+  const data = await getCached<{ results: Media[] }>(`/movie/${category}`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items = response.data.results.map((item: any) => ({ ...item, media_type: 'movie' }));
+  const items = data.results.map((item: any) => ({ ...item, media_type: 'movie' }));
   return filterBroken(items);
 };
 
 export const getTVShowsByCategory = async (category: 'popular' | 'top_rated' | 'on_the_air'): Promise<Media[]> => {
-  const response = await tmdb.get(`/tv/${category}`);
+  const data = await getCached<{ results: Media[] }>(`/tv/${category}`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items = response.data.results.map((item: any) => ({ ...item, media_type: 'tv' }));
+  const items = data.results.map((item: any) => ({ ...item, media_type: 'tv' }));
   return filterBroken(items);
 };
 
 export const getCredits = async (type: 'movie' | 'tv', id: number) => {
-  const response = await tmdb.get(`/${type}/${id}/credits`);
-  return response.data;
+  const data = await getCached<any>(`/${type}/${id}/credits`);
+  return data;
 };
 
 export const discoverMedia = async (
@@ -133,20 +148,20 @@ export const discoverMedia = async (
     page?: number;
   }
 ): Promise<Media[]> => {
-  const response = await tmdb.get(`/discover/${type}`, { params });
+  const data = await getCached<{ results: Media[] }>(`/discover/${type}`, params);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items = response.data.results.map((item: any) => ({ ...item, media_type: type }));
+  const items = data.results.map((item: any) => ({ ...item, media_type: type }));
   return filterBroken(items);
 };
 
 export const getSimilar = async (type: 'movie' | 'tv', id: number): Promise<Media[]> => {
-  const response = await tmdb.get(`/${type}/${id}/similar`);
+  const data = await getCached<{ results: Media[] }>(`/${type}/${id}/similar`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items = response.data.results.map((item: any) => ({ ...item, media_type: type }));
+  const items = data.results.map((item: any) => ({ ...item, media_type: type }));
   return filterBroken(items);
 };
 
 export const getSeasonDetails = async (tvId: number, seasonNumber: number) => {
-  const response = await tmdb.get(`/tv/${tvId}/season/${seasonNumber}`);
-  return response.data;
+  const data = await getCached<any>(`/tv/${tvId}/season/${seasonNumber}`);
+  return data;
 };

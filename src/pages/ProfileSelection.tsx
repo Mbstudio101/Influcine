@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
 import { Avatar, AVATARS } from '../components/Avatars';
@@ -8,23 +8,32 @@ import { Plus, X, Check } from 'lucide-react';
 import Focusable from '../components/Focusable';
 
 const ProfileSelection: React.FC = () => {
-  const { profiles, switchProfile, addProfile } = useAuth();
+  const { profiles, switchProfile, addProfile, profile } = useAuth();
   const navigate = useNavigate();
   const [isAdding, setIsAdding] = useState(false);
   const [newProfileName, setNewProfileName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0].id);
+  const [targetProfileId, setTargetProfileId] = useState<number | null>(null);
+
+  // Navigate only when the profile is fully loaded and matches selection
+  useEffect(() => {
+    if (targetProfileId !== null && profile?.id === targetProfileId) {
+      navigate('/browse');
+      setTargetProfileId(null);
+    }
+  }, [profile, targetProfileId, navigate]);
 
   const handleSelect = useCallback(
     async (profileId: number) => {
       try {
+        setTargetProfileId(profileId);
         await switchProfile(profileId);
-        // Small delay to ensure state updates settle and provide visual feedback
-        setTimeout(() => navigate('/browse'), 50);
       } catch (error) {
         console.error('Failed to switch profile:', error);
+        setTargetProfileId(null);
       }
     },
-    [switchProfile, navigate]
+    [switchProfile]
   );
 
   const handleAddProfile = async (e?: React.FormEvent) => {

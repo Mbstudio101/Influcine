@@ -6,9 +6,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, X, Check } from 'lucide-react';
 
 import Focusable from '../components/Focusable';
+import { useQueryClient } from '@tanstack/react-query';
+import { getPersonalizedRecommendations } from '../services/recommendations';
 
 const ProfileSelection: React.FC = () => {
   const { profiles, switchProfile, addProfile, profile } = useAuth();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [isAdding, setIsAdding] = useState(false);
   const [newProfileName, setNewProfileName] = useState('');
@@ -27,13 +30,21 @@ const ProfileSelection: React.FC = () => {
     async (profileId: number) => {
       try {
         setTargetProfileId(profileId);
+        
+        // Prefetch recommendations for the selected profile
+        queryClient.prefetchQuery({
+            queryKey: ['recommendations-home', profileId],
+            queryFn: () => getPersonalizedRecommendations(profileId),
+            staleTime: 1000 * 60 * 60, // 1 hour
+        });
+
         await switchProfile(profileId);
       } catch (error) {
         // console.error('Failed to switch profile:', error);
         setTargetProfileId(null);
       }
     },
-    [switchProfile]
+    [switchProfile, queryClient]
   );
 
   const handleAddProfile = async (e?: React.FormEvent) => {

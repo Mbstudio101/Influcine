@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import React from 'react';
 import { VirtuosoGrid } from 'react-virtuoso';
 import MediaCard from './MediaCard';
 import { Media } from '../types';
@@ -19,7 +19,10 @@ const GridList = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>((
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', // Standard card width
       gap: '1.5rem', // gap-6
-      padding: '2.5rem 4rem', // px-16 py-10
+      paddingTop: '2.5rem',
+      paddingBottom: '2.5rem',
+      paddingLeft: '4rem',
+      paddingRight: '4rem',
     }}
   >
     {children}

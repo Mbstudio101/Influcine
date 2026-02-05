@@ -13,10 +13,11 @@ import { usePlayer } from '../context/PlayerContext';
 import RightSidebar from '../components/RightSidebar';
 import Focusable from '../components/Focusable';
 import TrailerModal from '../components/TrailerModal';
-
+import { useAuth } from '../context/useAuth';
 import { useTrailerCache } from '../hooks/useTrailerCache';
 
 const Home: React.FC = () => {
+  const { profile } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const { play } = usePlayer();
 
@@ -69,9 +70,10 @@ const Home: React.FC = () => {
   }, [cachedBackgroundUrl]);
 
   const { data: recommendations = [] } = useQuery({
-    queryKey: ['recommendations-home'],
-    queryFn: getPersonalizedRecommendations,
+    queryKey: ['recommendations-home', profile?.id],
+    queryFn: () => getPersonalizedRecommendations(profile?.id),
     staleTime: 1000 * 60 * 60, // 1 hour
+    enabled: !!profile,
   });
 
   const historyQuery = useLiveQuery(

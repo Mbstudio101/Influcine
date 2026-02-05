@@ -11,6 +11,7 @@ export interface Media {
   first_air_date?: string; // TV shows
   media_type: 'movie' | 'tv';
   popularity?: number;
+  audio_format?: 'atmos' | '5.1' | 'stereo'; // Atmos Support
 }
 
 export interface Video {

@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { discoverMedia, getSimilar } from './tmdb';
 import { Media } from '../types';
+import { generateDailyMix } from './recommendationEngine';
 
 export interface RecommendationResult {
   type: 'core' | 'gem' | 'wildcard' | 'similar';
@@ -8,12 +9,28 @@ export interface RecommendationResult {
   items: Media[];
 }
 
-export const getPersonalizedRecommendations = async (): Promise<RecommendationResult[]> => {
-  // 1. Analyze User DNA from History
+export const getPersonalizedRecommendations = async (profileId?: number): Promise<RecommendationResult[]> => {
+  const recommendations: RecommendationResult[] = [];
+
+  // 1. Core Recommendation: "Daily Mix" (Powered by Taste Engine)
+  if (profileId) {
+    const dailyMix = await generateDailyMix(profileId);
+    if (dailyMix.length > 0) {
+      recommendations.push({
+        type: 'core',
+        title: 'Your Daily Mix',
+        items: dailyMix
+      });
+    }
+  }
+
+  // 2. Legacy Fallback / Additional Sections
+  // Analyze User DNA from History (Global fallback if no profile specific or for additional context)
   const history = await db.history.orderBy('savedAt').reverse().limit(50).toArray();
+  const watchedIds = new Set(history.map(h => h.id));
   
-  if (history.length === 0) {
-    // Fallback for new users
+  if (history.length === 0 && recommendations.length === 0) {
+    // Fallback for completely new users
     const trending = await discoverMedia('movie', { sort_by: 'popularity.desc' });
     return [{
       type: 'core',
@@ -22,24 +39,8 @@ export const getPersonalizedRecommendations = async (): Promise<RecommendationRe
     }];
   }
 
-  // Genre Frequency Map
-  // const genreCounts: Record<number, number> = {};
-  const watchedIds = new Set(history.map(h => h.id));
-
-  // Note: We don't have genre_ids in SavedMedia directly unless we stored them. 
-  // Assuming we might not have them, we might need to rely on what we have or fetch details.
-  // However, usually Media objects from TMDB have genre_ids. Let's assume they are there.
-  // If not, we might need to fetch details for the top watched items.
-  // For now, let's try to get recommendations based on the *Last Watched* item if we can't analyze genres easily.
-  
-  // Strategy: "The Influcine DNA"
-  // Since we might not have full genre data stored in indexedDB for every item (depending on how it was saved),
-  // we will pivot off the last 3 distinct watched items.
-
+  // 3. "Because you watched..." (Similar to Last Watched)
   const last3 = history.slice(0, 3);
-  const recommendations: RecommendationResult[] = [];
-
-  // 1. "Because you watched..." (Similar)
   if (last3.length > 0) {
     const lastItem = last3[0];
     const similar = await getSimilar(lastItem.media_type || 'movie', lastItem.id);

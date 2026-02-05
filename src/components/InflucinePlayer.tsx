@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSettings } from '../context/SettingsContext';
 import { SubtitleOverlay } from './SubtitleOverlay';
-import { parseSubtitle } from '../utils/subtitleParser';
 
 // Hooks
 import { usePlayerAudio } from '../hooks/usePlayerAudio';
 import { usePlayerSubtitles } from '../hooks/usePlayerSubtitles';
+import { useAuth } from '../context/useAuth';
+import { getPreference, togglePreference } from '../services/recommendationEngine';
+
+import { SubtitleCue } from '../utils/subtitleParser';
 
 // Components
 import { PlayerHeader } from './player/PlayerHeader';
@@ -33,6 +36,7 @@ interface InflucinePlayerProps {
     type: 'movie' | 'tv';
     season?: number;
     episode?: number;
+    audio_format?: 'atmos' | '5.1' | 'stereo';
   };
 }
 
@@ -58,7 +62,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [adblockPath, setAdblockPath] = useState<string>('');
-  const [forceEmbed, setForceEmbed] = useState(false);
+  const [forceEmbed] = useState(false);
   const isEmbed = forceEmbed || (!!embedSrc && !src);
 
   useEffect(() => {
@@ -68,6 +72,33 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   // --- Player State ---
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  
+  // --- User Preferences ---
+  const { profile } = useAuth();
+  const [userVote, setUserVote] = useState<'like' | 'dislike' | null>(null);
+
+  useEffect(() => {
+    if (profile?.id && mediaData?.tmdbId) {
+      getPreference(profile.id, parseInt(mediaData.tmdbId)).then(pref => {
+        if (pref?.vote === 'like') setUserVote('like');
+        else if (pref?.vote === 'dislike') setUserVote('dislike');
+      });
+    }
+  }, [profile, mediaData?.tmdbId]);
+
+  const handleVote = async (vote: 'like' | 'dislike') => {
+    if (!profile?.id || !mediaData?.tmdbId) return;
+    const tmdbId = parseInt(mediaData.tmdbId);
+
+    // Optimistic
+    if (userVote === vote) {
+        setUserVote(null);
+        await togglePreference(profile.id, tmdbId, vote, mediaData.type || 'movie');
+    } else {
+        setUserVote(vote);
+        await togglePreference(profile.id, tmdbId, vote, mediaData.type || 'movie');
+    }
+  };
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
@@ -88,7 +119,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const {
     audioMode, setAudioMode,
     audioFormat,
-    audioEngineReady, resumeAudioContext,
+    resumeAudioContext,
     availableTracks, detectAudioCapabilities, switchAudioTrack
   } = usePlayerAudio(videoRef, isEmbed, src);
 
@@ -102,7 +133,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     isSearchingSubs
   } = usePlayerSubtitles(videoRef, isEmbed, mediaData, src);
 
-  const { themeColor, subtitleSize, subtitleColor } = useSettings();
+  const { subtitleSize, subtitleColor } = useSettings();
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -129,7 +160,14 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 
   // Handle controls visibility
   useEffect(() => {
+    let lastActivity = 0;
+    const THROTTLE_MS = 200;
+
     const handleActivity = () => {
+      const now = Date.now();
+      if (now - lastActivity < THROTTLE_MS) return;
+      lastActivity = now;
+
       setShowControls(true);
       clearTimeout(controlsTimeoutRef.current);
       controlsTimeoutRef.current = setTimeout(() => {
@@ -141,12 +179,14 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     if (container) {
       container.addEventListener('mousemove', handleActivity);
       container.addEventListener('click', handleActivity);
+      container.addEventListener('keydown', handleActivity);
     }
 
     return () => {
       if (container) {
         container.removeEventListener('mousemove', handleActivity);
         container.removeEventListener('click', handleActivity);
+        container.removeEventListener('keydown', handleActivity);
       }
       clearTimeout(controlsTimeoutRef.current);
     };
@@ -332,11 +372,11 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 
   // Embed IPC Listeners
   useEffect(() => {
-    const handleTracks = (_: any, tracks: any[]) => {
+    const handleTracks = (_: import('electron').IpcRendererEvent, tracks: {index: number, label: string, language: string}[]) => {
         setEmbedTracks(tracks);
     };
 
-    const handleCues = (_: any, data: {index: number, cues: any[]}) => {
+    const handleCues = (_: import('electron').IpcRendererEvent, data: {index: number, cues: SubtitleCue[]}) => {
         if (data.index === activeEmbedTrackIndex) {
             setCustomSubtitles(data.cues);
         }
@@ -376,13 +416,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     input.onchange = async (e) => {
         const file = (e.target as HTMLInputElement).files?.[0];
         if (file) {
-            const text = await file.text();
-            // We need parseSubtitle here, or we can move it to a util.
-            // Since we imported usePlayerSubtitles, we don't have parseSubtitle exposed directly.
-            // But we can just use the hook's setCustomSubtitles with a parsed value?
-            // Wait, we need the parser. It was imported in usePlayerSubtitles.
-            // We should export it from there or import it here.
-            // I'll import it at top.
+            // TODO: Implement parsing if needed, currently unused
         }
     };
     input.click();
@@ -454,7 +488,8 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       <PlayerHeader 
         title={title} 
         onBack={onBack} 
-        showControls={showControls} 
+        showControls={showControls}
+        audioFormat={mediaData?.audio_format} 
       />
 
       {/* Center Overlay */}
@@ -483,6 +518,9 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
         onPipToggle={onPipToggle}
         onNext={onNext}
         formatTime={formatTime}
+        onLike={mediaData?.tmdbId ? () => handleVote('like') : undefined}
+        onDislike={mediaData?.tmdbId ? () => handleVote('dislike') : undefined}
+        userVote={userVote}
       />
 
       {/* Settings */}

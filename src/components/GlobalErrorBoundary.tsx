@@ -18,7 +18,7 @@ const ErrorFallback: React.FC<FallbackProps> = ({ error, resetErrorBoundary }) =
 
         <div className="bg-black/30 rounded-lg p-4 mb-8 text-left overflow-auto max-h-40">
           <code className="text-xs text-red-400 font-mono">
-            {error?.message || 'Unknown error'}
+            {(error as Error)?.message || 'Unknown error'}
           </code>
         </div>
 
@@ -39,13 +39,13 @@ interface GlobalErrorBoundaryProps {
 }
 
 const GlobalErrorBoundary: React.FC<GlobalErrorBoundaryProps> = ({ children }) => {
-  const logError = (error: Error, info: { componentStack: string }) => {
+  const logError = (error: unknown, info: { componentStack?: string | null }) => {
     // Send to centralized error agent
     errorAgent.log({
-      message: error.message,
-      stack: error.stack,
+      message: (error as Error).message || String(error),
+      stack: (error as Error).stack,
       type: 'CRITICAL',
-      context: { componentStack: info.componentStack }
+      context: { componentStack: info.componentStack || 'No stack trace' }
     });
   };
 

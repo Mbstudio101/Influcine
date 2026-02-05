@@ -1,13 +1,15 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useEffect } from 'react';
 import { Media, MediaDetails } from '../types';
 import { getImageUrl } from '../services/tmdb';
 import { useNavigate } from 'react-router-dom';
-import { Play, Plus, Check, Star, Youtube } from 'lucide-react';
+import { Play, Plus, Check, Star, Youtube, ThumbsUp, ThumbsDown } from 'lucide-react';
 import Focusable from './Focusable';
 import { usePlayer } from '../context/PlayerContext';
 import { useWatchlist } from '../hooks/useWatchlist';
 import TrailerModal from './TrailerModal';
 import { useTrailerPrefetch } from '../hooks/useTrailerPrefetch';
+import { useAuth } from '../context/useAuth';
+import { getPreference, togglePreference } from '../services/recommendationEngine';
 
 interface MediaCardProps {
   media: Media;
@@ -35,6 +37,33 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
   
   // Trailer State
   const [showTrailer, setShowTrailer] = useState(false);
+
+  // Preference State
+  const { profile } = useAuth();
+  const [userVote, setUserVote] = useState<'like' | 'dislike' | null>(null);
+
+  useEffect(() => {
+    if (profile?.id && media.id) {
+      getPreference(profile.id, media.id).then(pref => {
+        if (pref?.vote === 'like') setUserVote('like');
+        else if (pref?.vote === 'dislike') setUserVote('dislike');
+      });
+    }
+  }, [profile, media.id]);
+
+  const handleVote = async (e: React.MouseEvent, vote: 'like' | 'dislike') => {
+    e.stopPropagation();
+    if (!profile?.id) return;
+    
+    // Optimistic update
+    if (userVote === vote) {
+      setUserVote(null); // Toggle off
+      await togglePreference(profile.id, media.id, vote, mediaType as 'movie' | 'tv'); 
+    } else {
+      setUserVote(vote);
+      await togglePreference(profile.id, media.id, vote, mediaType as 'movie' | 'tv');
+    }
+  };
   
   const progress = (media as SavedMediaWithProgress).progress;
   const hasProgress = progress && progress.percentage > 0 && progress.percentage < 95; // Don't show if almost finished (credits)
@@ -138,6 +167,14 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
               <Star size={12} className="text-yellow-400 fill-yellow-400" />
               <span>{media.vote_average.toFixed(1)}</span>
             </div>
+            
+            {/* Atmos / Audio Badge */}
+            {(media.audio_format === 'atmos') && (
+               <span className="bg-black/50 border border-white/10 px-1.5 py-0.5 rounded backdrop-blur-sm flex items-center gap-1">
+                 <span className="text-[9px] font-bold tracking-wider text-white">ATMOS</span>
+               </span>
+            )}
+            
             <span className="bg-white/10 px-1.5 py-0.5 rounded backdrop-blur-sm">
               {new Date(media.release_date || media.first_air_date || '').getFullYear() || 'N/A'}
             </span>
@@ -149,6 +186,28 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
               className="flex-1 bg-linear-to-r from-primary to-purple-600 text-white py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:brightness-110 transition-all duration-300 text-sm shadow-[0_0_15px_rgba(124,58,237,0.4)] whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Play size={14} fill="currentColor" /> {hasProgress ? 'Resume' : 'Play'}
+            </button>
+             <button
+              onClick={(e) => handleVote(e, 'like')}
+              className={`p-2.5 backdrop-blur-md border border-white/10 rounded-xl transition-colors shrink-0 ${
+                userVote === 'like' 
+                  ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' 
+                  : 'bg-white/10 text-white hover:bg-white/20'
+              }`}
+              title="Like"
+            >
+              <ThumbsUp size={16} className={userVote === 'like' ? 'fill-current' : ''} />
+            </button>
+             <button
+              onClick={(e) => handleVote(e, 'dislike')}
+              className={`p-2.5 backdrop-blur-md border border-white/10 rounded-xl transition-colors shrink-0 ${
+                userVote === 'dislike' 
+                  ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' 
+                  : 'bg-white/10 text-white hover:bg-white/20'
+              }`}
+              title="Dislike"
+            >
+              <ThumbsDown size={16} className={userVote === 'dislike' ? 'fill-current' : ''} />
             </button>
             <button
               onClick={handlePlayTrailer}

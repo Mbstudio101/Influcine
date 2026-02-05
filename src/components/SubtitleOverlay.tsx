@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { SubtitleCue } from '../utils/subtitleParser';
 
 interface SubtitleOverlayProps {
-  cues: SubtitleCue[];
+  subtitles: SubtitleCue[];
   currentTime: number;
   offset?: number; // In seconds
 }
 
-export const SubtitleOverlay: React.FC<SubtitleOverlayProps> = ({ cues, currentTime, offset = 0 }) => {
+export const SubtitleOverlay: React.FC<SubtitleOverlayProps> = ({ subtitles, currentTime, offset = 0 }) => {
   const [activeCue, setActiveCue] = useState<SubtitleCue | null>(null);
 
   useEffect(() => {
@@ -15,9 +15,9 @@ export const SubtitleOverlay: React.FC<SubtitleOverlayProps> = ({ cues, currentT
     // Find active cue
     // Optimize: if cues are sorted, we can binary search or keep track of index
     // For now, simple linear scan (usually < 2000 items)
-    const cue = cues.find(c => time >= c.start && time <= c.end);
+    const cue = subtitles.find(c => time >= c.start && time <= c.end);
     setActiveCue(cue || null);
-  }, [currentTime, cues, offset]);
+  }, [currentTime, subtitles, offset]);
 
   if (!activeCue) return null;
 

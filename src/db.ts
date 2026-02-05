@@ -93,11 +93,29 @@ export interface RecentSearch {
   timestamp: number;
 }
 
+export interface UserPreference {
+    id?: number;
+    profileId: number;
+    tmdbId: number;
+    mediaType: 'movie' | 'tv';
+    vote: 'like' | 'dislike';
+    timestamp: number;
+}
+
+export interface RecommendationCache {
+    id?: number;
+    profileId: number;
+    generatedAt: number;
+    items: Media[];
+}
+
 class InflucineDB extends Dexie {
   library!: Table<SavedMedia>;
   recentSearches!: Table<RecentSearch>;
   history!: Table<SavedMedia>;
   users!: Table<User>;
+  preferences!: Table<UserPreference>;
+  recommendationCache!: Table<RecommendationCache>;
   profiles!: Table<Profile>;
   achievements!: Table<Achievement>;
   sourceMemory!: Table<SourceMemory>;
@@ -256,6 +274,11 @@ class InflucineDB extends Dexie {
       cachedReleases: '++id, tmdbId, releaseDate, [tmdbId+mediaType]',
       queryCache: '++id, query, normalizedQuery, timestamp',
       episodeProgress: '++id, profileId, showId, season, episode, [profileId+showId+season+episode], [profileId+showId]'
+    });
+
+    this.version(18).stores({
+        preferences: '++id, profileId, tmdbId, [profileId+tmdbId]',
+        recommendationCache: 'profileId, generatedAt'
     });
   }
 }

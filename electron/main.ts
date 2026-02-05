@@ -75,11 +75,11 @@ protocol.registerSchemesAsPrivileged([
 
 // Fix for "GPU process exited unexpectedly" and "Network service crashed"
 // Disabling hardware acceleration improves stability
-app.disableHardwareAcceleration();
+// app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('no-sandbox');
 
 if (!app.isPackaged) {
-  // console.log('Hardware acceleration and sandbox disabled for development stability');
+  // console.log('Hardware acceleration enabled for performance');
 }
 
 // Configure logging
@@ -139,7 +139,7 @@ const ADBLOCK_SCRIPT = `
          if (video) {
              currentTracks = Array.from(video.textTracks || []).map((t, i) => ({
                  index: i,
-                 label: t.label || t.language || \`Track \${i+1}\`,
+                 label: t.label || t.language || ('Track ' + (i+1)),
                  language: t.language || 'en',
                  kind: t.kind,
                  source: 'native'
@@ -231,7 +231,7 @@ const ADBLOCK_SCRIPT = `
   }
 
   // 1. Popup Blocking (Aggressive)
-  const noop = () => { /* console.log("[Influcine] Blocked Popup/Alert"); */ return null; };
+  const noop = () => { return null; };
   window.open = noop;
   window.alert = noop;
   window.confirm = () => true; // Auto-confirm to bypass some checks
@@ -240,42 +240,77 @@ const ADBLOCK_SCRIPT = `
   // Mock common ad variables to fool detectors
   window.canRunAds = true;
   window.isAdBlockActive = false;
+  // Mock more common ad-tech variables
+  // @ts-ignore
+  window.google = { ad: {}, ads: {} };
+  // @ts-ignore
+  window.googletag = { cmd: [], pubads: () => ({ setTargeting: () => {}, refresh: () => {} }), display: () => {} };
   
-  // 3. Clickjacking & Overlay Remover
-  function cleanDOM() {
-    const elements = document.querySelectorAll('*');
-    elements.forEach(el => {
-      const style = window.getComputedStyle(el);
-      const zIndex = parseInt(style.zIndex);
-      
-      // Remove High Z-Index Overlays (likely ads)
-      // We assume legitimate player controls are < 10000 or specific classes
-      if (zIndex > 99999 && !String(el.className).includes('player') && !String(el.className).includes('control')) {
-        // console.log("[Influcine] Removed High-Z Element:", el);
-        el.remove();
+  // 3. CSS Injection for Immediate Hiding (Performance)
+  const style = document.createElement('style');
+  style.textContent = 'iframe[src*="ads"], iframe[src*="doubleclick"], .ad-banner, .adsbox, #ad-container, div[class*="ads"], div[id*="ads"], div[class*="sponsor"], a[href*="bet"], a[href*="casino"], .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-title, .vjs-control-bar, .vjs-big-play-button, .plyr__controls, .plyr__poster, #player-controls, .controls-container, div[style*="z-index: 2147483647"], div[style*="z-index: 9999999"] { display: none !important; visibility: hidden !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }';
+  document.head.appendChild(style);
+
+  // 4. MutationObserver for DOM Cleanup (Replaces polling)
+  const observer = new MutationObserver((mutations) => {
+    let shouldCheck = false;
+    for (const m of mutations) {
+      if (m.addedNodes.length > 0) {
+        shouldCheck = true;
+        break;
       }
-      
-      // Remove invisible full-screen overlays
-      if (style.position === 'fixed' && style.opacity === '0' && el.tagName === 'DIV') {
-        // console.log("[Influcine] Removed Invisible Overlay:", el);
-        el.remove();
-      }
-      
-      // Remove common ad iframes inside the player
-      if (el.tagName === 'IFRAME' && !el.src.includes('vidfast') && !el.src.includes('vidlink') && !el.src.includes('youtube')) {
-         // Check size - small iframes are often tracking pixels or hidden ads
-         if (el.offsetWidth < 10 && el.offsetHeight < 10) {
-           el.remove();
-         }
-      }
+    }
+    
+    if (shouldCheck) {
+      // Throttle cleanup with requestAnimationFrame
+      requestAnimationFrame(() => {
+        const elements = document.querySelectorAll('div, iframe, a');
+        elements.forEach(el => {
+           // Remove high z-index elements (popups/overlays)
+           // @ts-ignore
+           const z = parseInt(el.style.zIndex || '0');
+           if (z > 9999 && !el.className.includes('Influcine')) {
+               el.remove();
+           }
+           
+           // Remove invisible overlays
+           // @ts-ignore
+           if (el.style.position === 'fixed' && el.style.opacity === '0') {
+               el.remove();
+           }
+        });
+      });
+    }
+  });
+  
+  if (document.body) {
+    observer.observe(document.body, { childList: true, subtree: true });
+  } else {
+    window.addEventListener('DOMContentLoaded', () => {
+        observer.observe(document.body, { childList: true, subtree: true });
     });
   }
-  
-  // Run cleaner periodically
-  setInterval(cleanDOM, 1000);
+
+  // Fallback cleanup (every 5s instead of 1s/3s)
+  setInterval(() => {
+      // Clean specific known ad iframes
+      document.querySelectorAll('iframe').forEach(el => {
+          // @ts-ignore
+          if (!el.src.includes('vidfast') && !el.src.includes('vidlink') && !el.src.includes('youtube')) {
+               // Check dimensions - tiny iframes are trackers
+               // @ts-ignore
+               if (el.offsetWidth < 20 || el.offsetHeight < 20) el.remove();
+          }
+      });
+  }, 5000);
   
   // 4. Specific Site Fixes (VidFast / VidLink / 2Embed)
   window.addEventListener('DOMContentLoaded', () => {
+    // Inject CSS to hide external player controls (We provide our own UI)
+    const style = document.createElement('style');
+    style.textContent = '/* Hide Common Player Controls */ .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-title, .vjs-control-bar, .vjs-big-play-button, .plyr__controls, .plyr__poster, .art-controls, .art-mask, .art-layer-auto, .fluid-controls, .fluid-title, #player-controls, .controls-container, .media-controls, .fp-controls, .fp-ui, /* Hide VidSrc Specifics */ #controls, #play-button, #bar, /* Hide Native Controls if exposed */ video::-webkit-media-controls { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; } /* Ensure Video is Full Size */ video { width: 100% !important; height: 100% !important; object-fit: contain !important; }';
+    document.head.appendChild(style);
+
     // Force video to be visible if hidden by anti-adblock
     const video = document.querySelector('video');
     if (video) {
@@ -514,7 +549,7 @@ ipcMain.handle('trailer-search', async (_event, query) => {
       let output = '';
       const process = ytDlp.exec(ytDlpArgs);
       
-      process.on('data', (data: any) => output += data.toString());
+      process.on('data', (data: Buffer) => output += data.toString());
       process.on('error', () => resolve(null));
       process.on('close', () => {
         const id = output.trim();
@@ -865,6 +900,29 @@ function createWindow() {
       '*://*.tunnelbear.com/*',
       '*://*.windscribe.com/*',
       '*://*.hotspotshield.com/*',
+      // High-traffic Ad Networks found on streaming sites
+      '*://*.exoclick.com/*',
+      '*://*.juicyads.com/*',
+      '*://*.propellerads.com/*',
+      '*://*.tsyndicate.com/*',
+      '*://*.adxpansion.com/*',
+      '*://*.trafficjunky.com/*',
+      '*://*.traffichunt.com/*',
+      '*://*.adcash.com/*',
+      '*://*.popads.net/*',
+      '*://*.popcash.net/*',
+      '*://*.mgid.com/*',
+      '*://*.revcontent.com/*',
+      '*://*.content.ad/*',
+      '*://*.adnow.com/*',
+      '*://*.bidvertiser.com/*',
+      '*://*.clickadu.com/*',
+      '*://*.hilltopads.com/*',
+      '*://*.a-ads.com/*',
+      '*://*.coinzilla.com/*',
+      '*://*.bitmedia.io/*',
+      '*://*.cointraffic.io/*',
+      '*://*.adbit.co/*'
     ]
   }
 

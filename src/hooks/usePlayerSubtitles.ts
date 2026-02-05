@@ -11,7 +11,7 @@ export interface SubtitleFile {
 export function usePlayerSubtitles(
   videoRef: React.RefObject<HTMLVideoElement>,
   isEmbed: boolean,
-  mediaData: any,
+  mediaData: { imdbId?: string; season?: number; episode?: number } | undefined,
   src: string | undefined
 ) {
   const [availableSubtitles, setAvailableSubtitles] = useState<TextTrack[]>([]);
@@ -100,7 +100,7 @@ export function usePlayerSubtitles(
     };
 
     fetchSubs();
-  }, [mediaData?.imdbId, isEmbed, embedTracks.length, customSubtitles.length]);
+  }, [mediaData?.imdbId, isEmbed, embedTracks.length, customSubtitles.length, mediaData]);
 
   const loadAutoSubtitle = (index: number) => {
       if (index === -1) {

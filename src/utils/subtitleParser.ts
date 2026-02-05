@@ -21,7 +21,7 @@ export const parseSubtitle = (content: string): SubtitleCue[] => {
   }
 
   while (i < lines.length) {
-    let line = lines[i].trim();
+    const line = lines[i].trim();
     
     // Skip empty lines or indices (for SRT)
     if (!line || /^\d+$/.test(line)) {

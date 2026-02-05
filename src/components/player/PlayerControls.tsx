@@ -1,7 +1,8 @@
 import React from 'react';
 import { 
   Play, Pause, Volume2, VolumeX, Settings, 
-  Maximize, Minimize, PictureInPicture, SkipForward 
+  Maximize, Minimize, PictureInPicture, SkipForward, 
+  ThumbsUp, ThumbsDown 
 } from 'lucide-react';
 import Focusable from '../Focusable';
 
@@ -23,6 +24,9 @@ interface PlayerControlsProps {
   onPipToggle?: () => void;
   onNext?: () => void;
   formatTime: (time: number) => string;
+  onLike?: () => void;
+  onDislike?: () => void;
+  userVote?: 'like' | 'dislike' | null;
 }
 
 export const PlayerControls: React.FC<PlayerControlsProps> = ({
@@ -42,7 +46,10 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   isPip,
   onPipToggle,
   onNext,
-  formatTime
+  formatTime,
+  onLike,
+  onDislike,
+  userVote
 }) => {
   return (
     <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pb-4 pt-12 transition-opacity duration-300 z-50 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
@@ -108,12 +115,38 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             </div>
           </div>
 
-          <span className="text-sm font-medium text-gray-300 font-mono">
-            {formatTime(currentTime)} / {formatTime(duration)}
-          </span>
+          <div className="flex items-center text-white/80 text-sm font-medium">
+            <span>{formatTime(currentTime)}</span>
+            <span className="mx-1">/</span>
+            <span className="opacity-60">{formatTime(duration)}</span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
+           {/* Like / Dislike */}
+           {onLike && onDislike && (
+             <div className="flex items-center gap-2 mr-4 border-r border-white/10 pr-4">
+                <Focusable onEnter={onLike}>
+                  <button 
+                    onClick={onLike}
+                    className={`p-2 rounded-full transition-colors ${userVote === 'like' ? 'text-green-400 bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+                    title="I like this"
+                  >
+                    <ThumbsUp className={`w-5 h-5 ${userVote === 'like' ? 'fill-current' : ''}`} />
+                  </button>
+                </Focusable>
+                <Focusable onEnter={onDislike}>
+                  <button 
+                    onClick={onDislike}
+                    className={`p-2 rounded-full transition-colors ${userVote === 'dislike' ? 'text-red-400 bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+                    title="Not for me"
+                  >
+                    <ThumbsDown className={`w-5 h-5 ${userVote === 'dislike' ? 'fill-current' : ''}`} />
+                  </button>
+                </Focusable>
+             </div>
+           )}
+
           {onPipToggle && document.pictureInPictureEnabled && (
              <Focusable onEnter={onPipToggle}>
                <button 
@@ -131,7 +164,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
               onClick={onOpenSettings}
               className="p-2 hover:bg-white/10 rounded-full text-white transition-colors"
             >
-              <Settings className="w-5 h-5" />
+              <Settings className="w-6 h-6" />
             </button>
           </Focusable>
 

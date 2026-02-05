@@ -48,7 +48,8 @@ tmdb.interceptors.response.use(
 );
 
 // Direct API call without double caching (handled by React Query)
-const fetchApi = async <T>(url: string, params?: Record<string, unknown>): Promise<T> => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const fetchApi = async <T>(url: string, params?: Record<string, any>): Promise<T> => {
   const response = await tmdb.get<T>(url, { params });
   return response.data;
 };
@@ -63,7 +64,8 @@ export const searchMulti = async (query: string): Promise<Media[]> => {
   return filterBroken(data.results);
 };
 
-export const getDetails = async (type: 'movie' | 'tv', id: number, params?: Record<string, unknown>): Promise<MediaDetails> => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const getDetails = async (type: 'movie' | 'tv', id: number, params?: Record<string, any>): Promise<MediaDetails> => {
   const data = await fetchApi<MediaDetails>(`/${type}/${id}`, {
     append_to_response: 'videos,credits,similar',
     ...params
@@ -133,6 +135,8 @@ export const discoverMedia = async (
     'first_air_date.lte'?: string;
     with_original_language?: string;
     page?: number;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    [key: string]: any;
   }
 ): Promise<Media[]> => {
   const data = await fetchApi<{ results: Media[] }>(`/discover/${type}`, params);

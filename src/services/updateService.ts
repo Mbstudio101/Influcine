@@ -86,7 +86,12 @@ export const checkForUpdates = async (currentVersion: string): Promise<AppVersio
             platforms: { macos: 'ipc', windows: 'ipc', linux: 'ipc' } // Marker for IPC handling
           };
         }
-        return null; // No update
+        // If Electron check says no update, we stop here (native flow is authoritative)
+        // Unless we are in dev mode and want to test GitHub fallback?
+        // No, keep it simple.
+        if (result.update === false) {
+             return null;
+        }
       } catch (err) {
         // console.warn('Electron update check failed, falling back to GitHub API', err);
         // Fallback to GitHub API below

@@ -182,7 +182,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (error) {
             // If there's an error (e.g. 403 Forbidden, invalid token), ensure we clear any stale state
             await supabase.auth.signOut().catch(() => {});
-            localStorage.removeItem('sb-' + import.meta.env.VITE_SUPABASE_URL + '-auth-token');
+            // Robust cleanup
+            for (const key of Object.keys(localStorage)) {
+                if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                    localStorage.removeItem(key);
+                }
+            }
           } else {
             session = data.session;
           }
@@ -198,6 +203,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch (error) {
         // console.error('Failed to restore session:', error);
+        // Force cleanup on error
+        await supabase.auth.signOut().catch(() => {});
+        localStorage.removeItem('sb-' + new URL(import.meta.env.VITE_SUPABASE_URL).hostname.split('.')[0] + '-auth-token');
+        // Also try generic cleanup for robustness
+        for (const key of Object.keys(localStorage)) {
+            if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                localStorage.removeItem(key);
+            }
+        }
       } finally {
         setIsLoading(false);
       }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { usePlayer } from '../context/PlayerContext';
 import InflucinePlayer from './InflucinePlayer';
-import { useEmbedUrl } from '../hooks/useEmbedUrl';
+import { useEmbedUrl, StreamProvider } from '../hooks/useEmbedUrl';
 import { X, Maximize2, Monitor } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { downloadService } from '../services/downloadService';
@@ -27,6 +27,7 @@ const GlobalPlayer: React.FC = () => {
 
   const [startTime, setStartTime] = useState(requestedStartTime || 0);
   const isPlayingRef = useRef(false);
+  const [provider, setProvider] = useState<StreamProvider>('vidfast');
 
   // PiP Size Management
   const [pipSize, setPipSize] = useState<'sm' | 'md' | 'lg'>('md');
@@ -79,7 +80,8 @@ const GlobalPlayer: React.FC = () => {
     id: id || '',
     season,
     episode,
-    startTime
+    startTime,
+    provider
   });
 
   // Calculate next episode
@@ -252,6 +254,8 @@ const GlobalPlayer: React.FC = () => {
                 onPause={handlePause}
                 onEnded={handleEnded}
                 onTimeUpdate={handleTimeUpdate}
+                provider={provider}
+                onProviderChange={(p) => setProvider(p as StreamProvider)}
             />
         )}
     </div>

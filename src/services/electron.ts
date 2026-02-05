@@ -1,4 +1,4 @@
-import { Subtitle, ImdbResult, ImdbDetails, UpdateCheckResult } from '../types';
+import { Subtitle, AutoSubtitle, ImdbResult, ImdbDetails, UpdateCheckResult } from '../types';
 
 // Centralized Electron Service
 // Handles all IPC communication between Renderer and Main process
@@ -9,7 +9,7 @@ export interface ElectronService {
   
   // Subtitles
   getSubtitles(videoId: string): Promise<Subtitle[]>;
-  autoFetchSubtitles(mediaData: unknown): Promise<Subtitle[]>;
+  autoFetchSubtitles(mediaData: unknown): Promise<AutoSubtitle[]>;
   
   // Trailers
   prefetchTrailer(url: string): Promise<void>;
@@ -57,8 +57,8 @@ class ElectronServiceImpl implements ElectronService {
     return this.invoke<Subtitle[]>('get-subtitles', videoId);
   }
 
-  async autoFetchSubtitles(mediaData: unknown): Promise<Subtitle[]> {
-    return this.invoke<Subtitle[]>('auto-fetch-subtitles', mediaData);
+  async autoFetchSubtitles(mediaData: unknown): Promise<AutoSubtitle[]> {
+    return this.invoke<AutoSubtitle[]>('auto-fetch-subtitles', mediaData);
   }
 
   // Trailers

@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  Sparkles, Check, Volume2, Type, Gauge, X 
+  Sparkles, Check, Volume2, Type, Gauge, X, Globe 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SubtitleFile } from '../../hooks/usePlayerSubtitles';
@@ -19,8 +19,8 @@ interface PlayerSettingsProps {
   onClose: () => void;
   
   // Tabs
-  activeTab: 'speed' | 'audio' | 'subtitles';
-  setActiveTab: (tab: 'speed' | 'audio' | 'subtitles') => void;
+  activeTab: 'speed' | 'audio' | 'subtitles' | 'source';
+  setActiveTab: (tab: 'speed' | 'audio' | 'subtitles' | 'source') => void;
   
   // Speed
   playbackSpeed: number;
@@ -43,13 +43,18 @@ interface PlayerSettingsProps {
   activeEmbedTrackIndex: number;
   onEmbedTrackChange: (index: number) => void;
   
-  autoSubtitles: {label: string, content: string}[];
+  autoSubtitles: any[];
   activeAutoSubtitleIndex: number;
   onAutoSubtitleChange: (index: number) => void;
   
   isSearchingSubs: boolean;
   onUploadClick: () => void;
   onSearchOnline: () => void;
+  
+  provider?: string;
+  onProviderChange?: (provider: string) => void;
+  isNativeMode?: boolean;
+  onToggleNativeMode?: () => void;
 }
 
 export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
@@ -61,7 +66,9 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
   availableSubtitles, externalSubtitles, activeSubtitleIndex, onSubtitleChange,
   embedTracks, activeEmbedTrackIndex, onEmbedTrackChange,
   autoSubtitles, activeAutoSubtitleIndex, onAutoSubtitleChange,
-  isSearchingSubs, onUploadClick, onSearchOnline
+  isSearchingSubs, onUploadClick, onSearchOnline,
+  provider, onProviderChange,
+  isNativeMode, onToggleNativeMode
 }) => {
   return (
     <AnimatePresence>
@@ -75,7 +82,13 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
           {/* Header */}
           <div className="p-4 border-b border-white/10 flex items-center justify-between">
             <h2 className="font-semibold text-white">Settings</h2>
-            <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full text-white/70 hover:text-white">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }} 
+              className="p-2 hover:bg-white/10 rounded-full text-white/70 hover:text-white"
+            >
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -103,10 +116,58 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
               <Gauge className="w-5 h-5" />
               Speed
             </button>
+            <button 
+              onClick={() => setActiveTab('source')}
+              className={`flex-1 p-3 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${activeTab === 'source' ? 'text-blue-400 bg-white/5' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+            >
+              <Globe className="w-5 h-5" />
+              Source
+            </button>
           </div>
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+            {activeTab === 'source' && (
+              <div className="space-y-4">
+                {onToggleNativeMode && (
+                  <button
+                    onClick={onToggleNativeMode}
+                    className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all mb-4 ${isNativeMode ? 'bg-red-500/20 border-red-500/50 text-white' : 'bg-white/5 border-transparent text-white/70 hover:bg-white/10'}`}
+                  >
+                     <div className="text-left">
+                       <div className="font-medium">{isNativeMode ? 'Disable Native Mode' : 'Enable Native Mode'}</div>
+                       <div className="text-xs opacity-60">Use the embedded player's original controls</div>
+                     </div>
+                     {isNativeMode && <Check className="w-5 h-5 text-red-400" />}
+                  </button>
+                )}
+
+                <div className="text-xs text-white/50 px-1">
+                  If the current video is not loading, buffering, or incorrect, try switching to a different source provider.
+                </div>
+                
+                {[
+                  { id: 'vidfast', name: 'VidFast', desc: 'Fastest, No Ads (Default)' },
+                  { id: 'vidlink', name: 'VidLink', desc: 'High Quality, Multi-Server' },
+                  { id: 'vidsrc', name: 'VidSrc', desc: 'Reliable Backup' },
+                  { id: 'superembed', name: 'SuperEmbed', desc: 'Aggregator' },
+                  { id: '2embed', name: '2Embed', desc: 'Alternative' },
+                ].map(p => (
+                    <button
+                        key={p.id}
+                        onClick={() => onProviderChange?.(p.id)}
+                        className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${provider === p.id ? 'bg-blue-500/20 border-blue-500/50 text-white' : 'bg-white/5 border-transparent text-white/70 hover:bg-white/10'}`}
+                    >
+                        <div className="text-left">
+                            <div className="font-medium">{p.name}</div>
+                            <div className="text-xs opacity-60">{p.desc}</div>
+                        </div>
+                        {provider === p.id && <Check className="w-5 h-5 text-blue-400" />}
+                    </button>
+                ))}
+              </div>
+            )}
+
             {activeTab === 'speed' && (
               <div className="space-y-1">
                 {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map(speed => (

@@ -18,6 +18,7 @@ import { migrateDatabaseIds } from './services/migration';
 import { CleanupAgent } from './services/CleanupAgent';
 import { PlayerProvider } from './context/PlayerContext';
 import GlobalPlayer from './components/GlobalPlayer';
+import BugReporter from './components/BugReporter';
 
 // Lazy load components
 const UpdateModal = lazy(() => import('./components/UpdateModal'));
@@ -194,6 +195,7 @@ function App() {
             readyToInstall={updateReady}
           />
         )}
+        <BugReporter />
         <Router>
           <GlobalPlayer />
           <div className="h-screen w-full bg-black text-white overflow-hidden flex flex-col select-none">

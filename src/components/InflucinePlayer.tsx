@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSettings } from '../context/SettingsContext';
 import { SubtitleOverlay } from './SubtitleOverlay';
+import { electronService } from '../services/electron';
 
 // Hooks
 import { usePlayerAudio } from '../hooks/usePlayerAudio';
@@ -8,13 +9,15 @@ import { usePlayerSubtitles } from '../hooks/usePlayerSubtitles';
 import { useAuth } from '../context/useAuth';
 import { getPreference, togglePreference } from '../services/recommendationEngine';
 
-import { SubtitleCue } from '../utils/subtitleParser';
+import { SubtitleCue, parseSubtitle } from '../utils/subtitleParser';
 
 // Components
 import { PlayerHeader } from './player/PlayerHeader';
 import { PlayerControls } from './player/PlayerControls';
 import { PlayerOverlay } from './player/PlayerOverlay';
 import { PlayerSettings } from './player/PlayerSettings';
+import { PlayerErrorBoundary } from './player/PlayerErrorBoundary';
+import TitleBar from './TitleBar';
 
 interface InflucinePlayerProps {
   src?: string;
@@ -30,6 +33,8 @@ interface InflucinePlayerProps {
   startTime?: number;
   onPipToggle?: () => void;
   isPip?: boolean;
+  provider?: string;
+  onProviderChange?: (provider: string) => void;
   mediaData?: {
     tmdbId?: string;
     imdbId?: string;
@@ -54,6 +59,8 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   startTime = 0,
   onPipToggle,
   isPip = false,
+  provider,
+  onProviderChange,
   mediaData
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -61,13 +68,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const iframeRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const [adblockPath, setAdblockPath] = useState<string>('');
-  const [forceEmbed] = useState(false);
-  const isEmbed = forceEmbed || (!!embedSrc && !src);
-
-  useEffect(() => {
-    window.ipcRenderer.invoke('get-adblock-path').then(setAdblockPath).catch(() => {});
-  }, []);
+  const isEmbed = !!embedSrc && !src;
 
   // --- Player State ---
   const [isPlaying, setIsPlaying] = useState(false);
@@ -108,19 +109,37 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [hasResumed, setHasResumed] = useState(false);
-  
+  const [internalPip, setInternalPip] = useState(false);
+  const [adblockPath, setAdblockPath] = useState<string>('');
+  const [isNativeMode, setIsNativeMode] = useState(false);
+
   // Settings Tab State
-  const [activeTab, setActiveTab] = useState<'speed' | 'audio' | 'subtitles'>('audio');
+  const [activeTab, setActiveTab] = useState<'speed' | 'audio' | 'subtitles' | 'source'>('audio');
   useEffect(() => {
-    if (isEmbed) setActiveTab('speed');
+    if (isEmbed) setActiveTab('source');
   }, [isEmbed]);
+
+  const toggleNativeMode = useCallback(() => {
+      if (!isEmbed) return;
+      
+      const newMode = !isNativeMode;
+      setIsNativeMode(newMode);
+      
+      if (iframeRef.current?.send) {
+          iframeRef.current.send('player-command', { 
+              command: newMode ? 'showNativeControls' : 'hideNativeControls' 
+          });
+      }
+      setShowSettings(false);
+  }, [isEmbed, isNativeMode]);
 
   // --- Hooks ---
   const {
     audioMode, setAudioMode,
     audioFormat,
     resumeAudioContext,
-    availableTracks, detectAudioCapabilities, switchAudioTrack
+    availableTracks, detectAudioCapabilities, switchAudioTrack,
+    setVolume: setAudioGain
   } = usePlayerAudio(videoRef, isEmbed, src);
 
   const {
@@ -129,7 +148,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     customSubtitles, setCustomSubtitles,
     embedTracks, setEmbedTracks,
     activeEmbedTrackIndex, setActiveEmbedTrackIndex,
-    autoSubtitles, activeAutoSubtitleIndex, loadAutoSubtitle,
+    autoSubtitles, activeAutoSubtitleIndex, setActiveAutoSubtitleIndex, loadAutoSubtitle,
     isSearchingSubs
   } = usePlayerSubtitles(videoRef, isEmbed, mediaData, src);
 
@@ -139,7 +158,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 
   // --- Logic ---
 
-  const formatTime = (time: number) => {
+  const formatTime = useCallback((time: number) => {
     const hours = Math.floor(time / 3600);
     const minutes = Math.floor((time % 3600) / 60);
     const seconds = Math.floor(time % 60);
@@ -148,13 +167,32 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
+  }, []);
 
   // Initialize
   useEffect(() => {
+    electronService.getAdblockPath().then(path => {
+       // Convert to file:// URL for preload if needed, but Electron usually takes absolute path
+       // Actually, preload accepts file path or file:// url.
+       // Let's use string path as returned by main process.
+       setAdblockPath(path ? `file://${path}` : '');
+    });
+
     if (!isEmbed && videoRef.current) {
       videoRef.current.currentTime = startTime;
       setVolume(videoRef.current.volume);
+
+      const video = videoRef.current;
+      const onEnterPip = () => setInternalPip(true);
+      const onLeavePip = () => setInternalPip(false);
+  
+      video.addEventListener('enterpictureinpicture', onEnterPip);
+      video.addEventListener('leavepictureinpicture', onLeavePip);
+  
+      return () => {
+          video.removeEventListener('enterpictureinpicture', onEnterPip);
+          video.removeEventListener('leavepictureinpicture', onLeavePip);
+      };
     }
   }, [startTime, isEmbed]);
 
@@ -234,35 +272,73 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 
   const handleVolumeChange = useCallback((newVolume: number) => {
     setVolume(newVolume);
+    setAudioGain(newVolume);
     if (isEmbed) {
+      if (iframeRef.current?.send) {
+        // Send generic 'setVolume' if the adblock script supports it?
+        // Our adblock script supports 'player-command'.
+        // But most web players don't have a standardized 'setVolume' message unless we coded it.
+        // Let's assume we can try to inject JS to set volume.
+        // The adblock script doesn't handle 'volume' command yet. 
+        // We should add it to electron/main.ts or rely on the adblock script to expose it.
+        // Actually, we can try to send a command and let the main process handle it.
+        // But for now, let's just handle mute.
+        // UPDATE: User says audio settings not connected.
+        // Let's add 'setVolume' command to main.ts loop.
+        iframeRef.current.send('player-command', { command: 'setVolume', volume: newVolume });
+      }
       setIsMuted(newVolume === 0);
       return;
     }
+    // Only set video element volume if we are NOT using the audio graph's GainNode heavily 
+    // to avoid double attenuation (quadratic volume curve).
+    // However, keeping video.volume=1 ensures the SourceNode gets full signal 
+    // and we control it via GainNode.
     if (videoRef.current) {
-      videoRef.current.volume = newVolume;
-      setIsMuted(newVolume === 0);
+        // Standard practice: Keep element volume at 1 and use GainNode for control
+        // OR sync them. If we sync them, we get x^2 curve.
+        // Let's rely on GainNode for smooth ramping and keep video volume fixed at 1
+        // UNLESS the user wants to mute.
+        // Actually, let's keep it simple: sync both but be aware of the curve.
+        // Better UX: linear slider -> GainNode. video.volume = 1.
+        videoRef.current.volume = 1; 
+        videoRef.current.muted = newVolume === 0;
     }
-  }, [isEmbed]);
+    setIsMuted(newVolume === 0);
+  }, [isEmbed, setAudioGain]);
 
   const toggleMute = useCallback(() => {
     if (isEmbed) {
       const newMuted = !isMuted;
       setIsMuted(newMuted);
       setVolume(newMuted ? 0 : 1);
+      setAudioGain(newMuted ? 0 : 1);
+      if (iframeRef.current?.send) {
+          iframeRef.current.send('player-command', { command: 'setMute', muted: newMuted });
+      }
       return;
     }
     if (videoRef.current) {
-      const newMuted = !videoRef.current.muted;
+      const newMuted = !isMuted; // Toggle local state
+      
+      // Update video element
       videoRef.current.muted = newMuted;
+      
+      // Update UI state
       setIsMuted(newMuted);
+
       if (newMuted) {
-        setVolume(0);
+        setVolume(0); // Set UI slider to 0
+        setAudioGain(0); // Mute GainNode
       } else {
+        // Unmute: Restore to previous volume (or 1 if unknown)
+        // For simplicity, restore to 1. Ideally we should store 'lastVolume'
         setVolume(1);
+        setAudioGain(1);
         videoRef.current.volume = 1;
       }
     }
-  }, [isEmbed, isMuted]);
+  }, [isEmbed, isMuted, setAudioGain]);
 
   const changeSpeed = useCallback((speed: number) => {
     if (isEmbed) {
@@ -284,8 +360,8 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     }
   }, [isEmbed]);
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(e.target.value);
+  const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement> | number) => {
+    const time = typeof e === 'number' ? e : parseFloat(e.target.value);
     if (isEmbed) {
       if (iframeRef.current?.send) {
         iframeRef.current.send('player-command', { command: 'seek', time });
@@ -299,7 +375,71 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       videoRef.current.currentTime = time;
       setCurrentTime(time);
     }
-  };
+  }, [isEmbed]);
+
+  const togglePip = useCallback(async () => {
+    if (onPipToggle) {
+        onPipToggle();
+        return;
+    }
+
+    if (isEmbed) return;
+
+    try {
+        if (document.pictureInPictureElement) {
+            await document.exitPictureInPicture();
+        } else if (videoRef.current) {
+            await videoRef.current.requestPictureInPicture();
+        }
+    } catch (e) {
+        // console.error("PiP failed", e);
+    }
+  }, [isEmbed, onPipToggle]);
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        // Ignore if typing in an input
+        if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
+
+        switch(e.key.toLowerCase()) {
+            case ' ':
+            case 'k':
+                e.preventDefault();
+                togglePlay();
+                break;
+            case 'f':
+                e.preventDefault();
+                toggleFullscreen();
+                break;
+            case 'm':
+                e.preventDefault();
+                toggleMute();
+                break;
+            case 'arrowleft':
+            case 'j':
+                e.preventDefault();
+                handleSeek(currentTime - 10);
+                break;
+            case 'arrowright':
+            case 'l':
+                e.preventDefault();
+                handleSeek(currentTime + 10);
+                break;
+            case 'arrowup':
+                e.preventDefault();
+                handleVolumeChange(Math.min(1, volume + 0.1));
+                break;
+            case 'arrowdown':
+                e.preventDefault();
+                handleVolumeChange(Math.max(0, volume - 0.1));
+                break;
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [togglePlay, toggleFullscreen, toggleMute, currentTime, volume, handleSeek, handleVolumeChange]);
 
   const handleLoadedMetadata = () => {
     if (isEmbed) return;
@@ -382,17 +522,45 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
         }
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleStateUpdate = (_: any, state: any) => {
+        const { event: playerEvent, currentTime: ct, duration: dur, paused } = state;
+        
+        if (typeof ct === 'number') {
+            setCurrentTime(ct);
+            if (typeof dur === 'number') onTimeUpdate?.(ct, dur);
+        }
+        if (typeof dur === 'number') setDuration(dur);
+
+        const isPaused = paused === true || playerEvent === 'pause';
+        const isPlayingState = paused === false || playerEvent === 'play';
+
+        if (isPlayingState) {
+             setIsPlaying(true);
+             onPlay?.();
+             if (startTime > 0 && !hasResumed) {
+                 iframeRef.current?.send('player-command', { command: 'seek', time: startTime });
+                 setHasResumed(true);
+             }
+        } else if (isPaused) {
+             setIsPlaying(false);
+             onPause?.();
+        }
+    };
+
     if (window.ipcRenderer) {
         window.ipcRenderer.on('embed-tracks-found', handleTracks);
         window.ipcRenderer.on('embed-track-cues', handleCues);
+        window.ipcRenderer.on('player-state-update', handleStateUpdate);
     }
     return () => {
         if (window.ipcRenderer) {
             window.ipcRenderer.removeAllListeners('embed-tracks-found');
             window.ipcRenderer.removeAllListeners('embed-track-cues');
+            window.ipcRenderer.removeAllListeners('player-state-update');
         }
     };
-  }, [activeEmbedTrackIndex, setEmbedTracks, setCustomSubtitles]);
+  }, [activeEmbedTrackIndex, setEmbedTracks, setCustomSubtitles, startTime, hasResumed, onTimeUpdate, onPlay, onPause]);
 
   const loadEmbedTrack = (index: number) => {
       if (index === -1) {
@@ -416,7 +584,19 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     input.onchange = async (e) => {
         const file = (e.target as HTMLInputElement).files?.[0];
         if (file) {
-            // TODO: Implement parsing if needed, currently unused
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const content = event.target?.result as string;
+                if (content) {
+                    const cues = parseSubtitle(content);
+                    setCustomSubtitles(cues);
+                    // Reset other subtitle states to prioritize this custom upload
+                    setActiveEmbedTrackIndex(-1);
+                    setActiveAutoSubtitleIndex(-1);
+                    setActiveSubtitleIndex(-1);
+                }
+            };
+            reader.readAsText(file);
         }
     };
     input.click();
@@ -438,6 +618,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   };
 
   return (
+    <PlayerErrorBoundary>
     <div 
       ref={containerRef}
       className="relative w-full h-full bg-black group overflow-hidden font-sans select-none"
@@ -445,115 +626,181 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     >
       <style>{getSubtitleStyles()}</style>
 
+      {/* Persistent Window Controls - Always Top Z-Index */}
+      <div className="absolute top-0 left-0 right-0 z-100 pointer-events-none">
+        <TitleBar isOverlay className={isNativeMode ? 'opacity-0 hover:opacity-100 transition-opacity' : ''} />
+      </div>
+
       {isEmbed ? (
-        <webview
-          ref={iframeRef}
-          src={embedSrc}
-          className="w-full h-full border-0"
-          preload={`file://${adblockPath}`}
-          webpreferences="contextIsolation=true, nodeIntegration=false"
-        />
+        <div className="absolute inset-0 z-0">
+          <webview
+            ref={iframeRef}
+            src={embedSrc}
+            className="w-full h-full border-0"
+            preload={adblockPath || undefined}
+            webpreferences="contextIsolation=no, nodeIntegration=yes"
+            allowpopups="true"
+          />
+        </div>
       ) : (
-        <video
-          ref={videoRef}
-          src={src}
-          className="w-full h-full object-contain"
-          onTimeUpdate={() => {
-              if(videoRef.current) {
-                  setCurrentTime(videoRef.current.currentTime);
-                  onTimeUpdate?.(videoRef.current.currentTime, videoRef.current.duration);
+        <div className="absolute inset-0 z-0">
+          <video
+            ref={videoRef}
+            src={src}
+            className={`w-full h-full object-contain bg-black transition-opacity duration-300 ${isBuffering ? 'opacity-50' : 'opacity-100'}`}
+            onTimeUpdate={() => {
+              if (videoRef.current) {
+                const t = videoRef.current.currentTime;
+                setCurrentTime(t);
+                onTimeUpdate?.(t, videoRef.current.duration);
               }
-          }}
-          onLoadedMetadata={handleLoadedMetadata}
-          onWaiting={() => setIsBuffering(true)}
-          onPlaying={() => setIsBuffering(false)}
-          onEnded={() => {
+            }}
+            onLoadedMetadata={handleLoadedMetadata}
+            onWaiting={() => setIsBuffering(true)}
+            onPlaying={() => {
+              setIsBuffering(false);
+              setIsPlaying(true);
+              onPlay?.();
+            }}
+            onPause={() => {
               setIsPlaying(false);
-              onEnded?.();
-          }}
-          crossOrigin="anonymous"
-          poster={poster}
-          playsInline
-        />
+              onPause?.();
+            }}
+            onEnded={() => {
+                setIsPlaying(false);
+                onEnded?.();
+            }}
+            crossOrigin="anonymous"
+            poster={poster}
+            playsInline
+          />
+        </div>
       )}
 
-      {/* Subtitle Overlay (Custom / Embed / Auto) */}
-      <SubtitleOverlay 
-        subtitles={customSubtitles} 
-        currentTime={currentTime} 
-        offset={0}
-      />
+      {/* Subtitle Overlay - Z-Index 10 */}
+      <div className="absolute inset-0 z-10 pointer-events-none">
+        <SubtitleOverlay 
+          subtitles={customSubtitles} 
+          currentTime={currentTime} 
+          offset={0}
+        />
+      </div>
 
-      {/* Header */}
-      <PlayerHeader 
-        title={title} 
-        onBack={onBack} 
-        showControls={showControls}
-        audioFormat={mediaData?.audio_format} 
-      />
+      {/* Header - Z-Index 20 */}
+      {!isNativeMode && (
+          <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none">
+            <PlayerHeader 
+              title={title} 
+              onBack={onBack} 
+              showControls={showControls}
+              audioFormat={mediaData?.audio_format} 
+            />
+          </div>
+      )}
+      
+      {/* Native Mode Back Button - Z-Index 50 */}
+      {isNativeMode && (
+          <div className="absolute top-4 left-4 z-50">
+              <button 
+                onClick={onBack}
+                className="p-2 bg-black/50 hover:bg-black/80 rounded-full text-white transition-colors backdrop-blur-md pointer-events-auto"
+              >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+          </div>
+      )}
+      
+      {/* Native Mode Settings Trigger - Z-Index 50 */}
+      {isNativeMode && (
+          <div className="absolute top-4 right-4 z-50">
+              <button 
+                onClick={() => setShowSettings(true)}
+                className="p-2 bg-black/50 hover:bg-black/80 rounded-full text-white transition-colors backdrop-blur-md pointer-events-auto"
+              >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+          </div>
+      )}
 
-      {/* Center Overlay */}
-      <PlayerOverlay 
-        isPlaying={isPlaying} 
-        isBuffering={isBuffering} 
-        onTogglePlay={togglePlay} 
-      />
+      {/* Center Overlay - Z-Index 30 */}
+      {!isNativeMode && (
+          <div className="absolute inset-0 z-30 pointer-events-none">
+            <PlayerOverlay 
+                isPlaying={isPlaying} 
+                isBuffering={isBuffering} 
+                onTogglePlay={togglePlay} 
+            />
+          </div>
+      )}
 
-      {/* Controls */}
-      <PlayerControls
-        showControls={showControls}
-        isPlaying={isPlaying}
-        onTogglePlay={togglePlay}
-        currentTime={currentTime}
-        duration={duration}
-        onSeek={handleSeek}
-        volume={volume}
-        onVolumeChange={handleVolumeChange}
-        isMuted={isMuted}
-        onToggleMute={toggleMute}
-        isFullscreen={isFullscreen}
-        onToggleFullscreen={toggleFullscreen}
-        onOpenSettings={() => setShowSettings(true)}
-        isPip={isPip}
-        onPipToggle={onPipToggle}
-        onNext={onNext}
-        formatTime={formatTime}
-        onLike={mediaData?.tmdbId ? () => handleVote('like') : undefined}
-        onDislike={mediaData?.tmdbId ? () => handleVote('dislike') : undefined}
-        userVote={userVote}
-      />
+      {/* Controls - Z-Index 40 */}
+      {!isNativeMode && (
+          <div className="absolute bottom-0 left-0 right-0 z-40 pointer-events-auto">
+            <PlayerControls
+                showControls={showControls}
+                isPlaying={isPlaying}
+                onTogglePlay={togglePlay}
+                currentTime={currentTime}
+                duration={duration}
+                onSeek={handleSeek}
+                volume={volume}
+                onVolumeChange={handleVolumeChange}
+                isMuted={isMuted}
+                onToggleMute={toggleMute}
+                isFullscreen={isFullscreen}
+                onToggleFullscreen={toggleFullscreen}
+                onOpenSettings={() => setShowSettings(true)}
+                isPip={isPip || internalPip}
+                onPipToggle={togglePip}
+                onNext={onNext}
+                formatTime={formatTime}
+                onLike={mediaData?.tmdbId ? () => handleVote('like') : undefined}
+                onDislike={mediaData?.tmdbId ? () => handleVote('dislike') : undefined}
+                userVote={userVote}
+            />
+          </div>
+      )}
 
-      {/* Settings */}
-      <PlayerSettings
-        isOpen={showSettings}
-        onClose={() => setShowSettings(false)}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        playbackSpeed={playbackSpeed}
-        onSpeedChange={changeSpeed}
-        audioMode={audioMode}
-        onAudioModeChange={setAudioMode}
-        audioFormat={audioFormat}
-        availableTracks={availableTracks}
-        onTrackChange={switchAudioTrack}
-        availableSubtitles={availableSubtitles}
-        externalSubtitles={externalSubtitles}
-        activeSubtitleIndex={activeSubtitleIndex}
-        onSubtitleChange={switchSubtitleTrack}
-        embedTracks={embedTracks}
-        activeEmbedTrackIndex={activeEmbedTrackIndex}
-        onEmbedTrackChange={loadEmbedTrack}
-        autoSubtitles={autoSubtitles}
-        activeAutoSubtitleIndex={activeAutoSubtitleIndex}
-        onAutoSubtitleChange={loadAutoSubtitle}
-        isSearchingSubs={isSearchingSubs}
-        onUploadClick={handleSubtitleUpload}
-        onSearchOnline={() => {
-             const query = title ? encodeURIComponent(title) : '';
-             window.open(`https://www.opensubtitles.org/en/search/sublanguageid-all/moviename-${query}`, '_blank');
-        }}
-      />
+      {/* Settings Panel - Z-Index 50 */}
+      {showSettings && (
+          <div className="absolute top-0 right-0 bottom-0 z-50 pointer-events-auto">
+            <PlayerSettings
+                isOpen={showSettings}
+                onClose={() => setShowSettings(false)}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                playbackSpeed={playbackSpeed}
+                onSpeedChange={changeSpeed}
+                audioMode={audioMode}
+                onAudioModeChange={setAudioMode}
+                audioFormat={audioFormat}
+                availableTracks={availableTracks}
+                onTrackChange={switchAudioTrack}
+                availableSubtitles={availableSubtitles}
+                externalSubtitles={externalSubtitles}
+                activeSubtitleIndex={activeSubtitleIndex}
+                onSubtitleChange={switchSubtitleTrack}
+                embedTracks={embedTracks}
+                activeEmbedTrackIndex={activeEmbedTrackIndex}
+                onEmbedTrackChange={loadEmbedTrack}
+                autoSubtitles={autoSubtitles}
+                activeAutoSubtitleIndex={activeAutoSubtitleIndex}
+                onAutoSubtitleChange={loadAutoSubtitle}
+                isSearchingSubs={isSearchingSubs}
+                onUploadClick={handleSubtitleUpload}
+                onSearchOnline={() => {
+                    const query = title ? encodeURIComponent(title) : '';
+                    window.open(`https://www.opensubtitles.org/en/search/sublanguageid-all/moviename-${query}`, '_blank');
+                }}
+                provider={provider}
+                onProviderChange={onProviderChange}
+                isNativeMode={isNativeMode}
+                onToggleNativeMode={toggleNativeMode}
+            />
+          </div>
+      )}
     </div>
+    </PlayerErrorBoundary>
   );
 };
 

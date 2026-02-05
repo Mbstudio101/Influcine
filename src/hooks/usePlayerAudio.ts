@@ -14,6 +14,9 @@ export interface ExtendedAudioTrackList {
   [index: number]: ExtendedAudioTrack;
 }
 
+// Global cache to prevent re-creating source nodes for the same video element
+const sourceNodeCache = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
+
 export function usePlayerAudio(
   videoRef: React.RefObject<HTMLVideoElement>,
   isEmbed: boolean,
@@ -27,98 +30,180 @@ export function usePlayerAudio(
   
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const analyserNodeRef = useRef<AnalyserNode | null>(null);
   const compressorRef = useRef<DynamicsCompressorNode | null>(null);
   const pannerRef = useRef<PannerNode | null>(null);
 
-  // Initialize Audio Context (Cinema Audio)
+  // Initialize Audio Context and Graph
   useEffect(() => {
     if (isEmbed || !videoRef.current || !src) return;
     
     try {
-      if (audioCtxRef.current) return;
+      // 1. Initialize Context
+      if (!audioCtxRef.current) {
+        const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
+        audioCtxRef.current = new AudioContextClass();
+      }
+      const ctx = audioCtxRef.current;
 
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
-      const ctx = new AudioContextClass();
-      
-      const source = ctx.createMediaElementSource(videoRef.current);
-      const compressor = ctx.createDynamicsCompressor();
+      // 2. Initialize Source
+      if (!sourceNodeRef.current) {
+        if (sourceNodeCache.has(videoRef.current)) {
+          sourceNodeRef.current = sourceNodeCache.get(videoRef.current)!;
+        } else {
+          try {
+            const source = ctx.createMediaElementSource(videoRef.current);
+            sourceNodeCache.set(videoRef.current, source);
+            sourceNodeRef.current = source;
+          } catch (e) {
+            // If creation fails, it might be because it was already created but not in our cache (unlikely if we use a global cache)
+            // or another error. We can't recover easily if we can't get the source.
+            // console.error("Failed to create MediaElementSource", e);
+            throw e;
+          }
+        }
+      }
 
-      // Configure Compressor for "Cinema Audio"
-      compressor.threshold.value = -24;
-      compressor.knee.value = 30;
-      compressor.ratio.value = 12;
-      compressor.attack.value = 0.003;
-      compressor.release.value = 0.25;
+      // 3. Initialize Nodes
+      if (!gainNodeRef.current) {
+        gainNodeRef.current = ctx.createGain();
+        gainNodeRef.current.gain.value = 1.0;
+      }
 
-      source.connect(compressor);
-      compressor.connect(ctx.destination);
+      if (!analyserNodeRef.current) {
+        analyserNodeRef.current = ctx.createAnalyser();
+        analyserNodeRef.current.fftSize = 2048;
+      }
 
-      audioCtxRef.current = ctx;
-      sourceNodeRef.current = source;
-      compressorRef.current = compressor;
+      if (!compressorRef.current) {
+        compressorRef.current = ctx.createDynamicsCompressor();
+        // Configure Compressor for "Cinema Audio"
+        compressorRef.current.threshold.value = -24;
+        compressorRef.current.knee.value = 30;
+        compressorRef.current.ratio.value = 12;
+        compressorRef.current.attack.value = 0.003;
+        compressorRef.current.release.value = 0.25;
+      }
+
+      if (!pannerRef.current) {
+        pannerRef.current = ctx.createPanner();
+        pannerRef.current.panningModel = 'HRTF';
+        pannerRef.current.distanceModel = 'inverse';
+        pannerRef.current.refDistance = 1;
+        pannerRef.current.maxDistance = 10000;
+        pannerRef.current.rolloffFactor = 1;
+        pannerRef.current.coneInnerAngle = 360;
+        pannerRef.current.coneOuterAngle = 0;
+        pannerRef.current.coneOuterGain = 0;
+        pannerRef.current.setPosition(0, 0, -1); // Sound in front
+        
+        if (ctx.listener) {
+            if (ctx.listener.forwardX) {
+                ctx.listener.forwardX.value = 0;
+                ctx.listener.forwardY.value = 0;
+                ctx.listener.forwardZ.value = -1;
+                ctx.listener.upX.value = 0;
+                ctx.listener.upY.value = 1;
+                ctx.listener.upZ.value = 0;
+            } else {
+                ctx.listener.setOrientation(0, 0, -1, 0, 1, 0);
+            }
+        }
+      }
 
       setAudioEngineReady(true);
     } catch (e) {
+      // console.error('Audio Engine Init Failed:', e);
       setAudioMode('standard');
       setAudioFormat('Standard Stereo');
       setAudioEngineReady(false);
     }
   }, [src, isEmbed, videoRef]);
 
-  // Handle Audio Mode Switching
+  // Handle Audio Graph Connections
   useEffect(() => {
-    if (isEmbed || !sourceNodeRef.current || !compressorRef.current || !audioCtxRef.current) return;
+    if (isEmbed || !audioEngineReady || !sourceNodeRef.current || !audioCtxRef.current) return;
 
-    // Disconnect all previous connections
-    sourceNodeRef.current.disconnect();
-    compressorRef.current.disconnect();
-    if (pannerRef.current) pannerRef.current.disconnect();
+    const ctx = audioCtxRef.current;
+    const source = sourceNodeRef.current;
+    const gain = gainNodeRef.current!;
+    const analyser = analyserNodeRef.current!;
+    const compressor = compressorRef.current!;
+    const panner = pannerRef.current!;
+
+    // Disconnect everything to reset graph
+    try {
+        source.disconnect();
+        gain.disconnect();
+        analyser.disconnect();
+        compressor.disconnect();
+        panner.disconnect();
+    } catch (e) { 
+        // Ignore disconnect errors
+    }
+
+    // Base Chain: Source -> Gain
+    source.connect(gain);
+
+    // Routing Logic
+    let lastNode: AudioNode = gain;
 
     // 1. Spatial Audio (Binaural Virtualization)
     if (audio?.spatialEnabled && audio.outputMode === 'binaural-virtualized') {
-      if (!pannerRef.current) {
-         pannerRef.current = audioCtxRef.current.createPanner();
-         pannerRef.current.panningModel = 'HRTF';
-         pannerRef.current.distanceModel = 'inverse';
-         pannerRef.current.refDistance = 1;
-         pannerRef.current.maxDistance = 10000;
-         pannerRef.current.rolloffFactor = 1;
-         pannerRef.current.coneInnerAngle = 360;
-         pannerRef.current.coneOuterAngle = 0;
-         pannerRef.current.coneOuterGain = 0;
-         
-         // Position listener slightly offset
-         if (audioCtxRef.current.listener) {
-            audioCtxRef.current.listener.setPosition(0, 0, 0);
-         }
-         pannerRef.current.setPosition(0, 0, -1); // Sound in front
-      }
+      gain.connect(panner);
+      lastNode = panner;
 
-      sourceNodeRef.current.connect(pannerRef.current);
-      // Optional: Chain compressor after panner for volume consistency
+      // Optional: Chain compressor after panner if Cinema Mode is also active
       if (audioMode === 'cinema') {
-        pannerRef.current.connect(compressorRef.current);
-        compressorRef.current.connect(audioCtxRef.current.destination);
-      } else {
-        pannerRef.current.connect(audioCtxRef.current.destination);
+        panner.connect(compressor);
+        lastNode = compressor;
       }
     }
-    // 2. Cinema Mode (Compressor)
+    // 2. Cinema Mode (Compressor only)
     else if (audioMode === 'cinema') {
-      sourceNodeRef.current.connect(compressorRef.current);
-      compressorRef.current.connect(audioCtxRef.current.destination);
+      gain.connect(compressor);
+      lastNode = compressor;
     } 
-    // 3. Standard / Passthrough
+    // 3. Standard / Passthrough (Direct)
     else {
-      sourceNodeRef.current.connect(audioCtxRef.current.destination);
+      // gain is already lastNode
     }
-  }, [audioMode, isEmbed, audio]);
 
-  const resumeAudioContext = () => {
+    // Final Chain: LastNode -> Analyser -> Destination
+    lastNode.connect(analyser);
+    analyser.connect(ctx.destination);
+
+  }, [audioMode, isEmbed, audio, audioEngineReady]);
+
+  const resumeAudioContext = useCallback(async () => {
     if (audioCtxRef.current?.state === 'suspended') {
-      audioCtxRef.current.resume();
+      try {
+        await audioCtxRef.current.resume();
+      } catch (e) {
+        // console.error("Failed to resume audio context", e);
+      }
     }
-  };
+  }, []);
+
+  const setVolume = useCallback((val: number) => {
+    if (gainNodeRef.current) {
+        // Use exponential ramp for natural volume change
+        const now = audioCtxRef.current?.currentTime || 0;
+        // Clamp value to avoid error with 0 in exponentialRampToValueAtTime
+        const safeVal = Math.max(0.0001, val); 
+        gainNodeRef.current.gain.cancelScheduledValues(now);
+        gainNodeRef.current.gain.setValueAtTime(gainNodeRef.current.gain.value, now);
+        gainNodeRef.current.gain.exponentialRampToValueAtTime(safeVal, now + 0.1);
+        
+        // If 0, explicitly mute after ramp
+        if (val === 0) {
+            setTimeout(() => {
+                if (gainNodeRef.current) gainNodeRef.current.gain.value = 0;
+            }, 100);
+        }
+    }
+  }, []);
 
   const detectAudioCapabilities = async () => {
     if (!videoRef.current) return;
@@ -170,14 +255,6 @@ export function usePlayerAudio(
       }
     }
 
-    // 3. Channel Count Check
-    if (audioCtxRef.current) {
-      const dest = audioCtxRef.current.destination;
-      if (dest.maxChannelCount >= 6 && detectedFormat === 'Optimized Stereo') {
-         // Could upgrade detectedFormat if needed
-      }
-    }
-
     setAudioFormat(detectedFormat);
     if (recommendedMode === 'standard') {
       setAudioMode('standard');
@@ -204,11 +281,11 @@ export function usePlayerAudio(
     audioMode,
     setAudioMode,
     audioFormat,
-    setAudioFormat,
-    audioEngineReady,
     resumeAudioContext,
+    setVolume,
     availableTracks,
     detectAudioCapabilities,
-    switchAudioTrack
+    switchAudioTrack,
+    analyserNode: analyserNodeRef.current
   };
 }

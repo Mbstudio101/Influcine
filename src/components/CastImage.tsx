@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { electronService } from '../services/electron';
 import { getImageUrl } from '../services/tmdb';
+import { imageFallbackAgent } from '../services/ImageFallbackAgent';
 
 interface CastImageProps {
   name: string;
@@ -22,25 +22,14 @@ export const CastImage: React.FC<CastImageProps> = ({ name, profilePath, classNa
         return;
       }
 
-      // Try to fetch from local cache first
-      const cacheKey = `actor_img_${name}`;
-      const cached = sessionStorage.getItem(cacheKey);
-      if (cached) {
-        if (mounted) {
-            setSrc(cached);
-        }
-        return;
-      }
-
+      // Use the centralized agent to find a fallback image
       try {
-        // Fallback to Google Search scrape via Electron Main Process
-        const url = await electronService.getActorImage(name);
+        const url = await imageFallbackAgent.getActorImage(name);
         if (mounted && url) {
           setSrc(url);
-          sessionStorage.setItem(cacheKey, url);
         }
       } catch (e) {
-        // console.error(e);
+        // Fail silently
       }
     };
 

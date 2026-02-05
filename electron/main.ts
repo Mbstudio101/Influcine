@@ -95,28 +95,8 @@ const ADBLOCK_SCRIPT = `
   // IPC Bridge for Player Control
   try {
     const { ipcRenderer } = require('electron');
-    ipcRenderer.on('player-command', (_event, data) => {
-      // console.log("[Influcine] Forwarding command:", data);
-      window.postMessage(data, '*');
-    });
 
-    // Time Sync for Subtitles
-    let lastTime = 0;
-    setInterval(() => {
-        const video = document.querySelector('video');
-        if (video && !video.paused) {
-            // Throttle: only send if diff > 1s
-            if (Math.abs(video.currentTime - lastTime) > 1) {
-                lastTime = video.currentTime;
-                ipcRenderer.send('embed-time-update', video.currentTime);
-            }
-        }
-    }, 500);
-
-    // Subtitle Extraction Logic
-     let knownTracks = [];
-     
-     function findVideo(root) {
+    function findVideo(root) {
         if (!root) return null;
         let v = root.querySelector('video');
         if (v) return v;
@@ -129,7 +109,102 @@ const ADBLOCK_SCRIPT = `
             }
         }
         return null;
-     }
+    }
+
+    ipcRenderer.on('player-command', (_event, data) => {
+      // console.log("[Influcine] Executing command:", data);
+      const video = findVideo(document);
+      if (!video) return;
+
+      try {
+        switch (data.command) {
+            case 'play':
+                video.play().catch(e => console.error("Play failed", e));
+                break;
+            case 'pause':
+                video.pause();
+                break;
+            case 'seek':
+                if (typeof data.time === 'number') video.currentTime = data.time;
+                break;
+            case 'setSpeed':
+                if (typeof data.speed === 'number') video.playbackRate = data.speed;
+                break;
+            case 'ratechange':
+                 if (typeof data.playbackRate === 'number') video.playbackRate = data.playbackRate;
+                 break;
+            case 'setVolume':
+                 if (typeof data.volume === 'number') {
+                     // Ensure volume is between 0 and 1
+                     video.volume = Math.max(0, Math.min(1, data.volume));
+                 }
+                 break;
+            case 'setMute':
+                 if (typeof data.muted === 'boolean') video.muted = data.muted;
+                 break;
+            case 'toggleMute':
+                 video.muted = !video.muted;
+                 break;
+            case 'showNativeControls':
+                 video.controls = true;
+                 break;
+            case 'hideNativeControls':
+                 video.controls = false;
+                 break;
+        }
+      } catch (e) {
+          // console.error("Command execution error", e);
+      }
+    });
+
+    // Time Sync for Subtitles & Progress
+    let lastTime = 0;
+    let lastPaused = true;
+    setInterval(() => {
+        const video = findVideo(document);
+        if (video) {
+             // Sync state
+             const state = {
+                 event: video.paused ? 'pause' : 'play',
+                 currentTime: video.currentTime,
+                 duration: video.duration
+             };
+             
+             // Throttle: only send if diff > 0.5s or state changed
+             if (Math.abs(video.currentTime - lastTime) > 0.5 || video.paused !== lastPaused) {
+                lastTime = video.currentTime;
+                lastPaused = video.paused;
+                
+                // Send detailed state update via IPC
+                ipcRenderer.send('player-state-update', state);
+             }
+        }
+    }, 500);
+
+    // Forward internal events to host
+    // We can also attach listeners directly if we found the video
+    let attachedVideo = null;
+    setInterval(() => {
+        const video = findVideo(document);
+        if (video && video !== attachedVideo) {
+            attachedVideo = video;
+            const notify = (e) => {
+                const state = {
+                    event: e.type,
+                    currentTime: video.currentTime,
+                    duration: video.duration,
+                    paused: video.paused
+                };
+                ipcRenderer.send('player-state-update', state);
+            };
+            video.addEventListener('play', notify);
+            video.addEventListener('pause', notify);
+            video.addEventListener('ended', notify);
+            video.addEventListener('timeupdate', notify);
+            video.addEventListener('loadedmetadata', notify);
+        }
+    }, 1000);
+
 
      function checkTracks() {
          const video = findVideo(document);
@@ -305,13 +380,68 @@ const ADBLOCK_SCRIPT = `
   }, 5000);
   
   // 4. Specific Site Fixes (VidFast / VidLink / 2Embed)
-  window.addEventListener('DOMContentLoaded', () => {
-    // Inject CSS to hide external player controls (We provide our own UI)
-    const style = document.createElement('style');
-    style.textContent = '/* Hide Common Player Controls */ .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-title, .vjs-control-bar, .vjs-big-play-button, .plyr__controls, .plyr__poster, .art-controls, .art-mask, .art-layer-auto, .fluid-controls, .fluid-title, #player-controls, .controls-container, .media-controls, .fp-controls, .fp-ui, /* Hide VidSrc Specifics */ #controls, #play-button, #bar, /* Hide Native Controls if exposed */ video::-webkit-media-controls { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; } /* Ensure Video is Full Size */ video { width: 100% !important; height: 100% !important; object-fit: contain !important; }';
-    document.head.appendChild(style);
+    window.addEventListener('DOMContentLoaded', () => {
+      // Robust CSS to hide controls
+      const cssContent = '/* Hide Common Player Controls */ .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-title, .vjs-control-bar, .vjs-big-play-button, .vjs-text-track-display, .plyr__controls, .plyr__poster, .art-controls, .art-mask, .art-layer-auto, .art-video-player .art-bottom, .fluid-controls, .fluid-title, #player-controls, .controls-container, .media-controls, .fp-controls, .fp-ui, /* Hide VidSrc/VidLink Specifics */ #controls, #play-button, #bar, .control-bar, .progress-bar, .buttons, /* Hide Native Controls if exposed via pseudo-elements (limited support) */ video::-webkit-media-controls, video::-webkit-media-controls-enclosure { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; } /* Ensure Video is Full Size */ video { width: 100% !important; height: 100% !important; object-fit: contain !important; }';
 
-    // Force video to be visible if hidden by anti-adblock
+      const injectStyle = (root) => {
+          if (!root) return;
+          // Avoid duplicate injection
+          if (root.getElementById && root.getElementById('influcine-css')) return;
+          if (root.querySelector && root.querySelector('#influcine-css')) return;
+
+          const style = document.createElement('style');
+          style.id = 'influcine-css';
+          style.textContent = cssContent;
+          
+          if (root.head) {
+              root.head.appendChild(style);
+          } else if (root.appendChild) {
+              root.appendChild(style);
+          }
+      };
+
+      // 1. Inject into main document
+      injectStyle(document);
+
+      // 2. Inject into Shadow DOMs
+      const injectIntoShadow = (root) => {
+          const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, null);
+          let node;
+          while (node = walker.nextNode()) {
+              if (node.shadowRoot) {
+                  injectStyle(node.shadowRoot);
+                  injectIntoShadow(node.shadowRoot);
+              }
+          }
+      };
+      injectIntoShadow(document.body);
+
+      // 3. Force remove native controls attribute
+      setInterval(() => {
+          const videos = document.querySelectorAll('video');
+          videos.forEach(v => {
+              if (v.controls) v.controls = false;
+          });
+      }, 1000);
+
+      ipcRenderer.on('player-command', (_event, data) => {
+          if (data.command === 'showNativeControls') {
+              const els = document.querySelectorAll('#influcine-css');
+              els.forEach(el => el.remove());
+              // Re-enable native controls
+               const videos = document.querySelectorAll('video');
+               videos.forEach(v => { v.controls = true; });
+          }
+          if (data.command === 'hideNativeControls') {
+              injectStyle(document);
+              injectIntoShadow(document.body);
+              const videos = document.querySelectorAll('video');
+              videos.forEach(v => { v.controls = false; });
+          }
+      });
+      
+      // Force video to be visible if hidden by anti-adblock
     const video = document.querySelector('video');
     if (video) {
       video.style.display = 'block';
@@ -436,6 +566,12 @@ ipcMain.on('embed-time-update', (_event, time) => {
   }
 });
 
+ipcMain.on('player-state-update', (_event, state) => {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('player-state-update', state);
+  }
+});
+
 ipcMain.on('embed-tracks-found', (_event, tracks) => {
   if (win && !win.isDestroyed()) {
     win.webContents.send('embed-tracks-found', tracks);
@@ -499,6 +635,7 @@ ipcMain.handle('trailer-download', async (_event, videoId) => {
       '-o', filePath,
       '--write-subs', '--write-auto-subs', '--sub-format', 'vtt', '--sub-langs', 'en,.*',
       '--no-playlist',
+      '--ignore-errors',
       '--force-ipv4',
       '--no-check-certificates',
       '--extractor-args', 'youtube:player_client=android'
@@ -994,18 +1131,30 @@ function createWindow() {
     });
   });
 
-  // Window controls
-  ipcMain.on('window-minimize', () => win?.minimize())
+  // Window Controls IPC
+  ipcMain.on('window-minimize', () => {
+    win?.minimize();
+  });
+
   ipcMain.on('window-maximize', () => {
     if (win?.isMaximized()) {
-      win.unmaximize()
+      win.unmaximize();
     } else {
-      win?.maximize()
+      win?.maximize();
     }
-  })
-  ipcMain.on('window-close', () => win?.close())
+  });
 
-  // Test active push message to Renderer-process.
+  ipcMain.on('window-close', () => {
+    win?.close();
+  });
+
+  ipcMain.on('window-fullscreen', () => {
+    if (win) {
+      win.setFullScreen(!win.isFullScreen());
+    }
+  });
+
+  // Test main push message
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
@@ -1041,7 +1190,7 @@ app.on('activate', () => {
 const streamUrlCache = new Map<string, { url: string, expiry: number }>();
 
 app.whenReady().then(() => {
-  initImdbDb();
+  createWindow();
 
   // IPC to prefetch trailer URL
   ipcMain.handle('trailer-prefetch', async (_event, videoId) => {

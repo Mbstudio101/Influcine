@@ -37,13 +37,13 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
             
             // Sequence:
             // 0s: Start (Audio + Visuals)
-            // 3.5s: Fade out
-            // 4.0s: Complete
+            // 2.0s: Fade out
+            // 2.5s: Complete
             setTimeout(() => {
                 if (mounted) {
                     setIsVisible(false);
                 }
-            }, 4000);
+            }, 2000);
         };
 
         // Try to wait for audio, but don't block too long

@@ -1,5 +1,6 @@
 import React from 'react';
 import { 
+  RotateCcw, RotateCw,
   Play, Pause, Volume2, VolumeX, Settings, 
   Maximize, Minimize, PictureInPicture, SkipForward, 
   ThumbsUp, ThumbsDown 
@@ -12,7 +13,7 @@ interface PlayerControlsProps {
   onTogglePlay: () => void;
   currentTime: number;
   duration: number;
-  onSeek: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onSeek: (e: React.ChangeEvent<HTMLInputElement> | number) => void;
   volume: number;
   onVolumeChange: (vol: number) => void;
   isMuted: boolean;
@@ -78,6 +79,26 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
               className="p-2 hover:bg-white/10 rounded-full text-white transition-colors"
             >
               {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current" />}
+            </button>
+          </Focusable>
+
+          <Focusable onEnter={() => onSeek(currentTime - 10)}>
+            <button 
+              onClick={() => onSeek(currentTime - 10)}
+              className="p-2 hover:bg-white/10 rounded-full text-white transition-colors"
+              title="Rewind 10s"
+            >
+              <RotateCcw className="w-5 h-5" />
+            </button>
+          </Focusable>
+
+          <Focusable onEnter={() => onSeek(currentTime + 10)}>
+            <button 
+              onClick={() => onSeek(currentTime + 10)}
+              className="p-2 hover:bg-white/10 rounded-full text-white transition-colors"
+              title="Forward 10s"
+            >
+              <RotateCw className="w-5 h-5" />
             </button>
           </Focusable>
 

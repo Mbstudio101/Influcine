@@ -392,7 +392,7 @@ const Details: React.FC = () => {
 
         <div className="absolute bottom-0 left-0 p-10 w-full max-w-4xl pb-10 z-10 flex gap-8 items-end">
           {/* Poster */}
-          <div className="hidden md:block w-48 rounded-lg overflow-hidden shadow-2xl border border-white/10 rotate-3 transform hover:rotate-0 transition-transform duration-500">
+          <div className="hidden md:block w-72 rounded-lg overflow-hidden shadow-2xl border border-white/10 rotate-3 transform hover:rotate-0 transition-transform duration-500">
             <img
               src={getImageUrl(details.poster_path)}
               alt={details.title || details.name}

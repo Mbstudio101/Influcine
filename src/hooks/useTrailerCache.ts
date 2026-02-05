@@ -13,22 +13,29 @@ export const useTrailerCache = (videoId: string | undefined) => {
 
     const init = async () => {
       try {
-        // New Strategy: Use 'trailer://' immediately.
-        // The protocol handler now supports:
-        // 1. Serving cached file if exists (1080p)
-        // 2. Streaming remote URL if missing (720p fallback)
-        // This ensures INSTANT playback.
+        // Strategy: Only use 'trailer://' if file exists locally.
+        // Otherwise return null to let UI fallback to YouTube Iframe.
+        // This ensures users see the official YouTube player (answering "why not from youtube")
+        // and avoids flaky yt-dlp streaming.
         
-        const url = `trailer://${videoId}`;
-        if (mounted) setCachedUrl(url);
+        // Check if exists locally
+        const localUrl = await window.ipcRenderer.invoke('trailer-check', videoId);
+        
+        if (mounted) {
+           if (localUrl) {
+             setCachedUrl(localUrl);
+           } else {
+             setCachedUrl(null); // Fallback to Iframe
+           }
+        }
 
-        // Trigger background download to upgrade to 1080p for next time
+        // Trigger background download to upgrade to 1080p local file for next time
         // Add a delay to prioritize immediate playback bandwidth
         setTimeout(() => {
           if (mounted) {
              window.ipcRenderer.invoke('trailer-download', videoId).catch(() => {});
           }
-        }, 15000); // 15s delay
+        }, 5000); // Reduced delay to 5s since we aren't streaming via proxy anymore
           
       } catch (error) {
         // console.error('Trailer cache error:', error);

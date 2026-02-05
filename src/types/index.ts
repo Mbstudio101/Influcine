@@ -87,6 +87,12 @@ export interface Subtitle {
   label: string;
 }
 
+export interface AutoSubtitle {
+  label: string;
+  content: string;
+  format?: string;
+}
+
 export interface StreamSource {
   url: string;
   quality: '4k' | '1080p' | '720p' | '480p' | '360p' | 'auto';

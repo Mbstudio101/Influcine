@@ -11,6 +11,7 @@ interface ErrorLog {
 class ErrorAgent {
   private static instance: ErrorAgent;
   private isInitialized = false;
+  private listeners: ((log: ErrorLog) => void)[] = [];
 
   private constructor() {}
 
@@ -19,6 +20,13 @@ class ErrorAgent {
       ErrorAgent.instance = new ErrorAgent();
     }
     return ErrorAgent.instance;
+  }
+
+  public subscribe(listener: (log: ErrorLog) => void) {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter(l => l !== listener);
+    };
   }
 
   public init() {
@@ -48,6 +56,9 @@ class ErrorAgent {
   }
 
   public async log(error: ErrorLog) {
+    // Notify listeners
+    this.listeners.forEach(l => l(error));
+
     // Console log for dev
     if (import.meta.env.DEV) {
       // console.groupCollapsed(`[ErrorAgent] ${error.type || 'ERROR'}: ${error.message}`);

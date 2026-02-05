@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { electronService } from '../services/electron';
 import { parseSubtitle, SubtitleCue } from '../utils/subtitleParser';
+import { AutoSubtitle } from '../types';
 
 export interface SubtitleFile {
   url: string;
@@ -20,7 +21,7 @@ export function usePlayerSubtitles(
   const [customSubtitles, setCustomSubtitles] = useState<SubtitleCue[]>([]);
   const [embedTracks, setEmbedTracks] = useState<{index: number, label: string, language: string}[]>([]);
   const [activeEmbedTrackIndex, setActiveEmbedTrackIndex] = useState(-1);
-  const [autoSubtitles, setAutoSubtitles] = useState<{label: string, content: string}[]>([]);
+  const [autoSubtitles, setAutoSubtitles] = useState<AutoSubtitle[]>([]);
   const [activeAutoSubtitleIndex, setActiveAutoSubtitleIndex] = useState(-1);
   const [isSearchingSubs, setIsSearchingSubs] = useState(false);
 
@@ -75,9 +76,9 @@ export function usePlayerSubtitles(
     }
   }, [isEmbed, externalSubtitles, videoRef]);
 
-  // Auto-Fetch Subtitles for Embeds
+  // Auto-Fetch Subtitles (Embeds & Native)
   useEffect(() => {
-    if (!mediaData?.imdbId || !isEmbed) return;
+    if (!mediaData?.imdbId) return;
     
     const fetchSubs = async () => {
         setIsSearchingSubs(true);
@@ -85,8 +86,8 @@ export function usePlayerSubtitles(
             const subs = await electronService.autoFetchSubtitles(mediaData);
             if (subs && subs.length > 0) {
                 setAutoSubtitles(subs);
-                // If no embed tracks found, auto-select first result
-                if (embedTracks.length === 0 && customSubtitles.length === 0) {
+                // If no other tracks found, auto-select first result
+                if (embedTracks.length === 0 && customSubtitles.length === 0 && availableSubtitles.length === 0) {
                     const cues = parseSubtitle(subs[0].content);
                     setCustomSubtitles(cues);
                     setActiveAutoSubtitleIndex(0);
@@ -100,7 +101,7 @@ export function usePlayerSubtitles(
     };
 
     fetchSubs();
-  }, [mediaData?.imdbId, isEmbed, embedTracks.length, customSubtitles.length, mediaData]);
+  }, [mediaData?.imdbId, embedTracks.length, customSubtitles.length, mediaData, availableSubtitles.length]);
 
   const loadAutoSubtitle = (index: number) => {
       if (index === -1) {
@@ -131,6 +132,7 @@ export function usePlayerSubtitles(
     setActiveEmbedTrackIndex,
     autoSubtitles,
     activeAutoSubtitleIndex,
+    setActiveAutoSubtitleIndex,
     loadAutoSubtitle,
     isSearchingSubs
   };

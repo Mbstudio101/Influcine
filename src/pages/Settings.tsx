@@ -17,7 +17,8 @@ import {
   Download,
   Server,
   Headphones,
-  Volume2
+  Volume2,
+  Bug
 } from 'lucide-react';
 import { db } from '../db';
 import { CleanupAgent } from '../services/CleanupAgent';
@@ -235,6 +236,28 @@ Removed ${report.sourceMemoryRemoved} duplicate source items`);
                   </button>
                 </div>
               </section>
+
+              {/* Developer Tools */}
+              <section>
+                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-white">
+                  <Bug className="text-red-400" /> Developer Tools
+                </h2>
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold text-white mb-1">Bug Catcher</h3>
+                      <p className="text-gray-400 text-sm">View runtime logs and errors captured by the application.</p>
+                    </div>
+                    <button 
+                      onClick={() => window.dispatchEvent(new CustomEvent('open-bug-reporter'))}
+                      className="px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl font-bold transition-all flex items-center gap-2"
+                    >
+                      <Bug size={18} />
+                      Open Bug Reporter
+                    </button>
+                  </div>
+                </div>
+              </section>
             </div>
           )}
 
@@ -246,7 +269,7 @@ Removed ${report.sourceMemoryRemoved} duplicate source items`);
                   <Headphones className="text-primary" /> Audio Experience
                 </h2>
                 
-                <div className="bg-gradient-to-br from-black/40 to-black/20 rounded-2xl p-6 border border-white/5 mb-6">
+                <div className="bg-linear-to-br from-black/40 to-black/20 rounded-2xl p-6 border border-white/5 mb-6">
                    <div className="flex items-center justify-between mb-6">
                       <div>
                         <div className="flex items-center gap-2 mb-1">

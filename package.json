@@ -40,7 +40,9 @@
     "qrcode.react": "^4.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-error-boundary": "^6.1.0",
     "react-router-dom": "^7.12.0",
+    "react-virtuoso": "^4.18.1",
     "tailwind-merge": "^3.4.0",
     "yt-dlp-wrap": "^2.3.12"
   },

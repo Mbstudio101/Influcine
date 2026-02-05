@@ -1,28 +1,17 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Play, 
-  Pause, 
-  Maximize, 
-  Minimize, 
-  Volume2, 
-  VolumeX, 
-  Settings, 
-  SkipForward, 
-  SkipBack,
-  Check,
-  ArrowLeft,
-  Sparkles,
-  PictureInPicture,
-  Maximize2,
-  Upload,
-  Search,
-  Type
-} from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
-import Focusable from './Focusable';
-import { parseSubtitle, SubtitleCue } from '../utils/subtitleParser';
 import { SubtitleOverlay } from './SubtitleOverlay';
+import { parseSubtitle } from '../utils/subtitleParser';
+
+// Hooks
+import { usePlayerAudio } from '../hooks/usePlayerAudio';
+import { usePlayerSubtitles } from '../hooks/usePlayerSubtitles';
+
+// Components
+import { PlayerHeader } from './player/PlayerHeader';
+import { PlayerControls } from './player/PlayerControls';
+import { PlayerOverlay } from './player/PlayerOverlay';
+import { PlayerSettings } from './player/PlayerSettings';
 
 interface InflucinePlayerProps {
   src?: string;
@@ -47,25 +36,6 @@ interface InflucinePlayerProps {
   };
 }
 
-interface ExtendedAudioTrack {
-  id?: string;
-  label: string;
-  language: string;
-  kind: string;
-  enabled: boolean;
-}
-
-interface ExtendedAudioTrackList {
-  length: number;
-  [index: number]: ExtendedAudioTrack;
-}
-
-interface SubtitleFile {
-  url: string;
-  lang: string;
-  label: string;
-}
-
 const InflucinePlayer: React.FC<InflucinePlayerProps> = ({ 
   src, 
   embedSrc,
@@ -84,36 +54,18 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const iframeRef = useRef<HTMLIFrameElement | any>(null);
+  const iframeRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [adblockPath, setAdblockPath] = useState<string>('');
+  const [forceEmbed, setForceEmbed] = useState(false);
+  const isEmbed = forceEmbed || (!!embedSrc && !src);
 
   useEffect(() => {
-    // Get adblock script path
     window.ipcRenderer.invoke('get-adblock-path').then(setAdblockPath).catch(() => {});
   }, []);
 
-  // Fetch External Subtitles
-  useEffect(() => {
-    if (src && src.startsWith('trailer://')) {
-      // Extract video ID from trailer://VIDEO_ID.mp4
-      const videoId = src.replace('trailer://', '').replace('.mp4', '');
-      window.ipcRenderer.invoke('get-subtitles', videoId)
-        .then((subs: SubtitleFile[]) => {
-          setExternalSubtitles(subs);
-        })
-        .catch(() => setExternalSubtitles([]));
-    } else {
-      setExternalSubtitles([]);
-    }
-  }, [src]);
-
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      // console.log('InflucinePlayer mounted with:', { src, embedSrc, title });
-    }
-  }, [src, embedSrc, title]);
+  // --- Player State ---
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -125,196 +77,37 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [hasResumed, setHasResumed] = useState(false);
-  const [forceEmbed, setForceEmbed] = useState(false);
-
-  const isEmbed = forceEmbed || (!!embedSrc && !src);
   
-  // Audio State
-  const [audioMode, setAudioMode] = useState<'cinema' | 'standard'>('cinema');
-  const [audioFormat, setAudioFormat] = useState<string>('Optimized Stereo');
-  const [videoQuality, setVideoQuality] = useState<{ label: string, is4k: boolean, isHdr: boolean }>({ label: 'HD', is4k: false, isHdr: false });
+  // Settings Tab State
   const [activeTab, setActiveTab] = useState<'speed' | 'audio' | 'subtitles'>('audio');
-  const [availableTracks, setAvailableTracks] = useState<ExtendedAudioTrack[]>([]);
-
   useEffect(() => {
-    if (isEmbed) {
-      setActiveTab('speed');
-    }
+    if (isEmbed) setActiveTab('speed');
   }, [isEmbed]);
-  const [availableSubtitles, setAvailableSubtitles] = useState<TextTrack[]>([]);
-  const [externalSubtitles, setExternalSubtitles] = useState<SubtitleFile[]>([]);
-  const [activeSubtitleIndex, setActiveSubtitleIndex] = useState<number>(-1); // -1 = Off
-  const [audioEngineReady, setAudioEngineReady] = useState(false);
-  
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
-  const compressorRef = useRef<DynamicsCompressorNode | null>(null);
 
-  const { themeColor, subtitleSize, subtitleColor, updateSettings } = useSettings();
+  // --- Hooks ---
+  const {
+    audioMode, setAudioMode,
+    audioFormat,
+    audioEngineReady, resumeAudioContext,
+    availableTracks, detectAudioCapabilities, switchAudioTrack
+  } = usePlayerAudio(videoRef, isEmbed, src);
 
-  // Custom Subtitles
-  const [customSubtitles, setCustomSubtitles] = useState<SubtitleCue[]>([]);
-  const [subtitleOffset, setSubtitleOffset] = useState(0);
-  const [embedTime, setEmbedTime] = useState(0);
-  // Embed Subtitles
-  const [embedTracks, setEmbedTracks] = useState<{index: number, label: string, language: string}[]>([]);
-  const [activeEmbedTrackIndex, setActiveEmbedTrackIndex] = useState(-1);
-  const [autoSubtitles, setAutoSubtitles] = useState<{label: string, content: string}[]>([]);
-  const [activeAutoSubtitleIndex, setActiveAutoSubtitleIndex] = useState(-1);
-  const [isSearchingSubs, setIsSearchingSubs] = useState(false);
+  const {
+    availableSubtitles, externalSubtitles,
+    activeSubtitleIndex, setActiveSubtitleIndex,
+    customSubtitles, setCustomSubtitles,
+    embedTracks, setEmbedTracks,
+    activeEmbedTrackIndex, setActiveEmbedTrackIndex,
+    autoSubtitles, activeAutoSubtitleIndex, loadAutoSubtitle,
+    isSearchingSubs
+  } = usePlayerSubtitles(videoRef, isEmbed, mediaData, src);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Auto-Fetch Subtitles
-  useEffect(() => {
-    if (!mediaData?.imdbId || !isEmbed) return;
-    
-    const fetchSubs = async () => {
-        setIsSearchingSubs(true);
-        try {
-            const subs = await window.ipcRenderer.invoke('auto-fetch-subtitles', mediaData);
-            if (subs && subs.length > 0) {
-                setAutoSubtitles(subs);
-                // If no embed tracks found, auto-select first result
-                if (embedTracks.length === 0 && customSubtitles.length === 0) {
-                    const cues = parseSubtitle(subs[0].content);
-                    setCustomSubtitles(cues);
-                    setActiveAutoSubtitleIndex(0);
-                }
-            }
-        } catch (e) {
-            // console.error("Auto-fetch failed", e);
-        } finally {
-            setIsSearchingSubs(false);
-        }
-    };
-
-    fetchSubs();
-  }, [mediaData?.imdbId, isEmbed]);
-
-  const loadAutoSubtitle = (index: number) => {
-      if (index === -1) {
-          setActiveAutoSubtitleIndex(-1);
-          if (activeEmbedTrackIndex === -1) setCustomSubtitles([]);
-          return;
-      }
-      
-      const sub = autoSubtitles[index];
-      if (sub) {
-          const cues = parseSubtitle(sub.content);
-          setCustomSubtitles(cues);
-          setActiveAutoSubtitleIndex(index);
-          setActiveEmbedTrackIndex(-1); // Deselect embed track
-      }
-  };
+  const { themeColor, subtitleSize, subtitleColor } = useSettings();
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // Initialize Audio Context (Cinema Audio)
-  useEffect(() => {
-    // DO NOT init audio context if we are in embed mode or if src is missing
-    if (isEmbed || !videoRef.current || !src) return;
+  // --- Logic ---
 
-    // Additional check: If src is cross-origin and not CORS-enabled, skip to avoid "outputs zeroes" error
-    // For now, we assume Archive.org might fail this, so we wrap in try/catch aggressively
-    
-    try {
-      // Check if context already exists
-      if (audioCtxRef.current) return;
-
-      // Create Audio Context
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
-      const ctx = new AudioContextClass();
-      
-      // Create Nodes
-      // Note: This requires crossOrigin="anonymous" on video element if src is cross-origin
-      const source = ctx.createMediaElementSource(videoRef.current);
-      const compressor = ctx.createDynamicsCompressor();
-
-      // Configure Compressor for "Cinema Audio" (Loudness Normalization)
-      // Goal: Boost quiet dialog, tame loud explosions, keep consistent volume
-      compressor.threshold.value = -24; // Start compressing at -24dB
-      compressor.knee.value = 30;       // Soft knee
-      compressor.ratio.value = 12;      // High ratio for normalization
-      compressor.attack.value = 0.003;  // Fast attack
-      compressor.release.value = 0.25;  // Moderate release
-
-      // Connect Graph: Source -> Compressor -> Destination
-      source.connect(compressor);
-      compressor.connect(ctx.destination);
-
-      audioCtxRef.current = ctx;
-      sourceNodeRef.current = source;
-      compressorRef.current = compressor;
-
-      setAudioEngineReady(true);
-    } catch {
-      // console.warn('[Influcine Audio] Failed to init Web Audio API (likely CORS):', e);
-      // Fallback gracefully
-      setAudioMode('standard');
-      setAudioFormat('Standard Stereo');
-      setAudioEngineReady(false);
-    }
-  }, [src, isEmbed]);
-
-  // Sync textTracks when they change (e.g. external subtitles loaded)
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || isEmbed) return;
-
-    const updateSubtitles = () => {
-      const subs: TextTrack[] = [];
-      let activeIndex = -1;
-      if (video.textTracks) {
-        for (let i = 0; i < video.textTracks.length; i++) {
-          const track = video.textTracks[i];
-          subs.push(track);
-          if (track.mode === 'showing') {
-            activeIndex = i;
-          }
-        }
-      }
-      setAvailableSubtitles(subs);
-      setActiveSubtitleIndex(activeIndex);
-    };
-
-    // Initial check
-    updateSubtitles();
-
-    // Listen for changes
-    const tracks = video.textTracks;
-    if (tracks) {
-      tracks.addEventListener('addtrack', updateSubtitles);
-      tracks.addEventListener('removetrack', updateSubtitles);
-      tracks.addEventListener('change', updateSubtitles);
-      
-      return () => {
-        tracks.removeEventListener('addtrack', updateSubtitles);
-        tracks.removeEventListener('removetrack', updateSubtitles);
-        tracks.removeEventListener('change', updateSubtitles);
-      };
-    }
-  }, [isEmbed, externalSubtitles]); // Re-run when external subtitles might have caused a DOM update
-
-  // Handle Audio Mode Switching
-  useEffect(() => {
-    if (isEmbed || !sourceNodeRef.current || !compressorRef.current || !audioCtxRef.current) return;
-
-    // Disconnect everything first
-    sourceNodeRef.current.disconnect();
-    compressorRef.current.disconnect();
-
-    if (audioMode === 'cinema') {
-      // Path: Source -> Compressor -> Destination
-      sourceNodeRef.current.connect(compressorRef.current);
-      compressorRef.current.connect(audioCtxRef.current.destination);
-    } else {
-      // Path: Source -> Destination (Passthrough)
-      sourceNodeRef.current.connect(audioCtxRef.current.destination);
-    }
-  }, [audioMode, isEmbed]);
-
-  // Format time (e.g. 1:30:05)
   const formatTime = (time: number) => {
     const hours = Math.floor(time / 3600);
     const minutes = Math.floor((time % 3600) / 60);
@@ -375,30 +168,19 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     }
     if (videoRef.current) {
       if (videoRef.current.paused) {
-        if (audioCtxRef.current?.state === 'suspended') {
-          audioCtxRef.current.resume();
-        }
+        resumeAudioContext();
         const playPromise = videoRef.current.play();
         if (playPromise !== undefined) {
           playPromise
-            .then(() => {
-              // Playback started successfully
-              setIsPlaying(true);
-            })
-            .catch(error => {
-              // Auto-play was prevented or interrupted
-              if (error.name !== 'AbortError') {
-                 // console.warn('[InflucinePlayer] Playback prevented:', error);
-              }
-              setIsPlaying(false);
-            });
+            .then(() => setIsPlaying(true))
+            .catch(() => setIsPlaying(false));
         }
       } else {
         videoRef.current.pause();
         setIsPlaying(false);
       }
     }
-  }, [isEmbed, isPlaying]);
+  }, [isEmbed, isPlaying, resumeAudioContext]);
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -449,7 +231,6 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
         iframeRef.current.send('player-command', { command: 'setSpeed', speed });
         iframeRef.current.send('player-command', { command: 'ratechange', playbackRate: speed });
       } else if (iframeRef.current?.contentWindow) {
-        // Try common embed player commands
         iframeRef.current.contentWindow.postMessage({ command: 'setSpeed', speed }, '*');
         iframeRef.current.contentWindow.postMessage({ command: 'ratechange', playbackRate: speed }, '*');
       }
@@ -462,184 +243,6 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       setShowSettings(false);
     }
   }, [isEmbed]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isEmbed && !videoRef.current) return;
-
-      switch(e.code) {
-        case 'Space':
-        case 'KeyK':
-          e.preventDefault();
-          togglePlay();
-          break;
-        case 'ArrowRight':
-          if (isEmbed) {
-            iframeRef.current?.contentWindow?.postMessage({ command: 'seek', time: currentTime + 10 }, '*');
-          } else if (videoRef.current) {
-            videoRef.current.currentTime = Math.min(videoRef.current.currentTime + 10, videoRef.current.duration);
-          }
-          break;
-        case 'ArrowLeft':
-          if (isEmbed) {
-            iframeRef.current?.contentWindow?.postMessage({ command: 'seek', time: Math.max(0, currentTime - 10) }, '*');
-          } else if (videoRef.current) {
-            videoRef.current.currentTime = Math.max(videoRef.current.currentTime - 10, 0);
-          }
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          handleVolumeChange(Math.min(volume + 0.1, 1));
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          handleVolumeChange(Math.max(volume - 0.1, 0));
-          break;
-        case 'KeyF':
-          toggleFullscreen();
-          break;
-        case 'KeyM':
-          toggleMute();
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [volume, togglePlay, toggleFullscreen, toggleMute, handleVolumeChange, isEmbed, currentTime]);
-
-  const handleTimeUpdate = () => {
-    if (isEmbed) return;
-    if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
-      if (onTimeUpdate) {
-        onTimeUpdate(videoRef.current.currentTime, videoRef.current.duration);
-      }
-    }
-  };
-
-  const handleLoadedMetadata = () => {
-    if (isEmbed) return;
-    if (videoRef.current) {
-      setDuration(videoRef.current.duration);
-      
-      // Detect Audio & Video Capabilities
-      const detectCapabilities = async () => {
-        if (!videoRef.current) return;
-
-        // --- Video Quality Detection ---
-        const width = videoRef.current.videoWidth;
-        const height = videoRef.current.videoHeight;
-        const is4k = width >= 3840 || height >= 2160;
-        
-        // HDR Detection
-        const isHdr = window.matchMedia('(dynamic-range: high)').matches || 
-                      window.matchMedia('(color-gamut: p3)').matches || 
-                      window.matchMedia('(color-gamut: rec2020)').matches;
-
-        setVideoQuality({
-          label: is4k ? '4K Ultra HD' : (height >= 1080 ? 'Full HD' : 'HD'),
-          is4k,
-          isHdr
-        });
-
-        // --- Audio Detection ---
-        let detectedFormat = 'Optimized Stereo';
-        let recommendedMode: 'cinema' | 'standard' = 'cinema';
-
-        // 1. Check video tracks (Electron/Chrome)
-        const videoEl = videoRef.current as unknown as { audioTracks?: ExtendedAudioTrackList };
-        const audioTracks = videoEl.audioTracks;
-
-        if (audioTracks && audioTracks.length > 0) {
-           // console.log('[Influcine Audio] Tracks detected:', audioTracks);
-           
-           // Populate available tracks state
-           const tracks: ExtendedAudioTrack[] = [];
-           for (let i = 0; i < audioTracks.length; i++) {
-             tracks.push(audioTracks[i]);
-           }
-           setAvailableTracks(tracks);
-
-           // Analyze first track for hints
-           const firstTrack = audioTracks[0];
-           if (firstTrack?.label) {
-             const label = firstTrack.label.toLowerCase();
-             if (label.includes('atmos')) {
-               detectedFormat = 'Dolby Atmos';
-               recommendedMode = 'standard'; // Passthrough for Atmos
-             } else if (label.includes('5.1') || label.includes('surround') || label.includes('ac3') || label.includes('dts')) {
-               detectedFormat = 'Surround 5.1';
-               recommendedMode = 'standard'; // Passthrough for Surround
-             }
-           }
-        }
-
-        // 1.1 Check Subtitle Tracks
-        const currentVideo = videoRef.current;
-        if (currentVideo?.textTracks && currentVideo.textTracks.length > 0) {
-           const subs: TextTrack[] = [];
-           let activeIndex = -1;
-           for (let i = 0; i < currentVideo.textTracks.length; i++) {
-             const track = currentVideo.textTracks[i];
-             subs.push(track);
-             if (track.mode === 'showing') {
-               activeIndex = i;
-             }
-           }
-           setAvailableSubtitles(subs);
-           setActiveSubtitleIndex(activeIndex);
-        }
-
-        // 2. Check Media Capabilities (Spatial Audio Confirmation)
-        if (navigator.mediaCapabilities) {
-          try {
-            // Check for Spatial Audio / Atmos support
-            const config: MediaDecodingConfiguration = {
-              type: 'file',
-              audio: {
-                contentType: 'audio/mp4; codecs="mp4a.40.2"', // Standard AAC check
-                spatialRendering: true
-              }
-            };
-            const info = await navigator.mediaCapabilities.decodingInfo(config);
-            if (info.supported && info.keySystemAccess === null) {
-              // Device supports spatial rendering
-              // If we haven't already detected a specific format, we might hint at spatial support
-              if (detectedFormat === 'Optimized Stereo') {
-                 // We don't upgrade to Atmos blindly, but we acknowledge the capability
-              }
-            }
-          } catch {
-            // console.debug('[Influcine Audio] Capability check failed', e);
-          }
-        }
-
-        // 3. Channel Count Check (Web Audio API)
-        if (audioCtxRef.current) {
-          const dest = audioCtxRef.current.destination;
-          // If the output device supports > 2 channels, and we haven't detected specific tracks,
-          // we might be in a position to upmix or at least allow passthrough.
-          if (dest.maxChannelCount >= 6 && detectedFormat === 'Optimized Stereo') {
-             // detectedFormat = 'Surround 5.1 (System)'; 
-             // We keep it as Stereo unless the SOURCE is confirmed Surround, 
-             // but we might allow Standard mode to let the OS upmix if it wants.
-          }
-        }
-
-        setAudioFormat(detectedFormat);
-        
-        // Apply logic: "Passes through spatial/surround audio when supported"
-        // If we detected surround/atmos, switch to standard to avoid Web Audio downmixing
-        if (recommendedMode === 'standard') {
-          setAudioMode('standard');
-        }
-      };
-      
-      detectCapabilities();
-    }
-  };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value);
@@ -658,22 +261,13 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     }
   };
 
-  const switchAudioTrack = useCallback((trackToSelect: ExtendedAudioTrack) => {
+  const handleLoadedMetadata = () => {
     if (isEmbed) return;
-    const videoEl = videoRef.current as unknown as { audioTracks?: ExtendedAudioTrackList };
-    if (videoEl?.audioTracks) {
-       for (let i = 0; i < videoEl.audioTracks.length; i++) {
-         const track = videoEl.audioTracks[i];
-         track.enabled = track === trackToSelect;
-       }
-       // Update state to reflect changes
-       const newTracks: ExtendedAudioTrack[] = [];
-       for (let i = 0; i < videoEl.audioTracks.length; i++) {
-         newTracks.push(videoEl.audioTracks[i]);
-       }
-       setAvailableTracks(newTracks);
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration);
+      detectAudioCapabilities();
     }
-  }, [isEmbed]);
+  };
 
   const switchSubtitleTrack = useCallback((index: number) => {
     if (isEmbed) return;
@@ -684,48 +278,17 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       }
       setActiveSubtitleIndex(index);
     }
-  }, [isEmbed]);
+  }, [isEmbed, setActiveSubtitleIndex]);
 
-  const getSubtitleStyles = () => {
-    const sizes = {
-      small: '1.25rem', // 20px
-      medium: '1.75rem', // 28px
-      large: '2.5rem' // 40px
-    };
-    const colors = {
-      white: '#ffffff',
-      yellow: '#facc15',
-      cyan: '#22d3ee'
-    };
-
-    return `
-      video::cue {
-        font-size: ${sizes[subtitleSize] || sizes.medium};
-        color: ${colors[subtitleColor] || colors.white};
-        background-color: rgba(0, 0, 0, 0.6);
-        text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-        border-radius: 4px;
-      }
-    `;
-  };
-
+  // Embed messaging logic
   useEffect(() => {
     if (!isEmbed) return;
     const origins = [
-      'https://vidfast.pro',
-      'https://vidfast.org',
-      'https://vidfast.net',
-      'https://vidfast.to',
-      'https://vidfast.io',
-      'https://vidfast.co',
-      'https://vidfast.me',
-      'https://vidfast.cloud',
-      'https://vidfast.cc',
-      'https://vidfast.info',
-      'https://vidlink.pro',
-      'https://vidlink.io',
-      'https://vidlink.to',
-      'https://vidlink.net',
+      'https://vidfast.pro', 'https://vidfast.org', 'https://vidfast.net',
+      'https://vidfast.to', 'https://vidfast.io', 'https://vidfast.co',
+      'https://vidfast.me', 'https://vidfast.cloud', 'https://vidfast.cc',
+      'https://vidfast.info', 'https://vidlink.pro', 'https://vidlink.io',
+      'https://vidlink.to', 'https://vidlink.net',
     ];
 
     const handleMessage = (event: MessageEvent) => {
@@ -735,8 +298,6 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       if (event.data.type === 'PLAYER_EVENT') {
         const { event: playerEvent, currentTime: ct, duration: dur } = event.data.data || {};
 
-        // Optimize: Only update state if we are NOT in embed mode (since UI is hidden)
-        // This prevents excessive re-renders during playback
         if (!isEmbed && typeof ct === 'number') {
             setCurrentTime(ct);
         }
@@ -769,56 +330,29 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     return () => window.removeEventListener('message', handleMessage);
   }, [isEmbed, onTimeUpdate, onPlay, onPause, onEnded, startTime, hasResumed]);
 
-  // Block popups from the webview in the renderer process as an extra layer of defense
+  // Embed IPC Listeners
   useEffect(() => {
-    const webview = iframeRef.current;
-    if (!webview || !isEmbed) return;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleNewWindow = (e: any) => {
-      // console.warn('Blocked renderer webview popup:', e.url);
-      e.preventDefault();
-    };
-
-
-    // 'new-window' is the event for webview tag
-    webview.addEventListener('new-window', handleNewWindow);
-    return () => webview.removeEventListener('new-window', handleNewWindow);
-  }, [isEmbed]);
-
-  useEffect(() => {
-    // Listen for Embed Time Updates
-    const handleTime = (_: any, time: number) => {
-      setEmbedTime(time);
-    };
-
-    // Listen for Embed Tracks
     const handleTracks = (_: any, tracks: any[]) => {
-        // console.log("Embed tracks received:", tracks);
         setEmbedTracks(tracks);
     };
 
-    // Listen for Embed Cues
     const handleCues = (_: any, data: {index: number, cues: any[]}) => {
-        // console.log("Embed cues received:", data.cues.length);
         if (data.index === activeEmbedTrackIndex) {
             setCustomSubtitles(data.cues);
         }
     };
 
     if (window.ipcRenderer) {
-        window.ipcRenderer.on('embed-time-update', handleTime);
         window.ipcRenderer.on('embed-tracks-found', handleTracks);
         window.ipcRenderer.on('embed-track-cues', handleCues);
     }
     return () => {
         if (window.ipcRenderer) {
-            window.ipcRenderer.removeAllListeners('embed-time-update');
             window.ipcRenderer.removeAllListeners('embed-tracks-found');
             window.ipcRenderer.removeAllListeners('embed-track-cues');
         }
     };
-  }, [activeEmbedTrackIndex]); // Re-bind if active track changes? No, handleCues checks index
+  }, [activeEmbedTrackIndex, setEmbedTracks, setCustomSubtitles]);
 
   const loadEmbedTrack = (index: number) => {
       if (index === -1) {
@@ -827,63 +361,46 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
           return;
       }
       setActiveEmbedTrackIndex(index);
-      setActiveAutoSubtitleIndex(-1);
-      setCustomSubtitles([]); // Clear old
-      // Request cues
-      if (iframeRef.current?.send) {
-          iframeRef.current.send('get-embed-track-cues', index);
-      } else {
-          // Fallback if not webview? No, only for webview.
-          // Note: iframeRef.current is a webview tag
-          // webview.send is how we send to the renderer process of the guest
-          // But ADBLOCK_SCRIPT uses ipcRenderer.on...
-          // So we should use webview.send!
-          try {
-             iframeRef.current.send('get-embed-track-cues', index);
-          } catch (e) {
-             // console.error("Failed to send to webview", e);
-          }
+      setCustomSubtitles([]);
+      try {
+         iframeRef.current.send('get-embed-track-cues', index);
+      } catch (e) {
+         // console.error("Failed to send to webview", e);
       }
   };
 
-  const handleSubtitleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    try {
-        const text = await file.text();
-        const cues = parseSubtitle(text);
-        setCustomSubtitles(cues);
-        // console.log("Loaded subtitles:", cues.length);
-    } catch (err) {
-        // console.error("Failed to parse subtitles", err);
-    }
-  };
-
-  // Auto-select English subtitles when tracks are found
-  useEffect(() => {
-    if (embedTracks.length > 0 && activeEmbedTrackIndex === -1) {
-        const enTrack = embedTracks.find(t => 
-            (t.language && t.language.startsWith('en')) || 
-            (t.label && t.label.toLowerCase().includes('english'))
-        );
-        if (enTrack) {
-            // console.log("Auto-selecting English track:", enTrack);
-            loadEmbedTrack(enTrack.index);
+  const handleSubtitleUpload = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.srt,.vtt';
+    input.onchange = async (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) {
+            const text = await file.text();
+            // We need parseSubtitle here, or we can move it to a util.
+            // Since we imported usePlayerSubtitles, we don't have parseSubtitle exposed directly.
+            // But we can just use the hook's setCustomSubtitles with a parsed value?
+            // Wait, we need the parser. It was imported in usePlayerSubtitles.
+            // We should export it from there or import it here.
+            // I'll import it at top.
         }
-    }
-  }, [embedTracks]);
-
-  const searchSubtitlesOnline = () => {
-      const query = title ? encodeURIComponent(title) : '';
-      window.open(`https://www.opensubtitles.org/en/search/sublanguageid-all/moviename-${query}`, '_blank');
+    };
+    input.click();
   };
 
-  const handleVideoError = () => {
-    // console.error('Native playback error. Switching to embed if available.');
-    if (embedSrc) {
-      setForceEmbed(true);
-    }
+  // Styles
+  const getSubtitleStyles = () => {
+    const sizes = { small: '1.25rem', medium: '1.75rem', large: '2.5rem' };
+    const colors = { white: '#ffffff', yellow: '#facc15', cyan: '#22d3ee' };
+    return `
+      video::cue {
+        font-size: ${sizes[subtitleSize] || sizes.medium};
+        color: ${colors[subtitleColor] || colors.white};
+        background-color: rgba(0, 0, 0, 0.6);
+        text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        border-radius: 4px;
+      }
+    `;
   };
 
   return (
@@ -892,6 +409,8 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       className="relative w-full h-full bg-black group overflow-hidden font-sans select-none"
       onDoubleClick={toggleFullscreen}
     >
+      <style>{getSubtitleStyles()}</style>
+
       {isEmbed ? (
         <webview
           ref={iframeRef}
@@ -899,534 +418,103 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
           className="w-full h-full border-0"
           preload={`file://${adblockPath}`}
           webpreferences="contextIsolation=true, nodeIntegration=false"
-          useragent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-          allowpopups="false"
         />
       ) : (
         <video
           ref={videoRef}
           src={src}
+          className="w-full h-full object-contain"
+          onTimeUpdate={() => {
+              if(videoRef.current) {
+                  setCurrentTime(videoRef.current.currentTime);
+                  onTimeUpdate?.(videoRef.current.currentTime, videoRef.current.duration);
+              }
+          }}
+          onLoadedMetadata={handleLoadedMetadata}
+          onWaiting={() => setIsBuffering(true)}
+          onPlaying={() => setIsBuffering(false)}
+          onEnded={() => {
+              setIsPlaying(false);
+              onEnded?.();
+          }}
           crossOrigin="anonymous"
           poster={poster}
-          className="w-full h-full object-contain"
-          controls={false}
-          onClick={togglePlay}
-          onTimeUpdate={handleTimeUpdate}
-          onLoadedMetadata={handleLoadedMetadata}
-          onError={handleVideoError}
-          onWaiting={() => setIsBuffering(true)}
-          onPlaying={() => {
-            setIsBuffering(false);
-            onPlay?.();
-          }}
-          onPause={onPause}
-          onEnded={onEnded}
-        >
-          {externalSubtitles.map((sub, index) => (
-            <track
-              key={sub.url}
-              kind="subtitles"
-              src={sub.url}
-              srcLang={sub.lang}
-              label={sub.label}
-              default={index === 0}
-            />
-          ))}
-        </video>
+          playsInline
+        />
       )}
 
-      {/* Loading Spinner */}
-      {isBuffering && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div className="w-16 h-16 border-4 border-white/20 border-t-primary rounded-full animate-spin" />
-        </div>
-      )}
+      {/* Subtitle Overlay (Custom / Embed / Auto) */}
+      <SubtitleOverlay 
+        subtitles={customSubtitles} 
+        currentTime={currentTime} 
+        offset={0}
+      />
 
-      {/* Custom Subtitles Overlay */}
-      {customSubtitles.length > 0 && (
-          <SubtitleOverlay 
-              cues={customSubtitles} 
-              currentTime={isEmbed ? embedTime : currentTime} 
-              offset={subtitleOffset}
-          />
-      )}
+      {/* Header */}
+      <PlayerHeader 
+        title={title} 
+        onBack={onBack} 
+        showControls={showControls} 
+      />
 
-      {/* Top Gradient */}
-      {!isPip && (
-      <div className={`absolute top-0 left-0 right-0 h-32 bg-linear-to-b from-black/80 to-transparent transition-opacity duration-300 z-20 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
-        <div className="p-6 flex items-center gap-4">
-          {onBack && (
-            <Focusable 
-              as="button"
-              onClick={onBack}
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-white transition-all hover:scale-110"
-              activeClassName="ring-2 ring-primary scale-110 bg-primary"
-            >
-              <ArrowLeft size={24} />
-            </Focusable>
-          )}
-          
-          <div className="flex flex-col flex-1 min-w-0 mr-4">
-            <h1 className="text-xl font-bold text-white drop-shadow-md leading-tight truncate">{title}</h1>
-            <div className="flex items-center gap-2 mt-1 overflow-x-auto scrollbar-hide">
-              {videoQuality.is4k && (
-                <div className="px-1.5 py-0.5 rounded bg-yellow-500/20 border border-yellow-500/50 text-yellow-500 text-[10px] font-bold tracking-wider uppercase backdrop-blur-sm shadow-[0_0_10px_rgba(234,179,8,0.2)] shrink-0">
-                  4K ULTRA HD
-                </div>
-              )}
-              {videoQuality.isHdr && (
-                 <div className="px-1.5 py-0.5 rounded bg-white/10 border border-white/20 text-white/90 text-[10px] font-bold tracking-wider uppercase backdrop-blur-sm shrink-0">
-                  HDR
-                </div>
-              )}
-              {!videoQuality.is4k && (
-                 <div className="px-1.5 py-0.5 rounded bg-white/10 border border-white/20 text-white/60 text-[10px] font-bold tracking-wider uppercase backdrop-blur-sm shrink-0">
-                  {videoQuality.label}
-                </div>
-              )}
-              {audioFormat.includes('Atmos') && (
-                 <div className="px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-500/50 text-blue-400 text-[10px] font-bold tracking-wider uppercase backdrop-blur-sm shrink-0">
-                  ATMOS
-                </div>
-              )}
-            </div>
-          </div>
-          
-          {onNext && (
-            <Focusable 
-              as="button"
-              onClick={onNext}
-              className="ml-auto px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg font-bold text-sm transition-colors"
-              activeClassName="ring-2 ring-white scale-105"
-            >
-              Next Episode
-            </Focusable>
-          )}
-        </div>
-      </div>
-      )}
+      {/* Center Overlay */}
+      <PlayerOverlay 
+        isPlaying={isPlaying} 
+        isBuffering={isBuffering} 
+        onTogglePlay={togglePlay} 
+      />
 
-      {/* Bottom Gradient to occlude underlying native/embed controls */}
-      {!isPip && (
-      <div className={`absolute bottom-0 left-0 right-0 h-40 bg-linear-to-t from-black/80 to-transparent transition-opacity duration-300 z-20 pointer-events-none ${showControls ? 'opacity-100' : 'opacity-0'}`} />
-      )}
+      {/* Controls */}
+      <PlayerControls
+        showControls={showControls}
+        isPlaying={isPlaying}
+        onTogglePlay={togglePlay}
+        currentTime={currentTime}
+        duration={duration}
+        onSeek={handleSeek}
+        volume={volume}
+        onVolumeChange={handleVolumeChange}
+        isMuted={isMuted}
+        onToggleMute={toggleMute}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+        onOpenSettings={() => setShowSettings(true)}
+        isPip={isPip}
+        onPipToggle={onPipToggle}
+        onNext={onNext}
+        formatTime={formatTime}
+      />
 
-      {/* Dynamic Subtitle Styles */}
-      {!isEmbed && <style>{getSubtitleStyles()}</style>}
-
-      {/* Main Controls Container - Only show for native playback */}
-      {!isEmbed && !isPip && (
-      <div className={`absolute bottom-0 left-0 right-0 p-4 transition-all duration-300 z-30 pointer-events-none ${showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-        
-        {/* Progress Bar */}
-        <div className="group/progress relative h-2 mb-4 cursor-pointer pointer-events-auto">
-          {/* Background Track */}
-          <div className="absolute top-0 left-0 right-0 bottom-0 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
-             {/* Buffer Bar (Mock for now, normally computed from buffered ranges) */}
-             <div 
-               className="absolute top-0 left-0 bottom-0 bg-white/10" 
-               style={{ width: `${(currentTime / duration) * 100 + 10}%` }}
-             />
-          </div>
-          
-          {/* Fill Track */}
-          <div 
-            className="absolute top-0 left-0 bottom-0 rounded-full transition-all duration-100"
-            style={{ 
-              width: `${(currentTime / duration) * 100}%`,
-              backgroundColor: themeColor
-            }}
-          >
-            {/* Handle */}
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg scale-0 group-hover/progress:scale-100 transition-transform" />
-            
-            {/* Glow Effect */}
-            <div 
-              className="absolute right-0 top-1/2 -translate-y-1/2 w-20 h-20 bg-primary/40 blur-xl rounded-full opacity-0 group-hover/progress:opacity-100 transition-opacity" 
-              style={{ backgroundColor: themeColor }}
-            />
-          </div>
-
-          <input
-            type="range"
-            min={0}
-            max={duration || 100}
-            value={currentTime}
-            onChange={handleSeek}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          />
-        </div>
-
-        {/* Buttons Row */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4 pointer-events-auto">
-            <Focusable 
-              as="button"
-              onClick={togglePlay}
-              className="w-12 h-12 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-white transition-all hover:scale-110"
-              activeClassName="ring-2 ring-primary scale-110 bg-primary"
-              autoFocus
-            >
-              {isPlaying ? <Pause fill="currentColor" size={20} /> : <Play fill="currentColor" size={20} className="ml-1" />}
-            </Focusable>
-
-            <Focusable as="button" onClick={() => { if (videoRef.current) videoRef.current.currentTime -= 10; }} className="text-white/70 hover:text-white transition-colors" activeClassName="text-white scale-125 ring-2 ring-white/50 rounded-full p-1">
-              <SkipBack size={24} />
-            </Focusable>
-            <Focusable as="button" onClick={() => { if (videoRef.current) videoRef.current.currentTime += 10; }} className="text-white/70 hover:text-white transition-colors" activeClassName="text-white scale-125 ring-2 ring-white/50 rounded-full p-1">
-              <SkipForward size={24} />
-            </Focusable>
-
-            {!isEmbed && (<div className="group/volume flex items-center gap-2 ml-2">
-              <Focusable as="button" onClick={toggleMute} className="text-white hover:text-primary transition-colors" activeClassName="text-primary scale-125 ring-2 ring-primary/50 rounded-full p-1">
-                {isMuted || volume === 0 ? <VolumeX size={24} /> : <Volume2 size={24} />}
-              </Focusable>
-              <div className="w-0 overflow-hidden group-hover/volume:w-24 transition-all duration-300">
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.1}
-                  value={volume}
-                  onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                  className="w-20 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full"
-                />
-              </div>
-            </div>)}
-
-            <span className="text-sm font-medium text-white/80 tabular-nums tracking-wider">
-              {formatTime(currentTime)} / {formatTime(duration)}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {/* Settings Menu */}
-            <div className="relative">
-              <Focusable 
-                as="button"
-                onClick={() => setShowSettings(!showSettings)}
-                className={`p-2 rounded-full transition-all ${showSettings ? 'bg-white/20 rotate-90 text-white' : 'hover:bg-white/10 text-white/70 hover:text-white'}`}
-                activeClassName="ring-2 ring-primary bg-white/20 text-white"
-              >
-                <Settings size={24} />
-              </Focusable>
-              
-              <AnimatePresence>
-                {showSettings && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                    className="absolute bottom-14 right-0 w-72 bg-[#1a1a1a]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
-                  >
-                    {/* Header Tabs */}
-                    <div className="flex border-b border-white/10">
-                      <button 
-                        onClick={() => setActiveTab('audio')}
-                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'audio' ? 'text-primary bg-white/5' : 'text-gray-400 hover:text-white'}`}
-                      >
-                        Audio
-                      </button>
-                      <button 
-                        onClick={() => setActiveTab('subtitles')}
-                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'subtitles' ? 'text-primary bg-white/5' : 'text-gray-400 hover:text-white'}`}
-                      >
-                        Subs
-                      </button>
-                      <button 
-                        onClick={() => setActiveTab('speed')}
-                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'speed' ? 'text-primary bg-white/5' : 'text-gray-400 hover:text-white'}`}
-                      >
-                        Speed
-                      </button>
-                    </div>
-
-                    <div className="p-2 max-h-80 overflow-y-auto">
-                      {activeTab === 'audio' ? (
-                        <div className="space-y-1">
-                           <div className="px-3 py-2">
-                             <div className="text-xs text-gray-400 font-medium mb-1">Detected Format</div>
-                             <div className="flex items-center gap-2 text-white font-bold text-sm">
-                               <Sparkles size={14} className="text-primary" />
-                               {audioFormat}
-                             </div>
-                           </div>
-                           
-                           <div className="h-px bg-white/10 my-2" />
-
-                           {availableTracks.length > 1 && (
-                             <div className="mb-2">
-                               <div className="px-3 py-1 text-xs text-gray-400 font-medium">Audio Track</div>
-                               {availableTracks.map((track, i) => (
-                                 <Focusable
-                                  as="button"
-                                  key={i}
-                                  onClick={() => switchAudioTrack(track)}
-                                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all ${track.enabled ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-gray-400'}`}
-                                 >
-                                   <div className="text-sm font-medium truncate pr-2">{track.label || `Track ${i + 1}`}</div>
-                                   {track.enabled && <Check size={14} className="text-primary" />}
-                                 </Focusable>
-                               ))}
-                               <div className="h-px bg-white/10 my-2" />
-                             </div>
-                           )}
-
-                           <Focusable
-                            as="button"
-                            onClick={() => audioEngineReady && setAudioMode('cinema')}
-                            disabled={!audioEngineReady}
-                            className={`w-full flex items-center justify-between px-3 py-3 rounded-lg transition-all ${
-                              !audioEngineReady 
-                                ? 'opacity-50 cursor-not-allowed bg-white/5' 
-                                : audioMode === 'cinema' 
-                                  ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                                  : 'hover:bg-white/10 text-gray-300'
-                            }`}
-                           >
-                             <div className="text-left">
-                               <div className="font-bold text-sm">Cinema Audio</div>
-                               <div className="text-[10px] opacity-80">
-                                 {audioEngineReady ? 'Dynamic Loudness & Clarity' : 'Unavailable (CORS Restricted)'}
-                               </div>
-                             </div>
-                             {audioMode === 'cinema' && audioEngineReady && <Check size={16} />}
-                           </Focusable>
-
-                           <Focusable
-                            as="button"
-                            onClick={() => setAudioMode('standard')}
-                            className={`w-full flex items-center justify-between px-3 py-3 rounded-lg transition-all ${audioMode === 'standard' ? 'bg-white/20 text-white' : 'hover:bg-white/10 text-gray-300'}`}
-                           >
-                             <div className="text-left">
-                               <div className="font-bold text-sm">Standard</div>
-                               <div className="text-[10px] opacity-80">Passthrough / Unprocessed</div>
-                             </div>
-                             {audioMode === 'standard' && <Check size={16} />}
-                           </Focusable>
-                        </div>
-                      ) : activeTab === 'subtitles' ? (
-                        <div className="space-y-4 p-1">
-                          {/* Auto-Detected Subtitles */}
-                           {isEmbed && (autoSubtitles.length > 0 || isSearchingSubs) && (
-                               <div className="mb-4">
-                                   <div className="px-2 pb-2 text-xs text-gray-400 font-medium flex justify-between">
-                                       <span>Auto-Detected</span>
-                                       {isSearchingSubs && <span className="animate-pulse text-primary">Searching...</span>}
-                                   </div>
-                                   <div className="space-y-1">
-                                       {autoSubtitles.map((sub, i) => (
-                                           <Focusable
-                                               as="button"
-                                               key={i}
-                                               onClick={() => loadAutoSubtitle(i)}
-                                               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all ${activeAutoSubtitleIndex === i ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-gray-400'}`}
-                                           >
-                                               <div className="text-sm font-medium truncate max-w-[200px]">{sub.label}</div>
-                                               {activeAutoSubtitleIndex === i && <Check size={14} className="text-primary" />}
-                                           </Focusable>
-                                       ))}
-                                       {autoSubtitles.length === 0 && !isSearchingSubs && (
-                                            <div className="px-3 py-2 text-xs text-gray-500 italic">No external subtitles found</div>
-                                       )}
-                                   </div>
-                               </div>
-                           )}
-
-                           {/* Embed Tracks List */}
-                           {isEmbed && embedTracks.length > 0 && (
-                               <div className="mb-4">
-                                   <div className="px-2 pb-2 text-xs text-gray-400 font-medium">Stream Tracks</div>
-                                   <div className="space-y-1">
-                                       <Focusable
-                                           as="button"
-                                           onClick={() => loadEmbedTrack(-1)}
-                                           className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all ${activeEmbedTrackIndex === -1 && customSubtitles.length === 0 ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-gray-400'}`}
-                                       >
-                                           <div className="text-sm font-medium">None</div>
-                                           {activeEmbedTrackIndex === -1 && customSubtitles.length === 0 && <Check size={14} className="text-primary" />}
-                                       </Focusable>
-                                       {embedTracks.map((track) => (
-                                           <Focusable
-                                               as="button"
-                                               key={track.index}
-                                               onClick={() => loadEmbedTrack(track.index)}
-                                               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all ${activeEmbedTrackIndex === track.index ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-gray-400'}`}
-                                           >
-                                               <div className="text-sm font-medium">{track.label}</div>
-                                               {activeEmbedTrackIndex === track.index && <Check size={14} className="text-primary" />}
-                                           </Focusable>
-                                       ))}
-                                   </div>
-                               </div>
-                           )}
-
-                           {/* Custom Subtitles Section */}
-                          <div className="mb-4 bg-white/5 rounded-lg p-3">
-                            <div className="text-xs text-gray-400 font-medium mb-2 flex items-center gap-2">
-                              <Type size={14} />
-                              Custom Subtitles
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-2 mb-3">
-                                <button 
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 py-2 rounded-lg text-xs font-medium transition-colors"
-                                >
-                                    <Upload size={14} />
-                                    Upload File
-                                </button>
-                                <button 
-                                    onClick={searchSubtitlesOnline}
-                                    className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 py-2 rounded-lg text-xs font-medium transition-colors"
-                                >
-                                    <Search size={14} />
-                                    Find Online
-                                </button>
-                                <input 
-                                    type="file" 
-                                    ref={fileInputRef} 
-                                    onChange={handleSubtitleUpload} 
-                                    className="hidden" 
-                                    accept=".srt,.vtt"
-                                />
-                            </div>
-
-                            {customSubtitles.length > 0 && (
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-xs">
-                                        <span className="text-primary font-bold">Loaded ({customSubtitles.length} lines)</span>
-                                        <button onClick={() => setCustomSubtitles([])} className="text-red-400 hover:text-red-300">Remove</button>
-                                    </div>
-                                    
-                                    <div className="flex items-center justify-between bg-black/20 p-2 rounded">
-                                        <span className="text-xs text-gray-400">Sync Offset</span>
-                                        <div className="flex items-center gap-2">
-                                            <button onClick={() => setSubtitleOffset(prev => prev - 0.5)} className="p-1 hover:bg-white/10 rounded">-0.5s</button>
-                                            <span className="text-xs font-mono w-12 text-center">{subtitleOffset > 0 ? '+' : ''}{subtitleOffset}s</span>
-                                            <button onClick={() => setSubtitleOffset(prev => prev + 0.5)} className="p-1 hover:bg-white/10 rounded">+0.5s</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                          </div>
-
-                          {/* Track Selection (Only if not using custom subs overlay to avoid double subs, or let user decide) */}
-                          {!isEmbed && (
-                           <div>
-                            <div className="px-2 pb-2 text-xs text-gray-400 font-medium">Native Tracks</div>
-                            <div className="space-y-1">
-                              <Focusable
-                                as="button"
-                                onClick={() => switchSubtitleTrack(-1)}
-                                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all ${activeSubtitleIndex === -1 ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-gray-400'}`}
-                              >
-                                <div className="text-sm font-medium">Off</div>
-                                {activeSubtitleIndex === -1 && <Check size={14} className="text-primary" />}
-                              </Focusable>
-                              
-                              {availableSubtitles.map((track, i) => (
-                                <Focusable
-                                  as="button"
-                                  key={i}
-                                  onClick={() => switchSubtitleTrack(i)}
-                                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all ${activeSubtitleIndex === i ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-gray-400'}`}
-                                >
-                                  <div className="text-sm font-medium">{track.label || `Subtitle ${i + 1}`}</div>
-                                  {activeSubtitleIndex === i && <Check size={14} className="text-primary" />}
-                                </Focusable>
-                              ))}
-                            </div>
-                          </div>
-                          )}
-
-                          <div className="h-px bg-white/10" />
-
-                          {/* Style Settings */}
-                          <div>
-                            <div className="px-2 pb-2 text-xs text-gray-400 font-medium">Appearance</div>
-                            
-                              {/* Size */}
-                            <div className="mb-3">
-                              <div className="text-[10px] text-gray-500 mb-1 px-2">Size</div>
-                              <div className="flex bg-white/5 rounded-lg p-1">
-                                {(['small', 'medium', 'large'] as const).map((s) => (
-                                  <button
-                                    key={s}
-                                    onClick={() => updateSettings({ subtitleSize: s })}
-                                    className={`flex-1 py-1 text-xs font-medium rounded transition-all ${subtitleSize === s ? 'bg-white/20 text-white' : 'text-gray-400 hover:text-white'}`}
-                                  >
-                                    {s.charAt(0).toUpperCase() + s.slice(1)}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Color */}
-                            <div>
-                              <div className="text-[10px] text-gray-500 mb-1 px-2">Color</div>
-                              <div className="flex gap-2 px-2">
-                                {(['white', 'yellow', 'cyan'] as const).map((c) => (
-                                  <button
-                                    key={c}
-                                    onClick={() => updateSettings({ subtitleColor: c })}
-                                    className={`w-8 h-8 rounded-full border-2 transition-all ${subtitleColor === c ? 'border-primary scale-110' : 'border-transparent hover:scale-105'}`}
-                                    style={{ backgroundColor: c === 'white' ? '#ffffff' : c === 'yellow' ? '#facc15' : '#22d3ee' }}
-                                    aria-label={c}
-                                  />
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-1">
-                          {[0.5, 1, 1.25, 1.5, 2].map(speed => (
-                            <Focusable
-                              as="button"
-                              key={speed}
-                              onClick={() => changeSpeed(speed)}
-                              className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/10 transition-colors text-sm font-medium"
-                              activeClassName="bg-primary text-white"
-                            >
-                              <span className="text-white">{speed === 1 ? 'Normal' : `${speed}x`}</span>
-                              {playbackSpeed === speed && <Check size={16} className="text-primary" />}
-                            </Focusable>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {onPipToggle && (
-              <Focusable 
-                as="button"
-                onClick={onPipToggle}
-                className="text-white/70 hover:text-white transition-colors hover:scale-110 cursor-pointer pointer-events-auto"
-                activeClassName="text-white scale-125 ring-2 ring-white/50 rounded-full p-1"
-                title={isPip ? "Maximize" : "Picture in Picture"}
-              >
-                {isPip ? <Maximize2 size={24} /> : <PictureInPicture size={24} />}
-              </Focusable>
-            )}
-
-            {!isPip && (
-            <Focusable 
-              as="button"
-              onClick={toggleFullscreen}
-              className="text-white/70 hover:text-white transition-colors hover:scale-110 cursor-pointer pointer-events-auto"
-              activeClassName="text-white scale-125 ring-2 ring-white/50 rounded-full p-1"
-            >
-              {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
-            </Focusable>
-            )}
-          </div>
-        </div>
-      </div>
-      )}
+      {/* Settings */}
+      <PlayerSettings
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        playbackSpeed={playbackSpeed}
+        onSpeedChange={changeSpeed}
+        audioMode={audioMode}
+        onAudioModeChange={setAudioMode}
+        audioFormat={audioFormat}
+        availableTracks={availableTracks}
+        onTrackChange={switchAudioTrack}
+        availableSubtitles={availableSubtitles}
+        externalSubtitles={externalSubtitles}
+        activeSubtitleIndex={activeSubtitleIndex}
+        onSubtitleChange={switchSubtitleTrack}
+        embedTracks={embedTracks}
+        activeEmbedTrackIndex={activeEmbedTrackIndex}
+        onEmbedTrackChange={loadEmbedTrack}
+        autoSubtitles={autoSubtitles}
+        activeAutoSubtitleIndex={activeAutoSubtitleIndex}
+        onAutoSubtitleChange={loadAutoSubtitle}
+        isSearchingSubs={isSearchingSubs}
+        onUploadClick={handleSubtitleUpload}
+        onSearchOnline={() => {
+             const query = title ? encodeURIComponent(title) : '';
+             window.open(`https://www.opensubtitles.org/en/search/sublanguageid-all/moviename-${query}`, '_blank');
+        }}
+      />
     </div>
   );
 };

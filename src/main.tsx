@@ -2,7 +2,7 @@ import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 // import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import App from './App.tsx'
-import ErrorBoundary from './components/ErrorBoundary'
+import GlobalErrorBoundary from './components/GlobalErrorBoundary'
 import { SettingsProvider } from './context/SettingsContext'
 import { AuthProvider } from './context/AuthContext'
 import { TVNavigationProvider } from './context/TVNavigationContext'
@@ -58,7 +58,7 @@ const initApp = async () => {
   }
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
-    <ErrorBoundary>
+    <GlobalErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <SettingsProvider>
@@ -71,7 +71,7 @@ const initApp = async () => {
         </AuthProvider>
         {/* {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />} */}
       </QueryClientProvider>
-    </ErrorBoundary>,
+    </GlobalErrorBoundary>,
   );
 };
 

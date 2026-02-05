@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import MediaCard from '../components/MediaCard';
+import VirtualMediaGrid from '../components/VirtualMediaGrid';
 import Focusable from '../components/Focusable';
 import { useNavigate } from 'react-router-dom';
 import { getImageUrl, getDetails } from '../services/tmdb';
@@ -80,9 +80,8 @@ const Watchlist: React.FC = () => {
 
   if (!watchlist) return null;
 
-  return (
-    <div className="h-full overflow-y-auto overflow-x-hidden pb-20 scrollbar-hide">
-      
+  const headerContent = (
+    <>
       {/* Hero / Featured Section */}
       <AnimatePresence mode="wait">
         {featuredItem ? (
@@ -216,11 +215,15 @@ const Watchlist: React.FC = () => {
           </div>
         </div>
       </div>
+    </>
+  );
 
-      {/* Content Grid */}
-      <div className="px-6 md:px-16 py-10">
-        {watchlist.length === 0 ? (
-          <motion.div 
+  return (
+    <div className="h-full overflow-hidden">
+      {watchlist.length === 0 ? (
+        <div className="h-full overflow-y-auto">
+             {headerContent}
+            <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="flex flex-col items-center justify-center py-20 text-center"
@@ -241,38 +244,23 @@ const Watchlist: React.FC = () => {
               Browse Content
             </Focusable>
           </motion.div>
-        ) : filteredItems.length === 0 ? (
-          <div className="text-center py-20">
-            <p className="text-gray-400 text-lg">No matches found for "{searchQuery}" in {filter !== 'all' ? filter : 'your library'}.</p>
-            <button 
-              onClick={() => { setSearchQuery(''); setFilter('all'); }}
-              className="mt-4 text-primary hover:underline"
-            >
-              Clear filters
-            </button>
-          </div>
-        ) : (
-          <motion.div 
-            layout
-            className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 md:gap-8"
-          >
-            <AnimatePresence>
-              {filteredItems.map((item) => (
-                <motion.div
-                  layout
-                  key={item.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.2 }}
+        </div>
+      ) : filteredItems.length === 0 ? (
+          <div className="h-full overflow-y-auto">
+            {headerContent}
+             <div className="text-center py-20">
+                <p className="text-gray-400 text-lg">No matches found for "{searchQuery}" in {filter !== 'all' ? filter : 'your library'}.</p>
+                <button 
+                onClick={() => { setSearchQuery(''); setFilter('all'); }}
+                className="mt-4 text-primary hover:underline"
                 >
-                  <MediaCard media={item} />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </motion.div>
-        )}
-      </div>
+                Clear filters
+                </button>
+            </div>
+          </div>
+      ) : (
+        <VirtualMediaGrid items={filteredItems} header={headerContent} />
+      )}
     </div>
   );
 };

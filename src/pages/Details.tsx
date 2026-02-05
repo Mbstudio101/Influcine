@@ -18,6 +18,7 @@ import { useEmbedUrl } from '../hooks/useEmbedUrl';
 import { findBestTrailer } from '../utils/videoUtils';
 import { useTrailerCache } from '../hooks/useTrailerCache';
 import TrailerModal from '../components/TrailerModal';
+import { electronService } from '../services/electron';
 
 const Details: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
@@ -178,11 +179,40 @@ const Details: React.FC = () => {
   const [activeTrailerKey, setActiveTrailerKey] = useState<string | null>(null);
 
   React.useEffect(() => {
-    if (details?.videos?.results) {
-      const best = findBestTrailer(details.videos.results);
-      if (best) setActiveTrailerKey(best.key);
-      else setActiveTrailerKey(null);
-    }
+    let mounted = true;
+
+    const fetchTrailer = async () => {
+      // 1. Try TMDB results first
+      if (details?.videos?.results) {
+        const best = findBestTrailer(details.videos.results);
+        if (best) {
+          if (mounted) setActiveTrailerKey(best.key);
+          return;
+        }
+      }
+
+      // 2. Fallback: Search YouTube if no official trailer found
+      if (details) {
+         const title = details.title || details.name;
+         if (title) {
+           try {
+             // Search for "Title Trailer"
+             const key = await electronService.searchTrailer(title);
+             if (mounted && key) {
+               setActiveTrailerKey(key);
+             } else if (mounted) {
+               setActiveTrailerKey(null);
+             }
+           } catch {
+             if (mounted) setActiveTrailerKey(null);
+           }
+         }
+      }
+    };
+
+    fetchTrailer();
+
+    return () => { mounted = false; };
   }, [details]);
 
   const cachedTrailerUrl = useTrailerCache(activeTrailerKey || undefined);

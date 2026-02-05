@@ -8,7 +8,9 @@ import { useSearchFilter, FilterType } from '../hooks/useSearchFilter';
 import { Search as SearchIcon, Zap, Clock, X, Film, Tv, LayoutGrid } from 'lucide-react';
 import Focusable from '../components/Focusable';
 import MediaCard from '../components/MediaCard';
+import VirtualMediaGrid from '../components/VirtualMediaGrid';
 import { useToast } from '../context/toast';
+import { motion } from 'framer-motion';
 
 const Search: React.FC = () => {
   const [query, setQuery] = useState('');
@@ -100,9 +102,8 @@ const Search: React.FC = () => {
     </button>
   );
 
-  return (
-    <div className="h-full overflow-y-auto pt-24 px-10 pb-10 scrollbar-hide">
-      <div className="max-w-3xl mx-auto mb-6">
+  const headerContent = (
+    <div className="max-w-3xl mx-auto mb-6 pt-24 px-10">
         <div className="relative group">
           <SearchIcon className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary transition-colors duration-300" size={24} />
           <Focusable
@@ -132,10 +133,9 @@ const Search: React.FC = () => {
             <FilterButton type="tv" label="TV Shows" icon={Tv} />
           </div>
         )}
-      </div>
 
-      {!query && recentSearches && recentSearches.length > 0 && (
-        <div className="max-w-3xl mx-auto mb-8">
+        {!query && recentSearches && recentSearches.length > 0 && (
+        <div className="max-w-3xl mx-auto mb-8 mt-10">
           <div className="flex items-center justify-between mb-4 px-2">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Recent Searches</h3>
             <button 
@@ -171,63 +171,78 @@ const Search: React.FC = () => {
           </div>
         </div>
       )}
-
+      
       {error && (
-        <div className="max-w-3xl mx-auto mb-8 px-6 py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-200 backdrop-blur-md">
+        <div className="max-w-3xl mx-auto mb-8 mt-6 px-6 py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-200 backdrop-blur-md">
           <div className="font-bold text-lg mb-1">Unable to search</div>
           <div className="text-sm opacity-80">
             {error instanceof Error ? error.message : 'An unknown error occurred'}
           </div>
         </div>
       )}
+    </div>
+  );
 
+  return (
+    <div className="h-full overflow-hidden">
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-20">
-          <div className="w-12 h-12 rounded-full border-4 border-primary/30 border-t-primary animate-spin mb-4"></div>
-          <div className="text-gray-400 animate-pulse font-medium tracking-wide">Searching the universe...</div>
+        <div className="h-full overflow-y-auto scrollbar-hide">
+            {headerContent}
+            <div className="flex flex-col items-center justify-center py-20">
+            <div className="w-12 h-12 rounded-full border-4 border-primary/30 border-t-primary animate-spin mb-4"></div>
+            <div className="text-gray-400 animate-pulse font-medium tracking-wide">Searching the universe...</div>
+            </div>
+        </div>
+      ) : filteredResults.length === 0 && query && !error ? (
+        <div className="h-full overflow-y-auto scrollbar-hide">
+            {headerContent}
+            <div className="max-w-2xl mx-auto mt-20 p-10 rounded-3xl bg-white/5 border border-white/5 text-center backdrop-blur-sm">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-linear-to-br from-gray-800 to-black border border-white/10 mb-6 shadow-inner">
+                <SearchIcon className="text-gray-500" size={32} />
+            </div>
+            <div className="text-2xl font-bold text-white mb-2">
+                No results found
+            </div>
+            <p className="text-gray-400 text-lg mb-6 max-w-md mx-auto">
+                {counts.all > 0 ? (
+                <span>
+                    No {filterType === 'movie' ? 'movies' : 'TV shows'} matching "<span className="text-white font-medium">{query}</span>".
+                    <br />
+                    <button 
+                    onClick={() => setFilterType('all')}
+                    className="mt-2 text-primary hover:text-primary/80 underline text-base"
+                    >
+                    View all results ({counts.all})
+                    </button>
+                </span>
+                ) : (
+                <span>We couldn't find anything matching "<span className="text-white font-medium">{query}</span>".</span>
+                )}
+            </p>
+            {counts.all === 0 && (
+                <div className="text-sm text-gray-500 bg-black/20 inline-block px-4 py-2 rounded-full border border-white/5">
+                Try checking for typos or using broader keywords
+                </div>
+            )}
+            </div>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 animate-in fade-in duration-500">
-          {filteredResults.map((item) => (
-            <MediaCard 
-              key={item.id} 
-              media={item} 
-              onClick={() => saveToHistory(debouncedQuery)} 
-            />
-          ))}
-        </div>
-      )}
-
-      {!loading && query && !error && filteredResults.length === 0 && (
-        <div className="max-w-2xl mx-auto mt-20 p-10 rounded-3xl bg-white/5 border border-white/5 text-center backdrop-blur-sm">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-linear-to-br from-gray-800 to-black border border-white/10 mb-6 shadow-inner">
-            <SearchIcon className="text-gray-500" size={32} />
-          </div>
-          <div className="text-2xl font-bold text-white mb-2">
-            No results found
-          </div>
-          <p className="text-gray-400 text-lg mb-6 max-w-md mx-auto">
-            {counts.all > 0 ? (
-              <span>
-                No {filterType === 'movie' ? 'movies' : 'TV shows'} matching "<span className="text-white font-medium">{query}</span>".
-                <br />
-                <button 
-                  onClick={() => setFilterType('all')}
-                  className="mt-2 text-primary hover:text-primary/80 underline text-base"
+        <VirtualMediaGrid 
+            items={filteredResults} 
+            header={headerContent}
+            renderItem={(item) => (
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.2 }}
                 >
-                  View all results ({counts.all})
-                </button>
-              </span>
-            ) : (
-              <span>We couldn't find anything matching "<span className="text-white font-medium">{query}</span>".</span>
+                    <MediaCard 
+                        media={item} 
+                        onClick={() => saveToHistory(debouncedQuery)} 
+                    />
+                </motion.div>
             )}
-          </p>
-          {counts.all === 0 && (
-            <div className="text-sm text-gray-500 bg-black/20 inline-block px-4 py-2 rounded-full border border-white/5">
-              Try checking for typos or using broader keywords
-            </div>
-          )}
-        </div>
+        />
       )}
     </div>
   );

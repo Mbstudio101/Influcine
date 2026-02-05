@@ -1,13 +1,13 @@
 import React, { memo, useState } from 'react';
 import { Media, MediaDetails } from '../types';
-import { getImageUrl, getVideos } from '../services/tmdb';
-import { findBestTrailer } from '../utils/videoUtils';
+import { getImageUrl } from '../services/tmdb';
 import { useNavigate } from 'react-router-dom';
 import { Play, Plus, Check, Star, Youtube } from 'lucide-react';
 import Focusable from './Focusable';
 import { usePlayer } from '../context/PlayerContext';
 import { useWatchlist } from '../hooks/useWatchlist';
 import TrailerModal from './TrailerModal';
+import { useTrailerPrefetch } from '../hooks/useTrailerPrefetch';
 
 interface MediaCardProps {
   media: Media;
@@ -30,11 +30,11 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
   const navigate = useNavigate();
   const [isFocused, setIsFocused] = useState(false);
   
+  const mediaType = media.media_type || (media.title ? 'movie' : 'tv');
+  const { trailerKey, prefetch, cancelPrefetch, fetchTrailerNow } = useTrailerPrefetch(media, mediaType as 'movie' | 'tv');
+  
   // Trailer State
   const [showTrailer, setShowTrailer] = useState(false);
-  const [trailerKey, setTrailerKey] = useState<string | null>(null);
-  
-  const mediaType = media.media_type || (media.title ? 'movie' : 'tv');
   
   const progress = (media as SavedMediaWithProgress).progress;
   const hasProgress = progress && progress.percentage > 0 && progress.percentage < 95; // Don't show if almost finished (credits)
@@ -62,11 +62,9 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
         return;
       }
 
-      const videos = await getVideos(mediaType as 'movie' | 'tv', media.id);
-      const trailer = findBestTrailer(videos);
+      const key = await fetchTrailerNow();
       
-      if (trailer) {
-        setTrailerKey(trailer.key);
+      if (key) {
         setShowTrailer(true);
       }
     } catch (e) {
@@ -74,20 +72,13 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
     }
   };
 
-  // Prefetch trailer on hover
+  // Debounced Prefetch trailer on hover
   const handleMouseEnter = () => {
-    if (!trailerKey) {
-       getVideos(mediaType as 'movie' | 'tv', media.id).then(videos => {
-         const trailer = findBestTrailer(videos);
-         if (trailer) {
-           setTrailerKey(trailer.key);
-           // Prefetch the actual video URL if backend supports it
-           if (window.ipcRenderer) {
-              window.ipcRenderer.invoke('trailer-prefetch', trailer.key).catch(() => {});
-           }
-         }
-       }).catch(() => {});
-    }
+    prefetch();
+  };
+
+  const handleMouseLeave = () => {
+      cancelPrefetch();
   };
 
   return (
@@ -102,6 +93,7 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <div className="block w-full h-full relative">
         <img

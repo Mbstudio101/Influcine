@@ -43,42 +43,39 @@ export function useWatchlist(media: Media | null | undefined) {
       // console.log('[useWatchlist] DB Schema for library:', db.library.schema.primKey);
     }
 
-    try {
-      if (isSaved) {
-        await db.library.delete(stableId);
-        showToast('Removed from your library.', 'info');
-      } else {
-        const mediaType = media.media_type || (media.title ? 'movie' : 'tv');
-        
-        // Ensure strictly serializable object with null fallbacks
-        // Dexie/IndexedDB prefers null over undefined for nullable fields
-        const payload: SavedMedia = {
-            id: stableId,
-            title: media.title || '',
-            name: media.name || '',
-            poster_path: media.poster_path ?? null,
-            backdrop_path: media.backdrop_path ?? null,
-            overview: media.overview || '',
-            vote_average: Number(media.vote_average) || 0,
-            release_date: media.release_date || undefined,
-            first_air_date: media.first_air_date || undefined,
-            media_type: mediaType as 'movie' | 'tv',
-            savedAt: Date.now(),
-        };
-        
-        // Add tmdbId only if it exists
-        const mediaWithTmdb = media as { tmdbId?: number | string };
-        if (mediaWithTmdb.tmdbId) {
-            payload.tmdbId = Number(mediaWithTmdb.tmdbId);
-        }
-
-        // console.log('[useWatchlist] Saving payload:', payload);
-        await db.library.put(payload);
-        
-        showToast('Added to your library.', 'success');
+    if (isSaved) {
+      db.library.delete(stableId)
+        .then(() => showToast('Removed from your library.', 'info'))
+        .catch(() => showToast('Could not update library.', 'error'));
+    } else {
+      const mediaType = media.media_type || (media.title ? 'movie' : 'tv');
+      
+      // Ensure strictly serializable object with null fallbacks
+      // Dexie/IndexedDB prefers null over undefined for nullable fields
+      const payload: SavedMedia = {
+          id: stableId,
+          title: media.title || '',
+          name: media.name || '',
+          poster_path: media.poster_path ?? null,
+          backdrop_path: media.backdrop_path ?? null,
+          overview: media.overview || '',
+          vote_average: Number(media.vote_average) || 0,
+          release_date: media.release_date || undefined,
+          first_air_date: media.first_air_date || undefined,
+          media_type: mediaType as 'movie' | 'tv',
+          savedAt: Date.now(),
+      };
+      
+      // Add tmdbId only if it exists
+      const mediaWithTmdb = media as { tmdbId?: number | string };
+      if (mediaWithTmdb.tmdbId) {
+          payload.tmdbId = Number(mediaWithTmdb.tmdbId);
       }
-    } catch {
-      showToast('Could not update library.', 'error');
+
+      // console.log('[useWatchlist] Saving payload:', payload);
+      await db.library.put(payload)
+        .then(() => showToast('Added to your library.', 'success'))
+        .catch(() => showToast('Could not update library.', 'error'));
     }
   }, [media, isSaved, showToast, stableId]);
 

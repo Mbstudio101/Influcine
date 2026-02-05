@@ -1,6 +1,5 @@
 import axios from 'axios';
-import { Media, MediaDetails, Video } from '../types';
-import { tmdbCache } from '../utils/apiCache';
+import { Media, MediaDetails, Video, CastMember, Episode } from '../types';
 
 const ACCESS_TOKEN = import.meta.env.VITE_TMDB_ACCESS_TOKEN;
 
@@ -48,46 +47,38 @@ tmdb.interceptors.response.use(
   }
 );
 
-// Generic GET with caching
-const getCached = async <T>(url: string, params?: Record<string, unknown>): Promise<T> => {
-  const cacheKey = tmdbCache.generateKey(url, params);
-  const cached = tmdbCache.get<T>(cacheKey);
-  
-  if (cached) {
-    return cached;
-  }
-
-  const response = await tmdb.get(url, { params });
-  tmdbCache.set(cacheKey, response.data);
+// Direct API call without double caching (handled by React Query)
+const fetchApi = async <T>(url: string, params?: Record<string, unknown>): Promise<T> => {
+  const response = await tmdb.get<T>(url, { params });
   return response.data;
 };
 
 export const getTrending = async (timeWindow: 'day' | 'week' = 'week'): Promise<Media[]> => {
-  const data = await getCached<{ results: Media[] }>(`/trending/all/${timeWindow}`);
+  const data = await fetchApi<{ results: Media[] }>(`/trending/all/${timeWindow}`);
   return filterBroken(data.results);
 };
 
 export const searchMulti = async (query: string): Promise<Media[]> => {
-  const data = await getCached<{ results: Media[] }>('/search/multi', { query });
+  const data = await fetchApi<{ results: Media[] }>('/search/multi', { query });
   return filterBroken(data.results);
 };
 
 export const getDetails = async (type: 'movie' | 'tv', id: number, params?: Record<string, unknown>): Promise<MediaDetails> => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data = await getCached<any>(`/${type}/${id}`, 
-    params || { append_to_response: 'videos,credits,similar' }
-  );
+  const data = await fetchApi<MediaDetails>(`/${type}/${id}`, {
+    append_to_response: 'videos,credits,similar',
+    ...params
+  });
   return { ...data, media_type: type };
 };
 
 export const getVideos = async (type: 'movie' | 'tv', id: number): Promise<Video[]> => {
-  const data = await getCached<{ results: Video[] }>(`/${type}/${id}/videos`);
+  const data = await fetchApi<{ results: Video[] }>(`/${type}/${id}/videos`);
   return data.results;
 };
 
 export const findMediaByImdbId = async (imdbId: string): Promise<Media | null> => {
   try {
-    const data = await getCached<{ movie_results: Media[], tv_results: Media[] }>(`/find/${imdbId}`, {
+    const data = await fetchApi<{ movie_results: Media[], tv_results: Media[] }>(`/find/${imdbId}`, {
       external_source: 'imdb_id'
     });
     
@@ -111,22 +102,19 @@ export const getImageUrl = (path: string | null, size: 'w92' | 'w154' | 'w185' |
 };
 
 export const getMoviesByCategory = async (category: 'popular' | 'top_rated' | 'now_playing' | 'upcoming'): Promise<Media[]> => {
-  const data = await getCached<{ results: Media[] }>(`/movie/${category}`);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items = data.results.map((item: any) => ({ ...item, media_type: 'movie' }));
+  const data = await fetchApi<{ results: Media[] }>(`/movie/${category}`);
+  const items = data.results.map((item) => ({ ...item, media_type: 'movie' } as Media));
   return filterBroken(items);
 };
 
 export const getTVShowsByCategory = async (category: 'popular' | 'top_rated' | 'on_the_air'): Promise<Media[]> => {
-  const data = await getCached<{ results: Media[] }>(`/tv/${category}`);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items = data.results.map((item: any) => ({ ...item, media_type: 'tv' }));
+  const data = await fetchApi<{ results: Media[] }>(`/tv/${category}`);
+  const items = data.results.map((item) => ({ ...item, media_type: 'tv' } as Media));
   return filterBroken(items);
 };
 
-export const getCredits = async (type: 'movie' | 'tv', id: number): Promise<any> => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data = await getCached<any>(`/${type}/${id}/credits`);
+export const getCredits = async (type: 'movie' | 'tv', id: number): Promise<{ cast: CastMember[] }> => {
+  const data = await fetchApi<{ cast: CastMember[] }>(`/${type}/${id}/credits`);
   return data;
 };
 
@@ -147,21 +135,18 @@ export const discoverMedia = async (
     page?: number;
   }
 ): Promise<Media[]> => {
-  const data = await getCached<{ results: Media[] }>(`/discover/${type}`, params);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items = data.results.map((item: any) => ({ ...item, media_type: type }));
+  const data = await fetchApi<{ results: Media[] }>(`/discover/${type}`, params);
+  const items = data.results.map((item) => ({ ...item, media_type: type } as Media));
   return filterBroken(items);
 };
 
 export const getSimilar = async (type: 'movie' | 'tv', id: number): Promise<Media[]> => {
-  const data = await getCached<{ results: Media[] }>(`/${type}/${id}/similar`);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items = data.results.map((item: any) => ({ ...item, media_type: type }));
+  const data = await fetchApi<{ results: Media[] }>(`/${type}/${id}/similar`);
+  const items = data.results.map((item) => ({ ...item, media_type: type } as Media));
   return filterBroken(items);
 };
 
-export const getSeasonDetails = async (tvId: number, seasonNumber: number): Promise<any> => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data = await getCached<any>(`/tv/${tvId}/season/${seasonNumber}`);
+export const getSeasonDetails = async (tvId: number, seasonNumber: number): Promise<{ episodes: Episode[] }> => {
+  const data = await fetchApi<{ episodes: Episode[] }>(`/tv/${tvId}/season/${seasonNumber}`);
   return data;
 };

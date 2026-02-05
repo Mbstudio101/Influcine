@@ -2,6 +2,9 @@ import { app, BrowserWindow, ipcMain, session, shell, protocol, net } from 'elec
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 import { autoUpdater } from 'electron-updater'
 import log from 'electron-log'
 import Database from 'better-sqlite3'
@@ -98,12 +101,17 @@ const ADBLOCK_SCRIPT = `
     });
 
     // Time Sync for Subtitles
+    let lastTime = 0;
     setInterval(() => {
         const video = document.querySelector('video');
         if (video && !video.paused) {
-            ipcRenderer.send('embed-time-update', video.currentTime);
+            // Throttle: only send if diff > 1s
+            if (Math.abs(video.currentTime - lastTime) > 1) {
+                lastTime = video.currentTime;
+                ipcRenderer.send('embed-time-update', video.currentTime);
+            }
         }
-    }, 250);
+    }, 500);
 
     // Subtitle Extraction Logic
      let knownTracks = [];
@@ -487,6 +495,35 @@ ipcMain.handle('trailer-download', async (_event, videoId) => {
     // console.error(`[Trailer] Download failed for ${videoId}:`, error);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     throw error;
+  }
+});
+
+ipcMain.handle('trailer-search', async (_event, query) => {
+  try {
+    await ensureYtDlp();
+    const ytDlpArgs = [
+      `ytsearch1:${query} trailer`,
+      '--get-id',
+      '--no-playlist',
+      '--no-check-certificates',
+      '--extractor-args', 'youtube:player_client=android'
+    ];
+    
+    return await new Promise<string | null>((resolve) => {
+      const ytDlp = new YTDlpWrap(YTDLP_PATH);
+      let output = '';
+      const process = ytDlp.exec(ytDlpArgs);
+      
+      process.on('data', (data: any) => output += data.toString());
+      process.on('error', () => resolve(null));
+      process.on('close', () => {
+        const id = output.trim();
+        // Simple validation for YouTube ID (11 chars)
+        resolve(id.length === 11 ? id : null);
+      });
+    });
+  } catch (error) {
+    return null;
   }
 });
 

@@ -11,6 +11,10 @@ const YTDlpWrap = YTDlpWrapModule.default || YTDlpWrapModule;
 import { ensureDirSync } from 'fs-extra'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegPath from 'ffmpeg-static'
+import zlib from 'node:zlib'
+import { promisify } from 'node:util'
+
+const gunzip = promisify(zlib.gunzip)
 
 // Set ffmpeg path
 if (ffmpegPath) {
@@ -66,11 +70,12 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'trailer', privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: true, stream: true } }
 ]);
 
-// Fix for "GPU process exited unexpectedly" and "Network service crashed" during HMR
-// Disabling hardware acceleration improves stability during development at the cost of performance
+// Fix for "GPU process exited unexpectedly" and "Network service crashed"
+// Disabling hardware acceleration improves stability
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('no-sandbox');
+
 if (!app.isPackaged) {
-  app.disableHardwareAcceleration();
-  app.commandLine.appendSwitch('no-sandbox');
   // console.log('Hardware acceleration and sandbox disabled for development stability');
 }
 
@@ -91,6 +96,128 @@ const ADBLOCK_SCRIPT = `
       // console.log("[Influcine] Forwarding command:", data);
       window.postMessage(data, '*');
     });
+
+    // Time Sync for Subtitles
+    setInterval(() => {
+        const video = document.querySelector('video');
+        if (video && !video.paused) {
+            ipcRenderer.send('embed-time-update', video.currentTime);
+        }
+    }, 250);
+
+    // Subtitle Extraction Logic
+     let knownTracks = [];
+     
+     function findVideo(root) {
+        if (!root) return null;
+        let v = root.querySelector('video');
+        if (v) return v;
+        // Simple Shadow DOM traversal
+        const els = root.querySelectorAll('*');
+        for (const el of els) {
+            if (el.shadowRoot) {
+                v = findVideo(el.shadowRoot);
+                if (v) return v;
+            }
+        }
+        return null;
+     }
+
+     function checkTracks() {
+         const video = findVideo(document);
+         let currentTracks = [];
+
+         // 1. Standard HTML5 Video Tracks
+         if (video) {
+             currentTracks = Array.from(video.textTracks || []).map((t, i) => ({
+                 index: i,
+                 label: t.label || t.language || \`Track \${i+1}\`,
+                 language: t.language || 'en',
+                 kind: t.kind,
+                 source: 'native'
+             })).filter(t => t.kind === 'subtitles' || t.kind === 'captions');
+         }
+
+         // 2. JWPlayer Tracks (Common in embeds)
+         // @ts-ignore
+         if (currentTracks.length === 0 && window.jwplayer) {
+             try {
+                 // @ts-ignore
+                 const player = window.jwplayer();
+                 if (player && player.getCaptionsList) {
+                     const tracks = player.getCaptionsList();
+                     currentTracks = tracks.map((t, i) => ({
+                         index: i,
+                         label: t.label || 'Unknown',
+                         language: 'en', // JWPlayer often doesn't give lang code easily in list
+                         kind: 'subtitles',
+                         source: 'jwplayer',
+                         id: i // JWPlayer uses index often
+                     }));
+                 }
+             } catch (e) { /* ignore */ }
+         }
+
+         if (JSON.stringify(currentTracks) !== JSON.stringify(knownTracks)) {
+             knownTracks = currentTracks;
+             ipcRenderer.send('embed-tracks-found', knownTracks);
+         }
+     }
+     
+     setInterval(checkTracks, 2000);
+
+     ipcRenderer.on('get-embed-track-cues', (_event, trackIndex) => {
+         // Handle JWPlayer
+         // @ts-ignore
+         if (window.jwplayer) {
+             try {
+                 // @ts-ignore
+                 const player = window.jwplayer();
+                 if (player && player.setCurrentCaptions) {
+                     // We can't extract cues from JWPlayer easily without playing
+                     // But we can force it to show?
+                     // Actually, if it's JWPlayer, we might not be able to extract text.
+                     // Fallback: Just select it in the player?
+                     player.setCurrentCaptions(trackIndex);
+                     return; 
+                 }
+             } catch (e) {}
+         }
+
+         const video = findVideo(document);
+         if (!video || !video.textTracks[trackIndex]) return;
+         
+         const track = video.textTracks[trackIndex];
+        
+        // Ensure track is loading cues
+        const originalMode = track.mode;
+        if (track.mode === 'disabled') {
+            track.mode = 'hidden'; // Load cues but don't show native UI
+        }
+        
+        const sendCues = () => {
+            const cues = Array.from(track.cues || []).map(c => ({
+                id: c.id,
+                start: c.startTime,
+                end: c.endTime,
+                text: c.text
+            }));
+            
+            if (cues.length > 0) {
+                ipcRenderer.send('embed-track-cues', { index: trackIndex, cues });
+            }
+        };
+        
+        if (track.cues && track.cues.length > 0) {
+            sendCues();
+        } else {
+            // Wait for load
+            setTimeout(sendCues, 500);
+            setTimeout(sendCues, 2000);
+            setTimeout(sendCues, 5000);
+        }
+    });
+
   } catch {
     // console.warn("[Influcine] Failed to init IPC bridge:", e);
   }
@@ -159,7 +286,71 @@ try {
   // console.error('Failed to write adblock script:', e);
 }
 
-// IPC Handlers for Trailer Caching
+// IPC Handler for Auto-Subtitles
+ipcMain.handle('auto-fetch-subtitles', async (_event, { imdbId, type, season, episode }) => {
+  if (!imdbId) return [];
+  
+  try {
+    const userAgent = 'Influcine v1.0';
+    let url = '';
+    
+    if (type === 'movie') {
+      url = `https://rest.opensubtitles.org/search/imdbid-${imdbId}/sublanguageid-eng`;
+    } else {
+      url = `https://rest.opensubtitles.org/search/episode-${episode}/imdbid-${imdbId}/season-${season}/sublanguageid-eng`;
+    }
+
+    // console.log('Fetching subtitles from:', url);
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': userAgent
+      }
+    });
+
+    if (!response.ok) return [];
+    
+    const data = await response.json();
+    
+    // Process top 3 results
+    const results = [];
+    const candidates = data.slice(0, 3);
+
+    for (const sub of candidates) {
+        try {
+            const dlRes = await fetch(sub.SubDownloadLink);
+            if (!dlRes.ok) continue;
+            
+            const buffer = Buffer.from(await dlRes.arrayBuffer());
+            let content = '';
+            
+            try {
+                // Try gunzip
+                const unzipped = await gunzip(buffer);
+                content = unzipped.toString('utf-8');
+            } catch {
+                // Maybe not gzipped?
+                content = buffer.toString('utf-8');
+            }
+            
+            results.push({
+                label: sub.MovieReleaseName || sub.LanguageName || 'English',
+                content: content,
+                format: sub.SubFormat
+            });
+        } catch (e) {
+            // console.error('Failed to download sub', e);
+        }
+    }
+    
+    return results;
+
+  } catch (error) {
+    // console.error('Subtitle fetch error:', error);
+    return [];
+  }
+});
+
+// IPC Handler for Trailer Caching
 ipcMain.handle('get-adblock-path', () => {
   return ADBLOCK_PATH;
 });
@@ -196,6 +387,24 @@ ipcMain.handle('trailer-check', async (_event, videoId) => {
 });
 
 // IPC Handler for Error Logging
+ipcMain.on('embed-time-update', (_event, time) => {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('embed-time-update', time);
+  }
+});
+
+ipcMain.on('embed-tracks-found', (_event, tracks) => {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('embed-tracks-found', tracks);
+  }
+});
+
+ipcMain.on('embed-track-cues', (_event, data) => {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('embed-track-cues', data);
+  }
+});
+
 ipcMain.handle('log-error', async (_event, errorData) => {
   const LOGS_DIR = path.join(app.getPath('userData'), 'logs');
   ensureDirSync(LOGS_DIR);
@@ -400,6 +609,13 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 
 // Set App Name for Dock
 app.setName('Influcine');
+if (process.platform === 'darwin') {
+  try {
+    app.dock.setIcon(path.join(process.env.VITE_PUBLIC, 'icon.png'));
+  } catch {
+    // console.error('Failed to set dock icon');
+  }
+}
 
 // Initialize IMDB DB
 let imdbDb: ReturnType<typeof Database> | null = null;
@@ -680,7 +896,7 @@ function createWindow() {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  if (process.platform !== 'darwin' || !app.isPackaged) {
     app.quit()
     win = null
   }

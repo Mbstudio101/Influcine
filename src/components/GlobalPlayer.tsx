@@ -232,8 +232,21 @@ const GlobalPlayer: React.FC = () => {
                 poster={media.poster_path ? `https://image.tmdb.org/t/p/w1280${media.backdrop_path || media.poster_path}` : undefined}
                 startTime={startTime}
                 onBack={close}
-                onPipToggle={togglePip}
+                onPipToggle={() => {
+                    if (isMini) {
+                        maximize();
+                    } else {
+                        togglePip();
+                    }
+                }}
                 isPip={isMini}
+                mediaData={{
+            tmdbId: id,
+            imdbId: media?.imdb_id,
+            type: type,
+            season: season,
+            episode: episode
+          }}
                 onNext={nextEpisode ? handleNext : undefined}
                 onPlay={handlePlay}
                 onPause={handlePause}

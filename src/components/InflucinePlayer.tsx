@@ -14,10 +14,15 @@ import {
   ArrowLeft,
   Sparkles,
   PictureInPicture,
-  Maximize2
+  Maximize2,
+  Upload,
+  Search,
+  Type
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
 import Focusable from './Focusable';
+import { parseSubtitle, SubtitleCue } from '../utils/subtitleParser';
+import { SubtitleOverlay } from './SubtitleOverlay';
 
 interface InflucinePlayerProps {
   src?: string;
@@ -33,6 +38,13 @@ interface InflucinePlayerProps {
   startTime?: number;
   onPipToggle?: () => void;
   isPip?: boolean;
+  mediaData?: {
+    tmdbId?: string;
+    imdbId?: string;
+    type: 'movie' | 'tv';
+    season?: number;
+    episode?: number;
+  };
 }
 
 interface ExtendedAudioTrack {
@@ -67,7 +79,8 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   onEnded,
   startTime = 0,
   onPipToggle,
-  isPip = false
+  isPip = false,
+  mediaData
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -138,6 +151,63 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const compressorRef = useRef<DynamicsCompressorNode | null>(null);
 
   const { themeColor, subtitleSize, subtitleColor, updateSettings } = useSettings();
+
+  // Custom Subtitles
+  const [customSubtitles, setCustomSubtitles] = useState<SubtitleCue[]>([]);
+  const [subtitleOffset, setSubtitleOffset] = useState(0);
+  const [embedTime, setEmbedTime] = useState(0);
+  // Embed Subtitles
+  const [embedTracks, setEmbedTracks] = useState<{index: number, label: string, language: string}[]>([]);
+  const [activeEmbedTrackIndex, setActiveEmbedTrackIndex] = useState(-1);
+  const [autoSubtitles, setAutoSubtitles] = useState<{label: string, content: string}[]>([]);
+  const [activeAutoSubtitleIndex, setActiveAutoSubtitleIndex] = useState(-1);
+  const [isSearchingSubs, setIsSearchingSubs] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-Fetch Subtitles
+  useEffect(() => {
+    if (!mediaData?.imdbId || !isEmbed) return;
+    
+    const fetchSubs = async () => {
+        setIsSearchingSubs(true);
+        try {
+            const subs = await window.ipcRenderer.invoke('auto-fetch-subtitles', mediaData);
+            if (subs && subs.length > 0) {
+                setAutoSubtitles(subs);
+                // If no embed tracks found, auto-select first result
+                if (embedTracks.length === 0 && customSubtitles.length === 0) {
+                    const cues = parseSubtitle(subs[0].content);
+                    setCustomSubtitles(cues);
+                    setActiveAutoSubtitleIndex(0);
+                }
+            }
+        } catch (e) {
+            // console.error("Auto-fetch failed", e);
+        } finally {
+            setIsSearchingSubs(false);
+        }
+    };
+
+    fetchSubs();
+  }, [mediaData?.imdbId, isEmbed]);
+
+  const loadAutoSubtitle = (index: number) => {
+      if (index === -1) {
+          setActiveAutoSubtitleIndex(-1);
+          if (activeEmbedTrackIndex === -1) setCustomSubtitles([]);
+          return;
+      }
+      
+      const sub = autoSubtitles[index];
+      if (sub) {
+          const cues = parseSubtitle(sub.content);
+          setCustomSubtitles(cues);
+          setActiveAutoSubtitleIndex(index);
+          setActiveEmbedTrackIndex(-1); // Deselect embed track
+      }
+  };
+
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
 
   // Initialize Audio Context (Cinema Audio)
@@ -716,6 +786,99 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     return () => webview.removeEventListener('new-window', handleNewWindow);
   }, [isEmbed]);
 
+  useEffect(() => {
+    // Listen for Embed Time Updates
+    const handleTime = (_: any, time: number) => {
+      setEmbedTime(time);
+    };
+
+    // Listen for Embed Tracks
+    const handleTracks = (_: any, tracks: any[]) => {
+        // console.log("Embed tracks received:", tracks);
+        setEmbedTracks(tracks);
+    };
+
+    // Listen for Embed Cues
+    const handleCues = (_: any, data: {index: number, cues: any[]}) => {
+        // console.log("Embed cues received:", data.cues.length);
+        if (data.index === activeEmbedTrackIndex) {
+            setCustomSubtitles(data.cues);
+        }
+    };
+
+    if (window.ipcRenderer) {
+        window.ipcRenderer.on('embed-time-update', handleTime);
+        window.ipcRenderer.on('embed-tracks-found', handleTracks);
+        window.ipcRenderer.on('embed-track-cues', handleCues);
+    }
+    return () => {
+        if (window.ipcRenderer) {
+            window.ipcRenderer.removeAllListeners('embed-time-update');
+            window.ipcRenderer.removeAllListeners('embed-tracks-found');
+            window.ipcRenderer.removeAllListeners('embed-track-cues');
+        }
+    };
+  }, [activeEmbedTrackIndex]); // Re-bind if active track changes? No, handleCues checks index
+
+  const loadEmbedTrack = (index: number) => {
+      if (index === -1) {
+          setActiveEmbedTrackIndex(-1);
+          setCustomSubtitles([]);
+          return;
+      }
+      setActiveEmbedTrackIndex(index);
+      setActiveAutoSubtitleIndex(-1);
+      setCustomSubtitles([]); // Clear old
+      // Request cues
+      if (iframeRef.current?.send) {
+          iframeRef.current.send('get-embed-track-cues', index);
+      } else {
+          // Fallback if not webview? No, only for webview.
+          // Note: iframeRef.current is a webview tag
+          // webview.send is how we send to the renderer process of the guest
+          // But ADBLOCK_SCRIPT uses ipcRenderer.on...
+          // So we should use webview.send!
+          try {
+             iframeRef.current.send('get-embed-track-cues', index);
+          } catch (e) {
+             // console.error("Failed to send to webview", e);
+          }
+      }
+  };
+
+  const handleSubtitleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    try {
+        const text = await file.text();
+        const cues = parseSubtitle(text);
+        setCustomSubtitles(cues);
+        // console.log("Loaded subtitles:", cues.length);
+    } catch (err) {
+        // console.error("Failed to parse subtitles", err);
+    }
+  };
+
+  // Auto-select English subtitles when tracks are found
+  useEffect(() => {
+    if (embedTracks.length > 0 && activeEmbedTrackIndex === -1) {
+        const enTrack = embedTracks.find(t => 
+            (t.language && t.language.startsWith('en')) || 
+            (t.label && t.label.toLowerCase().includes('english'))
+        );
+        if (enTrack) {
+            // console.log("Auto-selecting English track:", enTrack);
+            loadEmbedTrack(enTrack.index);
+        }
+    }
+  }, [embedTracks]);
+
+  const searchSubtitlesOnline = () => {
+      const query = title ? encodeURIComponent(title) : '';
+      window.open(`https://www.opensubtitles.org/en/search/sublanguageid-all/moviename-${query}`, '_blank');
+  };
+
   const handleVideoError = () => {
     // console.error('Native playback error. Switching to embed if available.');
     if (embedSrc) {
@@ -777,6 +940,15 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <div className="w-16 h-16 border-4 border-white/20 border-t-primary rounded-full animate-spin" />
         </div>
+      )}
+
+      {/* Custom Subtitles Overlay */}
+      {customSubtitles.length > 0 && (
+          <SubtitleOverlay 
+              cues={customSubtitles} 
+              currentTime={isEmbed ? embedTime : currentTime} 
+              offset={subtitleOffset}
+          />
       )}
 
       {/* Top Gradient */}
@@ -1033,11 +1205,116 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
                              {audioMode === 'standard' && <Check size={16} />}
                            </Focusable>
                         </div>
-                      ) : activeTab === 'subtitles' && !isEmbed ? (
+                      ) : activeTab === 'subtitles' ? (
                         <div className="space-y-4 p-1">
-                          {/* Track Selection */}
-                          <div>
-                            <div className="px-2 pb-2 text-xs text-gray-400 font-medium">Track</div>
+                          {/* Auto-Detected Subtitles */}
+                           {isEmbed && (autoSubtitles.length > 0 || isSearchingSubs) && (
+                               <div className="mb-4">
+                                   <div className="px-2 pb-2 text-xs text-gray-400 font-medium flex justify-between">
+                                       <span>Auto-Detected</span>
+                                       {isSearchingSubs && <span className="animate-pulse text-primary">Searching...</span>}
+                                   </div>
+                                   <div className="space-y-1">
+                                       {autoSubtitles.map((sub, i) => (
+                                           <Focusable
+                                               as="button"
+                                               key={i}
+                                               onClick={() => loadAutoSubtitle(i)}
+                                               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all ${activeAutoSubtitleIndex === i ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-gray-400'}`}
+                                           >
+                                               <div className="text-sm font-medium truncate max-w-[200px]">{sub.label}</div>
+                                               {activeAutoSubtitleIndex === i && <Check size={14} className="text-primary" />}
+                                           </Focusable>
+                                       ))}
+                                       {autoSubtitles.length === 0 && !isSearchingSubs && (
+                                            <div className="px-3 py-2 text-xs text-gray-500 italic">No external subtitles found</div>
+                                       )}
+                                   </div>
+                               </div>
+                           )}
+
+                           {/* Embed Tracks List */}
+                           {isEmbed && embedTracks.length > 0 && (
+                               <div className="mb-4">
+                                   <div className="px-2 pb-2 text-xs text-gray-400 font-medium">Stream Tracks</div>
+                                   <div className="space-y-1">
+                                       <Focusable
+                                           as="button"
+                                           onClick={() => loadEmbedTrack(-1)}
+                                           className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all ${activeEmbedTrackIndex === -1 && customSubtitles.length === 0 ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-gray-400'}`}
+                                       >
+                                           <div className="text-sm font-medium">None</div>
+                                           {activeEmbedTrackIndex === -1 && customSubtitles.length === 0 && <Check size={14} className="text-primary" />}
+                                       </Focusable>
+                                       {embedTracks.map((track) => (
+                                           <Focusable
+                                               as="button"
+                                               key={track.index}
+                                               onClick={() => loadEmbedTrack(track.index)}
+                                               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all ${activeEmbedTrackIndex === track.index ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-gray-400'}`}
+                                           >
+                                               <div className="text-sm font-medium">{track.label}</div>
+                                               {activeEmbedTrackIndex === track.index && <Check size={14} className="text-primary" />}
+                                           </Focusable>
+                                       ))}
+                                   </div>
+                               </div>
+                           )}
+
+                           {/* Custom Subtitles Section */}
+                          <div className="mb-4 bg-white/5 rounded-lg p-3">
+                            <div className="text-xs text-gray-400 font-medium mb-2 flex items-center gap-2">
+                              <Type size={14} />
+                              Custom Subtitles
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-2 mb-3">
+                                <button 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 py-2 rounded-lg text-xs font-medium transition-colors"
+                                >
+                                    <Upload size={14} />
+                                    Upload File
+                                </button>
+                                <button 
+                                    onClick={searchSubtitlesOnline}
+                                    className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 py-2 rounded-lg text-xs font-medium transition-colors"
+                                >
+                                    <Search size={14} />
+                                    Find Online
+                                </button>
+                                <input 
+                                    type="file" 
+                                    ref={fileInputRef} 
+                                    onChange={handleSubtitleUpload} 
+                                    className="hidden" 
+                                    accept=".srt,.vtt"
+                                />
+                            </div>
+
+                            {customSubtitles.length > 0 && (
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-primary font-bold">Loaded ({customSubtitles.length} lines)</span>
+                                        <button onClick={() => setCustomSubtitles([])} className="text-red-400 hover:text-red-300">Remove</button>
+                                    </div>
+                                    
+                                    <div className="flex items-center justify-between bg-black/20 p-2 rounded">
+                                        <span className="text-xs text-gray-400">Sync Offset</span>
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => setSubtitleOffset(prev => prev - 0.5)} className="p-1 hover:bg-white/10 rounded">-0.5s</button>
+                                            <span className="text-xs font-mono w-12 text-center">{subtitleOffset > 0 ? '+' : ''}{subtitleOffset}s</span>
+                                            <button onClick={() => setSubtitleOffset(prev => prev + 0.5)} className="p-1 hover:bg-white/10 rounded">+0.5s</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                          </div>
+
+                          {/* Track Selection (Only if not using custom subs overlay to avoid double subs, or let user decide) */}
+                          {!isEmbed && (
+                           <div>
+                            <div className="px-2 pb-2 text-xs text-gray-400 font-medium">Native Tracks</div>
                             <div className="space-y-1">
                               <Focusable
                                 as="button"
@@ -1061,6 +1338,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
                               ))}
                             </div>
                           </div>
+                          )}
 
                           <div className="h-px bg-white/10" />
 

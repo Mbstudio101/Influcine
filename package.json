@@ -70,5 +70,24 @@
     "vite-plugin-electron": "^0.28.6",
     "vite-plugin-electron-renderer": "^0.14.5"
   },
-  "main": "dist-electron/main.js"
+  "main": "dist-electron/main.js",
+  "build": {
+    "appId": "com.influcine.app",
+    "productName": "Influcine",
+    "directories": {
+      "output": "release/${version}"
+    },
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.entertainment"
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": "nsis"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "target": "AppImage"
+    }
+  }
 }

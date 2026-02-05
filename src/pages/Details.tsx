@@ -19,6 +19,7 @@ import { findBestTrailer } from '../utils/videoUtils';
 import { useTrailerCache } from '../hooks/useTrailerCache';
 import TrailerModal from '../components/TrailerModal';
 import { electronService } from '../services/electron';
+import { CastImage } from '../components/CastImage';
 
 const Details: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
@@ -567,8 +568,9 @@ const Details: React.FC = () => {
             {credits.cast.slice(0, 10).map((actor: CastMember) => (
               <div key={actor.id} className="min-w-[100px] flex flex-col items-center gap-2 text-center">
                 <div className="w-20 h-20 rounded-full overflow-hidden border border-white/10">
-                  <img
-                    src={getImageUrl(actor.profile_path)}
+                  <CastImage
+                    name={actor.name}
+                    profilePath={actor.profile_path}
                     alt={actor.name}
                     className="w-full h-full object-cover"
                   />

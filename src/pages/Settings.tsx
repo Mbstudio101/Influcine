@@ -15,11 +15,13 @@ import {
   Lock,
   Sparkles,
   Download,
-  Server
+  Server,
+  Headphones,
+  Volume2
 } from 'lucide-react';
 import { db } from '../db';
 import { CleanupAgent } from '../services/CleanupAgent';
-import { useSettings, Settings as AppSettings } from '../context/SettingsContext';
+import { useSettings, Settings as AppSettings, AudioSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/useAuth';
 import { Avatar } from '../components/Avatars';
 import { useNavigate } from 'react-router-dom';
@@ -110,7 +112,9 @@ const Settings: React.FC = () => {
     autoplay, 
     reducedMotion,
     defaultLanguage,
-    updateSettings
+    updateSettings,
+    audio,
+    updateAudio
   } = useSettings();
 
   const colors = [
@@ -237,6 +241,61 @@ Removed ${report.sourceMemoryRemoved} duplicate source items`);
           {/* Player Tab */}
           {activeTab === 'player' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <section>
+                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                  <Headphones className="text-primary" /> Audio Experience
+                </h2>
+                
+                <div className="bg-gradient-to-br from-black/40 to-black/20 rounded-2xl p-6 border border-white/5 mb-6">
+                   <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="text-lg font-bold text-white">Spatial Audio</h3>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">DOLBY ATMOS</span>
+                        </div>
+                        <p className="text-sm text-gray-400">Enable immersive 3D sound for supported content.</p>
+                      </div>
+                      <button 
+                        onClick={() => updateAudio({ spatialEnabled: !audio?.spatialEnabled })}
+                        className={`w-14 h-8 rounded-full transition-colors relative ${audio?.spatialEnabled ? 'bg-primary' : 'bg-white/10'}`}
+                      >
+                        <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-transform duration-300 ${audio?.spatialEnabled ? 'left-7' : 'left-1'}`} />
+                      </button>
+                   </div>
+
+                   {audio?.spatialEnabled && (
+                     <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                        <div className="p-4 bg-white/5 rounded-xl border border-white/5">
+                          <label className="block text-sm font-bold text-gray-400 mb-3">Output Mode</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {[
+                              { id: 'stereo', label: 'Stereo (Standard)', icon: Headphones },
+                              { id: 'surround-5.1', label: '5.1 Surround', icon: Volume2 },
+                              { id: 'binaural-virtualized', label: 'Virtual 3D (HRTF)', icon: Sparkles },
+                              { id: 'atmos-passthrough', label: 'HDMI Passthrough', icon: Server }
+                            ].map((mode) => (
+                              <button
+                                key={mode.id}
+                                onClick={() => updateAudio({ outputMode: mode.id as AudioSettings['outputMode'] })}
+                                className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
+                                  audio?.outputMode === mode.id
+                                    ? 'bg-primary/20 border-primary/50 text-white'
+                                    : 'bg-black/20 border-transparent text-gray-400 hover:bg-white/5 hover:text-white'
+                                }`}
+                              >
+                                <mode.icon size={18} />
+                                <span className="text-sm font-medium">{mode.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                     </div>
+                   )}
+                </div>
+              </section>
+
+              <div className="w-full h-px bg-white/5" />
+
               <section>
                 <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
                   <Type className="text-primary" /> Subtitles & Captions

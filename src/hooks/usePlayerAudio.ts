@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useSettings } from '../context/SettingsContext';
 
 export interface ExtendedAudioTrack {
   id?: string;
@@ -22,10 +23,12 @@ export function usePlayerAudio(
   const [audioFormat, setAudioFormat] = useState<string>('Optimized Stereo');
   const [audioEngineReady, setAudioEngineReady] = useState(false);
   const [availableTracks, setAvailableTracks] = useState<ExtendedAudioTrack[]>([]);
+  const { audio } = useSettings();
   
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   const compressorRef = useRef<DynamicsCompressorNode | null>(null);
+  const pannerRef = useRef<PannerNode | null>(null);
 
   // Initialize Audio Context (Cinema Audio)
   useEffect(() => {
@@ -66,16 +69,50 @@ export function usePlayerAudio(
   useEffect(() => {
     if (isEmbed || !sourceNodeRef.current || !compressorRef.current || !audioCtxRef.current) return;
 
+    // Disconnect all previous connections
     sourceNodeRef.current.disconnect();
     compressorRef.current.disconnect();
+    if (pannerRef.current) pannerRef.current.disconnect();
 
-    if (audioMode === 'cinema') {
+    // 1. Spatial Audio (Binaural Virtualization)
+    if (audio?.spatialEnabled && audio.outputMode === 'binaural-virtualized') {
+      if (!pannerRef.current) {
+         pannerRef.current = audioCtxRef.current.createPanner();
+         pannerRef.current.panningModel = 'HRTF';
+         pannerRef.current.distanceModel = 'inverse';
+         pannerRef.current.refDistance = 1;
+         pannerRef.current.maxDistance = 10000;
+         pannerRef.current.rolloffFactor = 1;
+         pannerRef.current.coneInnerAngle = 360;
+         pannerRef.current.coneOuterAngle = 0;
+         pannerRef.current.coneOuterGain = 0;
+         
+         // Position listener slightly offset
+         if (audioCtxRef.current.listener) {
+            audioCtxRef.current.listener.setPosition(0, 0, 0);
+         }
+         pannerRef.current.setPosition(0, 0, -1); // Sound in front
+      }
+
+      sourceNodeRef.current.connect(pannerRef.current);
+      // Optional: Chain compressor after panner for volume consistency
+      if (audioMode === 'cinema') {
+        pannerRef.current.connect(compressorRef.current);
+        compressorRef.current.connect(audioCtxRef.current.destination);
+      } else {
+        pannerRef.current.connect(audioCtxRef.current.destination);
+      }
+    }
+    // 2. Cinema Mode (Compressor)
+    else if (audioMode === 'cinema') {
       sourceNodeRef.current.connect(compressorRef.current);
       compressorRef.current.connect(audioCtxRef.current.destination);
-    } else {
+    } 
+    // 3. Standard / Passthrough
+    else {
       sourceNodeRef.current.connect(audioCtxRef.current.destination);
     }
-  }, [audioMode, isEmbed]);
+  }, [audioMode, isEmbed, audio]);
 
   const resumeAudioContext = () => {
     if (audioCtxRef.current?.state === 'suspended') {

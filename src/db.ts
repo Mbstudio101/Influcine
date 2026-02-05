@@ -64,6 +64,10 @@ export interface Profile {
     autoplay: boolean;
     subtitleSize: 'small' | 'medium' | 'large';
     subtitleColor: 'white' | 'yellow' | 'cyan';
+    audio?: {
+      spatialEnabled: boolean;
+      outputMode: 'stereo' | 'surround-5.1' | 'atmos-passthrough' | 'binaural-virtualized';
+    };
   };
 }
 

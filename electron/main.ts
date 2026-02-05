@@ -598,8 +598,39 @@ ipcMain.handle('get-subtitles', async (_event, videoId) => {
         label
       };
     });
-  } catch {
+  } catch (error) {
     return [];
+  }
+});
+
+// IPC Handler for Actor Image Search (Google Fallback)
+ipcMain.handle('get-actor-image', async (_event, name) => {
+  try {
+    // Use Google Basic Image Search (gbv=1) to get static HTML
+    const url = `https://www.google.com/search?q=${encodeURIComponent(name + ' actor')}&tbm=isch&gbv=1`;
+    const response = await net.fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    
+    if (!response.ok) return null;
+    
+    const html = await response.text();
+    
+    // Look for the standard Google Image Search result thumbnail
+    // They typically start with https://encrypted-tbn0.gstatic.com/images?q=...
+    const matches = html.match(/src="(https:\/\/encrypted-tbn0\.gstatic\.com\/images\?q=[^"]+)"/);
+    
+    if (matches && matches[1]) {
+      // Decode HTML entities if necessary (though usually src attributes in this context are clean enough)
+      return matches[1].replace(/&amp;/g, '&');
+    }
+    
+    return null;
+  } catch (e) {
+    // console.error('Actor image fetch failed:', e);
+    return null;
   }
 });
 

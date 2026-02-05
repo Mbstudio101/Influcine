@@ -1,6 +1,11 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+export interface AudioSettings {
+  spatialEnabled: boolean;
+  outputMode: 'stereo' | 'surround-5.1' | 'atmos-passthrough' | 'binaural-virtualized';
+}
+
 export interface Settings {
   themeColor: string;
   subtitleSize: 'small' | 'medium' | 'large';
@@ -8,6 +13,7 @@ export interface Settings {
   autoplay: boolean;
   reducedMotion: boolean;
   defaultLanguage: string;
+  audio: AudioSettings;
   profile: {
     name: string;
     avatarId: string;
@@ -17,6 +23,7 @@ export interface Settings {
 interface SettingsContextType extends Settings {
   updateSettings: (newSettings: Partial<Settings>) => void;
   updateProfile: (profile: Partial<Settings['profile']>) => void;
+  updateAudio: (audio: Partial<AudioSettings>) => void;
 }
 
 const defaultSettings: Settings = {
@@ -26,6 +33,10 @@ const defaultSettings: Settings = {
   autoplay: true,
   reducedMotion: false,
   defaultLanguage: 'English',
+  audio: {
+    spatialEnabled: false,
+    outputMode: 'stereo',
+  },
   profile: {
     name: 'John Doe',
     avatarId: 'human-m-1',
@@ -71,8 +82,15 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }));
   };
 
+  const updateAudio = (newAudio: Partial<AudioSettings>) => {
+    setSettings(prev => ({
+      ...prev,
+      audio: { ...prev.audio, ...newAudio }
+    }));
+  };
+
   return (
-    <SettingsContext.Provider value={{ ...settings, updateSettings, updateProfile }}>
+    <SettingsContext.Provider value={{ ...settings, updateSettings, updateProfile, updateAudio }}>
       {children}
     </SettingsContext.Provider>
   );

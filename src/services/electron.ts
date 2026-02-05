@@ -1,3 +1,5 @@
+import { Subtitle, ImdbResult, ImdbDetails, UpdateCheckResult } from '../types';
+
 // Centralized Electron Service
 // Handles all IPC communication between Renderer and Main process
 
@@ -6,23 +8,26 @@ export interface ElectronService {
   getAdblockPath(): Promise<string>;
   
   // Subtitles
-  getSubtitles(videoId: string): Promise<any[]>;
-  autoFetchSubtitles(mediaData: any): Promise<any[]>;
+  getSubtitles(videoId: string): Promise<Subtitle[]>;
+  autoFetchSubtitles(mediaData: unknown): Promise<Subtitle[]>;
   
   // Trailers
   prefetchTrailer(url: string): Promise<void>;
   searchTrailer(query: string): Promise<string | null>;
   
   // IMDB
-  searchImdb(query: string): Promise<any[]>;
-  getImdbById(id: string): Promise<any>;
+  searchImdb(query: string): Promise<ImdbResult[]>;
+  getImdbById(id: string): Promise<ImdbDetails>;
+
+  // Scraper
+  getActorImage(name: string): Promise<string | null>;
   
   // System
-  logError(error: any): Promise<void>;
+  logError(error: unknown): Promise<void>;
   getLogsPath(): Promise<string>;
   
   // Updates
-  checkForUpdates(currentVersion: string): Promise<any>;
+  checkForUpdates(currentVersion: string): Promise<UpdateCheckResult>;
   downloadUpdate(): Promise<void>;
   installUpdate(): Promise<void>;
 }
@@ -32,7 +37,7 @@ class ElectronServiceImpl implements ElectronService {
     return window.ipcRenderer;
   }
 
-  private async invoke<T>(channel: string, ...args: any[]): Promise<T> {
+  private async invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
     if (!this.ipc) {
       if (import.meta.env.DEV) {
         console.warn(`[ElectronService] IPC not available. Call to '${channel}' ignored.`);
@@ -48,12 +53,12 @@ class ElectronServiceImpl implements ElectronService {
   }
 
   // Subtitles
-  async getSubtitles(videoId: string): Promise<any[]> {
-    return this.invoke<any[]>('get-subtitles', videoId);
+  async getSubtitles(videoId: string): Promise<Subtitle[]> {
+    return this.invoke<Subtitle[]>('get-subtitles', videoId);
   }
 
-  async autoFetchSubtitles(mediaData: any): Promise<any[]> {
-    return this.invoke<any[]>('auto-fetch-subtitles', mediaData);
+  async autoFetchSubtitles(mediaData: unknown): Promise<Subtitle[]> {
+    return this.invoke<Subtitle[]>('auto-fetch-subtitles', mediaData);
   }
 
   // Trailers
@@ -66,16 +71,21 @@ class ElectronServiceImpl implements ElectronService {
   }
 
   // IMDB
-  async searchImdb(query: string): Promise<any[]> {
-    return this.invoke<any[]>('imdb-search', query);
+  async searchImdb(query: string): Promise<ImdbResult[]> {
+    return this.invoke<ImdbResult[]>('imdb-search', query);
   }
 
-  async getImdbById(id: string): Promise<any> {
-    return this.invoke<any>('imdb-get-by-id', id);
+  async getImdbById(id: string): Promise<ImdbDetails> {
+    return this.invoke<ImdbDetails>('imdb-get-by-id', id);
+  }
+
+  // Scraper
+  async getActorImage(name: string): Promise<string | null> {
+    return this.invoke<string | null>('get-actor-image', name);
   }
 
   // System
-  async logError(error: any): Promise<void> {
+  async logError(error: unknown): Promise<void> {
     // Fire and forget
     this.ipc?.invoke('log-error', error).catch(() => {});
   }
@@ -85,8 +95,8 @@ class ElectronServiceImpl implements ElectronService {
   }
 
   // Updates
-  async checkForUpdates(currentVersion: string): Promise<any> {
-    return this.invoke<any>('check-for-updates', currentVersion);
+  async checkForUpdates(currentVersion: string): Promise<UpdateCheckResult> {
+    return this.invoke<UpdateCheckResult>('check-for-updates', currentVersion);
   }
 
   async downloadUpdate(): Promise<void> {

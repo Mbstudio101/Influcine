@@ -81,16 +81,46 @@ export interface Episode {
   vote_average?: number;
 }
 
+export interface Subtitle {
+  lang: string;
+  url: string;
+  label: string;
+}
+
 export interface StreamSource {
   url: string;
   quality: '4k' | '1080p' | '720p' | '480p' | '360p' | 'auto';
   format: 'mp4' | 'm3u8' | 'webm';
-  subtitles?: {
-    lang: string;
-    url: string;
-    label: string;
-  }[];
+  subtitles?: Subtitle[];
   headers?: Record<string, string>;
+}
+
+export interface ImdbResult {
+  id: string;
+  title: string;
+  year?: string;
+  type?: string;
+  poster?: string;
+}
+
+export interface ImdbDetails {
+  id: string;
+  title: string;
+  year?: string;
+  rating?: number;
+  runtime?: string;
+  poster?: string;
+  plot?: string;
+  genres?: string[];
+  director?: string;
+  actors?: string;
+}
+
+export interface UpdateCheckResult {
+  update: boolean;
+  version?: string;
+  releaseNotes?: string;
+  error?: string;
 }
 
 export interface CastMember {

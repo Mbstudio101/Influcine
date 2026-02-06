@@ -111,13 +111,22 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const [hasResumed, setHasResumed] = useState(false);
   const [internalPip, setInternalPip] = useState(false);
   const [adblockPath, setAdblockPath] = useState<string>('');
-  const [isNativeMode, setIsNativeMode] = useState(false);
+  const [isNativeMode, setIsNativeMode] = useState(true); // Default to true
 
   // Settings Tab State
   const [activeTab, setActiveTab] = useState<'speed' | 'audio' | 'subtitles' | 'source'>('audio');
   useEffect(() => {
     if (isEmbed) setActiveTab('source');
   }, [isEmbed]);
+
+  useEffect(() => {
+    if (isEmbed && iframeRef.current?.send) {
+        // Apply initial native mode state to the embed
+        iframeRef.current.send('player-command', { 
+            command: isNativeMode ? 'showNativeControls' : 'hideNativeControls' 
+        });
+    }
+  }, [isEmbed, isNativeMode]);
 
   const toggleNativeMode = useCallback(() => {
       if (!isEmbed) return;

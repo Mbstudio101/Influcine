@@ -13,19 +13,19 @@ export const useTrailerCache = (videoId: string | undefined) => {
 
     const init = async () => {
       try {
-        // Strategy: Only use 'trailer://' if file exists locally.
-        // Otherwise return null to let UI fallback to YouTube Iframe.
-        // This ensures users see the official YouTube player (answering "why not from youtube")
-        // and avoids flaky yt-dlp streaming.
+        // Strategy: Always return 'trailer://' protocol URL to allow immediate streaming.
+        // The backend protocol handler will decide whether to serve from disk or stream from YouTube.
+        // This ensures the UI always gets a valid video source for the <video> tag.
         
-        // Check if exists locally
+        // Check if exists locally (or just get the stream URL)
         const localUrl = await window.ipcRenderer.invoke('trailer-check', videoId);
         
         if (mounted) {
            if (localUrl) {
              setCachedUrl(localUrl);
            } else {
-             setCachedUrl(null); // Fallback to Iframe
+             // Fallback for safety, though trailer-check should now always return a URL
+             setCachedUrl(`trailer://${videoId}`);
            }
         }
 

@@ -548,7 +548,8 @@ ipcMain.handle('trailer-check', async (_event, videoId) => {
       if (stats.size < 10 * 1024 * 1024) {
          // console.log(`[Trailer] File too small (${stats.size} bytes), likely low quality. Re-downloading: ${videoId}`);
          try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
-         return null;
+         // Return stream URL to allow immediate playback while redownloading
+         return `trailer://${videoId}`;
       }
       return `trailer://${videoId}`;
     } else {
@@ -556,7 +557,9 @@ ipcMain.handle('trailer-check', async (_event, videoId) => {
       try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
     }
   }
-  return null;
+  // If file doesn't exist, return stream URL to start streaming immediately
+  // The frontend will trigger a background download separately
+  return `trailer://${videoId}`;
 });
 
 // IPC Handler for Error Logging
@@ -1257,9 +1260,6 @@ app.whenReady().then(() => {
 
       // 2. If VTT is missing, try to download it
       if (isVtt) {
-         // Extract video ID from "VIDEOID.LANG.vtt"
-         await ensureYtDlp();
-         // ... (download logic for subs could go here, but usually main video download handles it)
          return new Response('Subtitle not found', { status: 404 });
       }
 
@@ -1276,14 +1276,15 @@ app.whenReady().then(() => {
 
       if (!directUrl) {
         await ensureYtDlp();
+        // Simplified args for better compatibility
+        // Use -f b (best pre-muxed) to avoid separate video/audio streams which causes "video only" issues
+        // Remove player_client=android as it might cause UA mismatch
         const ytDlpArgs = [
           `https://www.youtube.com/watch?v=${safeId}`,
-          '-f', 'best[ext=mp4]/best[ext=webm]/best', // Allow WebM for faster start
-          '-S', 'res,ext:mp4:m4a', // Prefer resolution, then mp4
+          '-f', 'b', // Best pre-muxed (video+audio)
           '-g',
-          '--force-ipv4',
           '--no-check-certificates',
-          '--extractor-args', 'youtube:player_client=android'
+          '--force-ipv4' // Sometimes IPv6 causes issues with Google
         ];
 
         directUrl = await new Promise<string>((resolve, reject) => {
@@ -1292,7 +1293,13 @@ app.whenReady().then(() => {
           ytDlp.exec(ytDlpArgs)
             .on('data', (data: string | Buffer) => output += data.toString())
             .on('error', (err: Error) => reject(err))
-            .on('close', () => resolve(output.trim().split('\n')[0])); // Take first URL
+            .on('close', () => {
+              const lines = output.trim().split('\n');
+              // If we get multiple lines, it usually means video+audio separate streams if we used 'best'.
+              // But with '-f b', we should get one.
+              // Just in case, take the first one.
+              resolve(lines[0]); 
+            }); 
         });
         
         if (directUrl && directUrl.startsWith('http')) {
@@ -1301,13 +1308,19 @@ app.whenReady().then(() => {
       }
 
       if (directUrl && directUrl.startsWith('http')) {
-        // Proxy the remote stream with headers (Range, etc.)
+        // Proxy the remote stream with headers
         const headers = new Headers();
-        // Forward Range header if present
+        
+        // IMPORTANT: Forward Range header for seeking
         if (request.headers.has('Range')) {
           headers.set('Range', request.headers.get('Range')!);
         }
         
+        // Forward User-Agent to match potential restrictions (though yt-dlp usually handles signature)
+        // If the URL is signed, it might not matter.
+        // But if we can, let's look like a browser.
+        headers.set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+
         return net.fetch(directUrl, { headers });
       }
       
@@ -1315,6 +1328,22 @@ app.whenReady().then(() => {
 
     } catch (err) {
       // console.error('[Trailer Protocol] Error:', err);
+      // Log to file for user debugging
+      const errorData = {
+          type: 'TRAILER_PROTOCOL_ERROR',
+          message: err instanceof Error ? err.message : String(err),
+          context: { url: request.url }
+      };
+      // Try to log properly
+      try {
+          const LOGS_DIR = path.join(app.getPath('userData'), 'logs');
+          if (fs.existsSync(LOGS_DIR)) {
+              fs.appendFileSync(path.join(LOGS_DIR, 'app.log'), `[${new Date().toISOString()}] [TRAILER_ERROR] ${errorData.message}\n`);
+          }
+      } catch {
+          // Ignore logging errors
+      }
+
       return new Response('Internal Server Error', { status: 500 });
     }
   });

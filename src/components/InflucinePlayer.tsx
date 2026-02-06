@@ -120,11 +120,28 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   }, [isEmbed]);
 
   useEffect(() => {
-    if (isEmbed && iframeRef.current?.send) {
-        // Apply initial native mode state to the embed
-        iframeRef.current.send('player-command', { 
-            command: isNativeMode ? 'showNativeControls' : 'hideNativeControls' 
-        });
+    const webview = iframeRef.current;
+    if (isEmbed && webview) {
+        // Apply state immediately
+        if (webview.send) {
+            webview.send('player-command', { 
+                command: isNativeMode ? 'showNativeControls' : 'hideNativeControls' 
+            });
+        }
+
+        // Apply state on navigation/reload
+        const onDomReady = () => {
+             if (webview.send) {
+                webview.send('player-command', { 
+                    command: isNativeMode ? 'showNativeControls' : 'hideNativeControls' 
+                });
+             }
+        };
+
+        webview.addEventListener('dom-ready', onDomReady);
+        return () => {
+            webview.removeEventListener('dom-ready', onDomReady);
+        };
     }
   }, [isEmbed, isNativeMode]);
 

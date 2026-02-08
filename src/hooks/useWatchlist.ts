@@ -46,7 +46,10 @@ export function useWatchlist(media: Media | null | undefined) {
     if (isSaved) {
       db.library.delete(stableId)
         .then(() => showToast('Removed from your library.', 'info'))
-        .catch(() => showToast('Could not update library.', 'error'));
+        .catch((e) => {
+          console.error('Library delete failed:', e);
+          showToast('Could not update library.', 'error');
+        });
     } else {
       const mediaType = media.media_type || (media.title ? 'movie' : 'tv');
       
@@ -75,7 +78,10 @@ export function useWatchlist(media: Media | null | undefined) {
       // console.log('[useWatchlist] Saving payload:', payload);
       await db.library.put(payload)
         .then(() => showToast('Added to your library.', 'success'))
-        .catch(() => showToast('Could not update library.', 'error'));
+        .catch((e) => {
+          console.error('Library put failed:', e);
+          showToast('Could not update library.', 'error');
+        });
     }
   }, [media, isSaved, showToast, stableId]);
 

@@ -24,7 +24,7 @@ export class PlayerErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // console.error("InflucinePlayer Error:", error, errorInfo);
+    console.error('InflucinePlayer Error:', error, errorInfo);
     this.setState({
       error,
       errorInfo

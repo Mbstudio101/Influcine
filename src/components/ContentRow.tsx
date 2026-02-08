@@ -33,7 +33,7 @@ const ContentRow: React.FC<ContentRowProps> = ({ title, fetcher, data, cardSize 
   const loading = !data && !!fetcher && isFetching;
 
   if (error) {
-    // console.error(`Failed to fetch data for ${title}:`, error);
+    console.error(`Failed to fetch data for ${title}:`, error);
   }
 
   const handleScroll = () => {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { electronService } from '../services/electron';
 import { parseSubtitle, SubtitleCue } from '../utils/subtitleParser';
 import { AutoSubtitle } from '../types';
+import { errorAgent } from '../services/errorAgent';
 
 export interface SubtitleFile {
   url: string;
@@ -28,12 +29,20 @@ export function usePlayerSubtitles(
   // Fetch External Subtitles (Trailer protocol)
   useEffect(() => {
     if (src && src.startsWith('trailer://')) {
-      const videoId = src.replace('trailer://', '').replace('.mp4', '');
+      // Extract ID from trailer://v/ID or trailer://ID
+      let videoId = src.replace('trailer://', '').replace('.mp4', '');
+      if (videoId.startsWith('v/')) {
+          videoId = videoId.substring(2);
+      }
+      
       electronService.getSubtitles(videoId)
         .then((subs) => {
           setExternalSubtitles(subs);
         })
-        .catch(() => setExternalSubtitles([]));
+        .catch((e) => {
+          errorAgent.log({ message: 'Failed to fetch subtitles', type: 'WARN', context: { error: String(e) } });
+          setExternalSubtitles([]);
+        });
     } else {
       setExternalSubtitles([]);
     }
@@ -94,7 +103,7 @@ export function usePlayerSubtitles(
                 }
             }
         } catch (e) {
-            // console.error("Auto-fetch failed", e);
+            errorAgent.log({ message: 'Auto-fetch subtitles failed', type: 'WARN', context: { error: String(e) } });
         } finally {
             setIsSearchingSubs(false);
         }

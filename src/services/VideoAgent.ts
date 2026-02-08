@@ -3,6 +3,7 @@ import { searchMulti } from './tmdb';
 import { searchLocalIMDB } from './imdb-local';
 import { Media } from '../types';
 import { normalizeString } from '../utils/stringUtils';
+import { errorAgent } from './errorAgent';
 
 interface AgentSearchResult {
   results: Media[];
@@ -38,8 +39,8 @@ export class VideoAgentService {
           query: userQuery
         };
       }
-    } catch {
-      // console.warn('VideoAgent: Cache lookup failed, proceeding to fetch', cacheError);
+    } catch (cacheError) {
+      errorAgent.log({ message: 'VideoAgent: Cache lookup failed, proceeding to fetch', type: 'WARN', context: { cacheError } });
     }
 
     // 2. Fetch from External Sources (TMDB + Local IMDB)
@@ -49,23 +50,20 @@ export class VideoAgentService {
       }
       
       const [tmdbResults, localImdbResults] = await Promise.all([
-        searchMulti(userQuery).catch(() => {
-          if (import.meta.env.DEV) {
-            // console.error('TMDB Search failed', e);
-          }
+        searchMulti(userQuery).catch((e) => {
+          errorAgent.log({ message: 'TMDB Search failed', type: 'ERROR', context: { error: String(e), query: userQuery } });
           return [] as Media[];
         }),
-        searchLocalIMDB(userQuery).catch(() => {
-          if (import.meta.env.DEV) {
-            // console.warn('Local IMDB Search failed', e);
-          }
+        searchLocalIMDB(userQuery).catch((e) => {
+          errorAgent.log({ message: 'Local IMDB Search failed', type: 'WARN', context: { error: String(e), query: userQuery } });
           return [];
         })
       ]);
 
       // Convert Local IMDB results to Media objects
+      // Use a negative hash derived from tconst to avoid collisions with TMDB IDs
       const localMedia: Media[] = localImdbResults.map(item => ({
-        id: 0, // Placeholder
+        id: -(Math.abs(item.tconst.split('').reduce((acc: number, ch: string) => acc * 31 + ch.charCodeAt(0), 0)) % 1_000_000 || 1),
         imdb_id: item.tconst,
         title: item.primaryTitle,
         name: item.primaryTitle,
@@ -115,8 +113,8 @@ export class VideoAgentService {
 
         // Cleanup old cache asynchronously
         this.cleanupCache();
-      } catch {
-        // console.warn('VideoAgent: Failed to cache results, but search succeeded', cacheWriteError);
+      } catch (cacheWriteError) {
+        errorAgent.log({ message: 'VideoAgent: Failed to cache results', type: 'WARN', context: { error: String(cacheWriteError) } });
       }
 
       return {
@@ -126,8 +124,8 @@ export class VideoAgentService {
         query: userQuery
       };
 
-    } catch {
-      // console.error('VideoAgent: Search failed', error);
+    } catch (error) {
+      errorAgent.log({ message: 'VideoAgent: Search failed', type: 'ERROR', context: { error: String(error), query: userQuery } });
       // Return empty or fallback
       return {
         results: [],
@@ -163,12 +161,6 @@ export class VideoAgentService {
     }
   }
 
-  /**
-   * Helper to verify if a specific media item has a known working source
-   */
-  // async getVerifiedSource(tmdbId: number, season?: number, episode?: number) {
-  //   return null;
-  // }
 }
 
 export const VideoAgent = new VideoAgentService();

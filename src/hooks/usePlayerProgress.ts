@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../db';
 import { useAuth } from '../context/useAuth';
 import { MediaDetails } from '../types';
+import { errorAgent } from '../services/errorAgent';
 
 interface UsePlayerProgressProps {
   type: 'movie' | 'tv';
@@ -70,7 +71,7 @@ export const usePlayerProgress = ({
           }
         }
       } catch (error) {
-        // console.error('Failed to load progress:', error);
+        errorAgent.log({ message: 'Failed to load progress', type: 'ERROR', context: { error: String(error), id } });
       } finally {
         setIsLoadingProgress(false);
       }
@@ -129,7 +130,7 @@ export const usePlayerProgress = ({
         await db.episodeProgress.put(cleanEpisode);
       }
     } catch (err) {
-      // console.error('Error saving progress:', err);
+      errorAgent.log({ message: 'Error saving progress', type: 'ERROR', context: { error: String(err) } });
     }
   }, []);
 

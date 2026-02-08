@@ -78,7 +78,7 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
           play(media as unknown as MediaDetails);
       }
     } catch (err) {
-      // console.error('Failed to play media:', err);
+      console.error('Failed to play media:', err);
     }
   };
 
@@ -97,7 +97,7 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
         setShowTrailer(true);
       }
     } catch (e) {
-      // console.error('Failed to fetch trailer', e);
+      console.error('Failed to fetch trailer', e);
     }
   };
 
@@ -165,7 +165,7 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
           <div className="flex items-center justify-between text-xs text-gray-300 mb-3 whitespace-nowrap">
             <div className="flex items-center gap-1">
               <Star size={12} className="text-yellow-400 fill-yellow-400" />
-              <span>{media.vote_average.toFixed(1)}</span>
+              <span>{(media.vote_average || 0).toFixed(1)}</span>
             </div>
             
             {/* Atmos / Audio Badge */}

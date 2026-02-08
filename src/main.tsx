@@ -38,9 +38,10 @@ const initApp = async () => {
     await db.open();
     // If successful, we can verify if a previous rescue needs restoration
     await restoreFromRescueDB(db);
-  } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-    // console.error('[Main] Database open failed:', err);
-    if (err.name === 'DexieError' || err.name === 'UpgradeError' || err.name === 'VersionError' || err.message?.includes('primary key') || err.name === 'DexieError2') {
+  } catch (err: unknown) {
+    const dbErr = err as { name?: string; message?: string };
+    errorAgent.log({ message: '[Main] Database open failed', type: 'CRITICAL', context: { error: String(err) } });
+    if (dbErr.name === 'DexieError' || dbErr.name === 'UpgradeError' || dbErr.name === 'VersionError' || dbErr.message?.includes('primary key') || dbErr.name === 'DexieError2') {
        wasRescued = await performRescue('InflucineDB');
     }
   }
@@ -54,8 +55,8 @@ const initApp = async () => {
         // Reload page to ensure clean state
         window.location.reload();
         return; // Stop execution here
-    } catch {
-        // console.error('Failed to reopen DB after rescue:', e);
+    } catch (e) {
+        errorAgent.log({ message: 'Failed to reopen DB after rescue', type: 'CRITICAL', context: { error: String(e) } });
     }
   }
 

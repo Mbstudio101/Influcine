@@ -125,8 +125,7 @@ function App() {
     };
 
     if ('requestIdleCallback' in window) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (window as any).requestIdleCallback(() => runMaintenance());
+      window.requestIdleCallback(() => runMaintenance());
     } else {
       setTimeout(runMaintenance, 2000);
     }
@@ -138,9 +137,7 @@ function App() {
           setUpdateAvailable(update);
         }
       } catch (error) {
-        if (import.meta.env.DEV) {
-          // console.error('Update check failed', error);
-        }
+        console.warn('Update check failed', error);
       }
     };
     check();
@@ -153,7 +150,7 @@ function App() {
       try {
         await installUpdate();
       } catch (error) {
-        // console.error('Failed to install update:', error);
+        console.error('Failed to install update:', error);
       }
       return;
     }
@@ -165,7 +162,7 @@ function App() {
       return;
     } catch (e) {
       // Fallback to browser download if not supported/failed
-      // console.warn('IPC download not supported, falling back to browser', e);
+      console.warn('IPC download not supported, falling back to browser', e);
       const link = getPlatformDownloadLink(updateAvailable);
       if (link) {
         window.open(link, '_blank');

@@ -21,9 +21,9 @@ export function useTrailerPrefetch(media: Media, mediaType: 'movie' | 'tv') {
                 const trailer = findBestTrailer(videos);
                 if (trailer) {
                     setTrailerKey(trailer.key);
-                    electronService.prefetchTrailer(trailer.key).catch(() => {});
+                    electronService.prefetchTrailer(trailer.key).catch(() => { /* prefetch is best-effort */ });
                 }
-            }).catch(() => {});
+            }).catch(() => { /* prefetch lookup is best-effort */ });
         }, 500);
     }
   }, [media.id, mediaType, trailerKey]);
@@ -56,6 +56,7 @@ export function useTrailerPrefetch(media: Media, mediaType: 'movie' | 'tv') {
 
           return null;
       } catch (e) {
+          console.warn('Failed to fetch trailer:', e);
           return null;
       }
   }, [media.id, mediaType, trailerKey, media.title, media.name]);

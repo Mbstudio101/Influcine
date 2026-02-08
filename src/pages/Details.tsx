@@ -239,8 +239,8 @@ const Details: React.FC = () => {
         media_type: details.media_type,
         savedAt: Date.now()
       });
-    } catch {
-      // console.error('Failed to save history:', error);
+    } catch (error) {
+      console.error('Failed to save history:', error);
     }
 
     if (effectiveType === 'tv') {
@@ -277,8 +277,8 @@ const Details: React.FC = () => {
           episode
         }
       });
-    } catch {
-      // console.error('Failed to set episode for playback:', error);
+    } catch (error) {
+      console.error('Failed to set episode for playback:', error);
     }
     if (effectiveType && details) {
       play(details, season, episode);
@@ -336,16 +336,13 @@ const Details: React.FC = () => {
                 loop
                 playsInline
                 onCanPlay={() => setIsTrailerReady(true)}
-                onError={() => {
-                  // console.warn('Trailer playback unavailable, falling back.', {
-                  //   src: cachedTrailerUrl,
-                  //   error: e
-                  // });
+                onError={(e) => {
+                  console.warn('Trailer playback unavailable', e);
                   setIsTrailerReady(false);
                   
                   // Invalidate cache
                   if (activeTrailerKey) {
-                    window.ipcRenderer?.invoke('trailer-invalidate', activeTrailerKey).catch(() => { });
+                    window.ipcRenderer?.invoke('trailer-invalidate', activeTrailerKey).catch(() => { /* cache invalidation is best-effort */ });
                   }
 
                   // Find next best trailer

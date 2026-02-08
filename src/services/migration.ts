@@ -1,4 +1,5 @@
 import { db } from '../db';
+import { errorAgent } from './errorAgent';
 
 /**
  * Migrates any string-based numeric IDs in the database to proper number types.
@@ -8,8 +9,7 @@ export async function migrateDatabaseIds() {
   try {
     if (!db.isOpen()) {
       await db.open().catch(err => {
-        // If it's a version error, we might need to delete and recreate, but let's just log for now
-        // console.error('[Migration] Database failed to open during check:', err);
+        errorAgent.log({ message: '[Migration] Database failed to open during check', type: 'ERROR', context: { error: String(err) } });
         throw err;
       });
     }
@@ -71,6 +71,6 @@ export async function migrateDatabaseIds() {
     }
 
   } catch (error) {
-    // console.error('[Migration] Failed to migrate database IDs:', error);
+    errorAgent.log({ message: '[Migration] Failed to migrate database IDs', type: 'ERROR', context: { error: String(error) } });
   }
 }

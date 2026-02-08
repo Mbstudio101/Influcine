@@ -92,111 +92,48 @@ const ADBLOCK_SCRIPT = `
 (function() {
   // console.log("[Influcine] AdBlocker Active");
   
+  let knownTracks = [];
+  let isNativeMode = false; // Default state
+
   // IPC Bridge for Player Control
   try {
     const { ipcRenderer } = require('electron');
 
     function findVideo(root) {
         if (!root) return null;
-        let v = root.querySelector('video');
-        if (v) return v;
-        // Simple Shadow DOM traversal
-        const els = root.querySelectorAll('*');
-        for (const el of els) {
-            if (el.shadowRoot) {
-                v = findVideo(el.shadowRoot);
+        if (root.querySelector) {
+            const v = root.querySelector('video');
+            if (v) return v;
+        }
+        // Shadow DOM
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, null);
+        let node;
+        while (node = walker.nextNode()) {
+            if (node.shadowRoot) {
+                const v = findVideo(node.shadowRoot);
                 if (v) return v;
             }
         }
         return null;
     }
 
-    ipcRenderer.on('player-command', (_event, data) => {
-      // console.log("[Influcine] Executing command:", data);
-      const video = findVideo(document);
-      if (!video) return;
-
-      try {
-        switch (data.command) {
-            case 'play':
-                video.play().catch(e => console.error("Play failed", e));
-                break;
-            case 'pause':
-                video.pause();
-                break;
-            case 'seek':
-                if (typeof data.time === 'number') video.currentTime = data.time;
-                break;
-            case 'setSpeed':
-                if (typeof data.speed === 'number') video.playbackRate = data.speed;
-                break;
-            case 'ratechange':
-                 if (typeof data.playbackRate === 'number') video.playbackRate = data.playbackRate;
-                 break;
-            case 'setVolume':
-                 if (typeof data.volume === 'number') {
-                     // Ensure volume is between 0 and 1
-                     video.volume = Math.max(0, Math.min(1, data.volume));
-                 }
-                 break;
-            case 'setMute':
-                 if (typeof data.muted === 'boolean') video.muted = data.muted;
-                 break;
-            case 'toggleMute':
-                 video.muted = !video.muted;
-                 break;
-            case 'showNativeControls':
-                 video.controls = true;
-                 break;
-            case 'hideNativeControls':
-                 video.controls = false;
-                 break;
+    function notify() {
+        const video = findVideo(document);
+        if (video) {
+            ipcRenderer.send('player-state-update', {
+                time: video.currentTime,
+                duration: video.duration,
+                paused: video.paused,
+                volume: video.volume,
+                muted: video.muted
+            });
+            ipcRenderer.send('embed-time-update', video.currentTime);
         }
-      } catch (e) {
-          // console.error("Command execution error", e);
-      }
-    });
+    }
 
-    // Time Sync for Subtitles & Progress
-    let lastTime = 0;
-    let lastPaused = true;
     setInterval(() => {
         const video = findVideo(document);
         if (video) {
-             // Sync state
-             const state = {
-                 event: video.paused ? 'pause' : 'play',
-                 currentTime: video.currentTime,
-                 duration: video.duration
-             };
-             
-             // Throttle: only send if diff > 0.5s or state changed
-             if (Math.abs(video.currentTime - lastTime) > 0.5 || video.paused !== lastPaused) {
-                lastTime = video.currentTime;
-                lastPaused = video.paused;
-                
-                // Send detailed state update via IPC
-                ipcRenderer.send('player-state-update', state);
-             }
-        }
-    }, 500);
-
-    // Forward internal events to host
-    // We can also attach listeners directly if we found the video
-    let attachedVideo = null;
-    setInterval(() => {
-        const video = findVideo(document);
-        if (video && video !== attachedVideo) {
-            attachedVideo = video;
-            const notify = (e) => {
-                const state = {
-                    event: e.type,
-                    currentTime: video.currentTime,
-                    duration: video.duration,
-                    paused: video.paused
-                };
-                ipcRenderer.send('player-state-update', state);
-            };
             video.addEventListener('play', notify);
             video.addEventListener('pause', notify);
             video.addEventListener('ended', notify);
@@ -257,10 +194,6 @@ const ADBLOCK_SCRIPT = `
                  // @ts-ignore
                  const player = window.jwplayer();
                  if (player && player.setCurrentCaptions) {
-                     // We can't extract cues from JWPlayer easily without playing
-                     // But we can force it to show?
-                     // Actually, if it's JWPlayer, we might not be able to extract text.
-                     // Fallback: Just select it in the player?
                      player.setCurrentCaptions(trackIndex);
                      return; 
                  }
@@ -312,21 +245,87 @@ const ADBLOCK_SCRIPT = `
   window.confirm = () => true; // Auto-confirm to bypass some checks
   
   // 2. Anti-Adblock Killer (Mocking)
-  // Mock common ad variables to fool detectors
   window.canRunAds = true;
   window.isAdBlockActive = false;
-  // Mock more common ad-tech variables
   // @ts-ignore
   window.google = { ad: {}, ads: {} };
   // @ts-ignore
   window.googletag = { cmd: [], pubads: () => ({ setTargeting: () => {}, refresh: () => {} }), display: () => {} };
   
-  // 3. CSS Injection for Immediate Hiding (Performance)
-  const style = document.createElement('style');
-  style.textContent = 'iframe[src*="ads"], iframe[src*="doubleclick"], .ad-banner, .adsbox, #ad-container, div[class*="ads"], div[id*="ads"], div[class*="sponsor"], a[href*="bet"], a[href*="casino"], .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-title, .vjs-control-bar, .vjs-big-play-button, .plyr__controls, .plyr__poster, #player-controls, .controls-container, div[style*="z-index: 2147483647"], div[style*="z-index: 9999999"] { display: none !important; visibility: hidden !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }';
-  document.head.appendChild(style);
+  // 3. CSS Injection Logic (Global)
+  const cssContent = '/* Hide Common Player Controls */ .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-title, .vjs-control-bar, .vjs-big-play-button, .vjs-text-track-display, .plyr__controls, .plyr__poster, .art-controls, .art-mask, .art-layer-auto, .art-video-player .art-bottom, .fluid-controls, .fluid-title, #player-controls, .controls-container, .media-controls, .fp-controls, .fp-ui, /* Hide VidSrc/VidLink Specifics */ #controls, #play-button, #bar, .control-bar, .progress-bar, .buttons, /* Hide Native Controls if exposed via pseudo-elements (limited support) */ video::-webkit-media-controls, video::-webkit-media-controls-enclosure { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; width: 0 !important; height: 0 !important; } /* Ensure Video is Full Size */ video { width: 100% !important; height: 100% !important; object-fit: contain !important; }';
 
-  // 4. MutationObserver for DOM Cleanup (Replaces polling)
+  const injectStyle = (root) => {
+      if (!root) return;
+      if (root.getElementById && root.getElementById('influcine-css')) return;
+      if (root.querySelector && root.querySelector('#influcine-css')) return;
+
+      const style = document.createElement('style');
+      style.id = 'influcine-css';
+      style.textContent = cssContent;
+      
+      if (root.head) {
+          root.head.appendChild(style);
+      } else if (root.appendChild) {
+          root.appendChild(style);
+      }
+  };
+
+  const removeStyle = () => {
+      const els = document.querySelectorAll('#influcine-css');
+      els.forEach(el => el.remove());
+  };
+
+  const injectIntoShadow = (root) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, null);
+      let node;
+      while (node = walker.nextNode()) {
+          if (node.shadowRoot) {
+              injectStyle(node.shadowRoot);
+              injectIntoShadow(node.shadowRoot);
+          }
+      }
+  };
+
+  // IPC Listener (Global)
+  try {
+    const { ipcRenderer } = require('electron');
+    ipcRenderer.on('player-command', (_event, data) => {
+        if (data.command === 'showNativeControls') {
+            isNativeMode = true;
+            removeStyle();
+            const videos = document.querySelectorAll('video');
+            videos.forEach(v => { v.controls = true; });
+        }
+        if (data.command === 'hideNativeControls') {
+            isNativeMode = false;
+            injectStyle(document);
+            injectIntoShadow(document.body);
+            const videos = document.querySelectorAll('video');
+            videos.forEach(v => { v.controls = false; });
+        }
+        if (data.command === 'setVolume') {
+            const videos = document.querySelectorAll('video');
+            videos.forEach(v => { 
+                v.volume = 1; // Keep full volume, let GainNode handle it in main app if possible, or sets it.
+                // Actually, if we are in embed, the main app audio context might not work perfectly across process boundaries 
+                // unless we capture audio. 
+                // But for now, just set it.
+                // v.volume = data.volume; // If we want to control it here.
+            });
+        }
+        if (data.command === 'setMute') {
+            const videos = document.querySelectorAll('video');
+            videos.forEach(v => { v.muted = data.muted; });
+        }
+        if (data.command === 'seek') {
+             const video = findVideo(document);
+             if (video) video.currentTime = data.time;
+        }
+    });
+  } catch {}
+
+  // 4. MutationObserver for DOM Cleanup
   const observer = new MutationObserver((mutations) => {
     let shouldCheck = false;
     for (const m of mutations) {
@@ -337,7 +336,6 @@ const ADBLOCK_SCRIPT = `
     }
     
     if (shouldCheck) {
-      // Throttle cleanup with requestAnimationFrame
       requestAnimationFrame(() => {
         const elements = document.querySelectorAll('div, iframe, a');
         elements.forEach(el => {
@@ -354,10 +352,20 @@ const ADBLOCK_SCRIPT = `
                el.remove();
            }
         });
+        
+        // If native mode is ON, ensure controls are visible
+        if (isNativeMode) {
+             const videos = document.querySelectorAll('video');
+             videos.forEach(v => { v.controls = true; });
+        } else {
+             // Re-inject style if missing?
+             injectStyle(document);
+        }
       });
     }
   });
   
+  // Start observing
   if (document.body) {
     observer.observe(document.body, { childList: true, subtree: true });
   } else {
@@ -366,7 +374,7 @@ const ADBLOCK_SCRIPT = `
     });
   }
 
-  // Fallback cleanup (every 5s instead of 1s/3s)
+  // 5. Cleanup Loop & Native Control Enforcement
   setInterval(() => {
       // Clean specific known ad iframes
       document.querySelectorAll('iframe').forEach(el => {
@@ -377,70 +385,33 @@ const ADBLOCK_SCRIPT = `
                if (el.offsetWidth < 20 || el.offsetHeight < 20) el.remove();
           }
       });
-  }, 5000);
-  
-  // 4. Specific Site Fixes (VidFast / VidLink / 2Embed)
-    window.addEventListener('DOMContentLoaded', () => {
-      // Robust CSS to hide controls
-      const cssContent = '/* Hide Common Player Controls */ .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-title, .vjs-control-bar, .vjs-big-play-button, .vjs-text-track-display, .plyr__controls, .plyr__poster, .art-controls, .art-mask, .art-layer-auto, .art-video-player .art-bottom, .fluid-controls, .fluid-title, #player-controls, .controls-container, .media-controls, .fp-controls, .fp-ui, /* Hide VidSrc/VidLink Specifics */ #controls, #play-button, #bar, .control-bar, .progress-bar, .buttons, /* Hide Native Controls if exposed via pseudo-elements (limited support) */ video::-webkit-media-controls, video::-webkit-media-controls-enclosure { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; } /* Ensure Video is Full Size */ video { width: 100% !important; height: 100% !important; object-fit: contain !important; }';
-
-      const injectStyle = (root) => {
-          if (!root) return;
-          // Avoid duplicate injection
-          if (root.getElementById && root.getElementById('influcine-css')) return;
-          if (root.querySelector && root.querySelector('#influcine-css')) return;
-
-          const style = document.createElement('style');
-          style.id = 'influcine-css';
-          style.textContent = cssContent;
-          
-          if (root.head) {
-              root.head.appendChild(style);
-          } else if (root.appendChild) {
-              root.appendChild(style);
-          }
-      };
-
-      // 1. Inject into main document
-      injectStyle(document);
-
-      // 2. Inject into Shadow DOMs
-      const injectIntoShadow = (root) => {
-          const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, null);
-          let node;
-          while (node = walker.nextNode()) {
-              if (node.shadowRoot) {
-                  injectStyle(node.shadowRoot);
-                  injectIntoShadow(node.shadowRoot);
-              }
-          }
-      };
-      injectIntoShadow(document.body);
-
-      // 3. Force remove native controls attribute
-      setInterval(() => {
-          const videos = document.querySelectorAll('video');
-          videos.forEach(v => {
-              if (v.controls) v.controls = false;
-          });
-      }, 1000);
-
-      ipcRenderer.on('player-command', (_event, data) => {
-          if (data.command === 'showNativeControls') {
-              const els = document.querySelectorAll('#influcine-css');
-              els.forEach(el => el.remove());
-              // Re-enable native controls
-               const videos = document.querySelectorAll('video');
-               videos.forEach(v => { v.controls = true; });
-          }
-          if (data.command === 'hideNativeControls') {
-              injectStyle(document);
-              injectIntoShadow(document.body);
-              const videos = document.querySelectorAll('video');
-              videos.forEach(v => { v.controls = false; });
-          }
-      });
       
+      if (isNativeMode) {
+           // Ensure controls are ON
+           const videos = document.querySelectorAll('video');
+           videos.forEach(v => { 
+               if (!v.controls) v.controls = true; 
+           });
+      } else {
+           // Ensure controls are OFF (if not native mode)
+           const videos = document.querySelectorAll('video');
+           videos.forEach(v => {
+              if (v.controls) v.controls = false;
+           });
+      }
+  }, 1000);
+  
+  // 6. DOMContentLoaded Logic
+    window.addEventListener('DOMContentLoaded', () => {
+      // Initial CSS Injection
+      if (!isNativeMode) {
+          injectStyle(document);
+          injectIntoShadow(document.body);
+      } else {
+          // If already native (fast IPC), ensure removed
+          removeStyle();
+      }
+
       // Force video to be visible if hidden by anti-adblock
     const video = document.querySelector('video');
     if (video) {
@@ -549,9 +520,9 @@ ipcMain.handle('trailer-check', async (_event, videoId) => {
          // console.log(`[Trailer] File too small (${stats.size} bytes), likely low quality. Re-downloading: ${videoId}`);
          try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
          // Return stream URL to allow immediate playback while redownloading
-         return `trailer://${videoId}`;
+         return `trailer://v/${videoId}`;
       }
-      return `trailer://${videoId}`;
+      return `trailer://v/${videoId}`;
     } else {
       // Clean up empty file
       try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
@@ -559,7 +530,7 @@ ipcMain.handle('trailer-check', async (_event, videoId) => {
   }
   // If file doesn't exist, return stream URL to start streaming immediately
   // The frontend will trigger a background download separately
-  return `trailer://${videoId}`;
+  return `trailer://v/${videoId}`;
 });
 
 // IPC Handler for Error Logging
@@ -665,7 +636,7 @@ ipcMain.handle('trailer-download', async (_event, videoId) => {
         throw new Error('Download finished but file not found');
     }
 
-    return `trailer://${videoId}`;
+    return `trailer://v/${videoId}`;
   } catch (error) {
     // console.error(`[Trailer] Download failed for ${videoId}:`, error);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
@@ -733,7 +704,7 @@ ipcMain.handle('get-subtitles', async (_event, videoId) => {
       label = label.charAt(0).toUpperCase() + label.slice(1);
 
       return {
-        url: `trailer://${f}`,
+        url: `trailer://v/${f}`,
         lang,
         label
       };
@@ -1237,13 +1208,17 @@ app.whenReady().then(() => {
   protocol.handle('trailer', async (request) => {
     try {
       // Robust URL parsing
-      const url = request.url;
-      const videoId = url.replace('trailer://', '').replace(/\/$/, ''); // Remove protocol and trailing slash
+      // Browser might lowercase the host in standard schemes (trailer://HOST/PATH)
+      // So we use trailer://v/VIDEO_ID where VIDEO_ID is the path (case-sensitive)
+      const parsedUrl = new URL(request.url);
+      const videoId = parsedUrl.pathname.replace(/^\//, ''); // Remove leading slash
       const decodedId = decodeURIComponent(videoId);
 
       // Sanitize ID to prevent directory traversal
       const safeId = path.basename(decodedId);
       
+      if (!safeId) return new Response('Invalid ID', { status: 400 });
+
       // Check extension to support VTT subtitles
       const isVtt = safeId.endsWith('.vtt');
       const filePath = isVtt 
@@ -1327,11 +1302,17 @@ app.whenReady().then(() => {
       return new Response('Video unavailable', { status: 404 });
 
     } catch (err) {
+      // Check for known errors
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      if (errorMsg.includes('Video unavailable') || errorMsg.includes('404')) {
+          return new Response('Video unavailable', { status: 404 });
+      }
+
       // console.error('[Trailer Protocol] Error:', err);
       // Log to file for user debugging
       const errorData = {
           type: 'TRAILER_PROTOCOL_ERROR',
-          message: err instanceof Error ? err.message : String(err),
+          message: errorMsg,
           context: { url: request.url }
       };
       // Try to log properly

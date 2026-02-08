@@ -140,7 +140,7 @@ const Watchlist: React.FC = () => {
                            const details = await getDetails(featuredItem.media_type, featuredItem.id);
                            play(details);
                         } catch(e) {
-                          // console.error(e);
+                          console.error(e);
                         }
                       }
                     }}

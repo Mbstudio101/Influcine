@@ -142,7 +142,7 @@ export const generateDailyMix = async (profileId: number): Promise<Media[]> => {
           }
       }
   } catch (e) {
-      // console.error("RecEngine Error", e);
+      console.warn('RecEngine Error', e);
   }
 
   // 4. Cache Results

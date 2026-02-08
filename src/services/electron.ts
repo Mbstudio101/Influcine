@@ -86,8 +86,10 @@ class ElectronServiceImpl implements ElectronService {
 
   // System
   async logError(error: unknown): Promise<void> {
-    // Fire and forget
-    this.ipc?.invoke('log-error', error).catch(() => {});
+    // Fire and forget — if error logging itself fails, write to console as last resort
+    this.ipc?.invoke('log-error', error).catch((e) => {
+      console.warn('[ElectronService] Failed to send error log to main process:', e);
+    });
   }
 
   async getLogsPath(): Promise<string> {

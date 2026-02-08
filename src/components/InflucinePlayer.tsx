@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSettings } from '../context/SettingsContext';
 import { SubtitleOverlay } from './SubtitleOverlay';
 import { electronService } from '../services/electron';
+import { errorAgent } from '../services/errorAgent';
 
 // Hooks
 import { usePlayerAudio } from '../hooks/usePlayerAudio';
@@ -64,8 +65,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   mediaData
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const iframeRef = useRef<any>(null);
+  const iframeRef = useRef<HTMLElement & { send?: (channel: string, ...args: unknown[]) => void; contentWindow?: Window; getWebContentsId?: () => number; isLoading?: () => boolean }>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isEmbed = !!embedSrc && !src;
@@ -122,19 +122,37 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   useEffect(() => {
     const webview = iframeRef.current;
     if (isEmbed && webview) {
-        // Apply state immediately
-        if (webview.send) {
-            webview.send('player-command', { 
-                command: isNativeMode ? 'showNativeControls' : 'hideNativeControls' 
-            });
+        // Safe send function
+        const sendState = () => {
+            try {
+                // Check if webview is ready
+                 if (webview.getWebContentsId && webview.isLoading && !webview.isLoading() && webview.send) {
+                     webview.send('player-command', {
+                        command: isNativeMode ? 'showNativeControls' : 'hideNativeControls'
+                    });
+                }
+            } catch {
+                // Webview not ready yet — expected during initialization
+            }
+        };
+
+        // Attempt to send immediately (might fail if not attached)
+        // Wrap in try-catch to prevent crash
+        try {
+             sendState();
+        } catch {
+             // Ignore error
         }
 
         // Apply state on navigation/reload
         const onDomReady = () => {
-             if (webview.send) {
-                webview.send('player-command', { 
-                    command: isNativeMode ? 'showNativeControls' : 'hideNativeControls' 
+             // Now it is safe to send
+             try {
+                webview.send?.('player-command', {
+                    command: isNativeMode ? 'showNativeControls' : 'hideNativeControls'
                 });
+             } catch {
+                 // Ignore error
              }
         };
 
@@ -418,7 +436,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
             await videoRef.current.requestPictureInPicture();
         }
     } catch (e) {
-        // console.error("PiP failed", e);
+        errorAgent.log({ message: 'PiP toggle failed', type: 'WARN', context: { error: String(e) } });
     }
   }, [isEmbed, onPipToggle]);
 
@@ -548,8 +566,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
         }
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleStateUpdate = (_: any, state: any) => {
+    const handleStateUpdate = (_: unknown, state: { event?: string; currentTime?: number; duration?: number; paused?: boolean }) => {
         const { event: playerEvent, currentTime: ct, duration: dur, paused } = state;
         
         if (typeof ct === 'number') {
@@ -565,7 +582,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
              setIsPlaying(true);
              onPlay?.();
              if (startTime > 0 && !hasResumed) {
-                 iframeRef.current?.send('player-command', { command: 'seek', time: startTime });
+                 iframeRef.current?.send?.('player-command', { command: 'seek', time: startTime });
                  setHasResumed(true);
              }
         } else if (isPaused) {
@@ -597,9 +614,9 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       setActiveEmbedTrackIndex(index);
       setCustomSubtitles([]);
       try {
-         iframeRef.current.send('get-embed-track-cues', index);
+         iframeRef.current?.send?.('get-embed-track-cues', index);
       } catch (e) {
-         // console.error("Failed to send to webview", e);
+         errorAgent.log({ message: 'Failed to send to webview', type: 'WARN', context: { error: String(e) } });
       }
   };
 

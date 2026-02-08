@@ -59,7 +59,7 @@ const Settings: React.FC = () => {
         setUpdateStatus('up-to-date');
       }
     } catch (error) {
-      // console.error('Update check failed:', error);
+      console.error('Update check failed:', error);
       const err = error as Error;
       // Handle the specific "Cannot find latest-mac.yml" or 404 as "Up to date"
       if (err?.message?.includes('404') || err?.message?.includes('Cannot find latest')) {
@@ -89,7 +89,7 @@ const Settings: React.FC = () => {
 
       await downloadUpdate();
     } catch (error) {
-      // console.error('Download failed:', error);
+      console.error('Download failed:', error);
       setUpdateStatus('error');
       setErrorMessage('Failed to download update.');
     }
@@ -99,7 +99,7 @@ const Settings: React.FC = () => {
     try {
       await installUpdate();
     } catch (error) {
-      // console.error('Install failed:', error);
+      console.error('Install failed:', error);
       setUpdateStatus('error');
       setErrorMessage('Failed to restart and install.');
     }

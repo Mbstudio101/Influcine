@@ -38,11 +38,11 @@ const filterBroken = (items: Media[]): Media[] => {
 tmdb.interceptors.response.use(
   response => response,
   error => {
-    // console.error('TMDB API Error:', {
-    //   url: error.config?.url,
-    //   status: error.response?.status,
-    //   message: error.message
-    // });
+    console.warn('TMDB API Error:', {
+      url: error.config?.url,
+      status: error.response?.status,
+      message: error.message
+    });
     return Promise.reject(error);
   }
 );
@@ -91,9 +91,7 @@ export const findMediaByImdbId = async (imdbId: string): Promise<Media | null> =
     
     return results.length > 0 ? results[0] : null;
   } catch (error) {
-    if (import.meta.env.DEV) {
-      // console.warn('Failed to resolve IMDB ID:', error);
-    }
+    console.warn('Failed to resolve IMDB ID:', error);
     return null;
   }
 };

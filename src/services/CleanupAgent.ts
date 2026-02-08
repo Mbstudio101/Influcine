@@ -1,4 +1,5 @@
 import { db, SavedMedia } from '../db';
+import { errorAgent } from './errorAgent';
 
 export interface CleanupReport {
   libraryRemoved: number;
@@ -27,7 +28,9 @@ export const CleanupAgent = {
     try {
       if (!db.isOpen()) {
          // Try to open silently
-         await db.open().catch(() => {}); 
+         await db.open().catch((e) => {
+           errorAgent.log({ message: 'CleanupAgent: Failed to open DB', type: 'WARN', context: { error: String(e) } });
+         });
          if (!db.isOpen()) return report; // Abort if still closed
       }
 
@@ -137,8 +140,7 @@ export const CleanupAgent = {
       for (const group of sourceMemoryGroups.values()) {
         if (group.length > 1) {
           // Keep latest (by ID)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          group.sort((a: any, b: any) => (b.id || 0) - (a.id || 0));
+              group.sort((a, b) => (b.id || 0) - (a.id || 0));
           for (let i = 1; i < group.length; i++) {
             if (group[i].id) sourceMemoryToDelete.push(group[i].id!);
           }
@@ -152,7 +154,7 @@ export const CleanupAgent = {
 
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error during cleanup';
-      // console.error('CleanupAgent error:', error);
+      errorAgent.log({ message: 'CleanupAgent error', type: 'ERROR', context: { error: errorMessage } });
       report.errors.push(errorMessage);
     }
 

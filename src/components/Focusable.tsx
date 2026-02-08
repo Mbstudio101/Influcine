@@ -11,10 +11,8 @@ interface FocusableProps {
   activeClassName?: string; // Class to apply when focused
   as?: React.ElementType; // Allow rendering as different tags (button, div, etc.)
   autoFocus?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onClick?: (e: any) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [key: string]: any;
+  onClick?: (e: React.MouseEvent<HTMLElement>) => void;
+  [key: string]: unknown;
 }
 
 const Focusable: React.FC<FocusableProps> = ({

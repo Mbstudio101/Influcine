@@ -8,8 +8,7 @@ interface LogEntry {
   message: string;
   type: 'ERROR' | 'WARN' | 'INFO' | 'CRITICAL';
   stack?: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  context?: any;
+  context?: Record<string, unknown>;
 }
 
 const BugReporter: React.FC = () => {

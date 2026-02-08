@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, User, Profile } from '../db';
 import { AuthContext } from './useAuth';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { errorAgent } from '../services/errorAgent';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Initialize IDs from localStorage
@@ -181,7 +182,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const { data, error } = await supabase.auth.getSession();
           if (error) {
             // If there's an error (e.g. 403 Forbidden, invalid token), ensure we clear any stale state
-            await supabase.auth.signOut().catch(() => {});
+            await supabase.auth.signOut().catch((e) => {
+              errorAgent.log({ message: 'Failed to sign out during session error cleanup', type: 'WARN', context: { error: String(e) } });
+            });
             // Robust cleanup
             for (const key of Object.keys(localStorage)) {
                 if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
@@ -202,9 +205,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
            }
         }
       } catch (error) {
-        // console.error('Failed to restore session:', error);
+        errorAgent.log({ message: 'Failed to restore session', type: 'ERROR', context: { error: String(error) } });
         // Force cleanup on error
-        await supabase.auth.signOut().catch(() => {});
+        await supabase.auth.signOut().catch((e) => {
+          errorAgent.log({ message: 'Signout failed during session restore cleanup', type: 'WARN', context: { error: String(e) } });
+        });
         localStorage.removeItem('sb-' + new URL(import.meta.env.VITE_SUPABASE_URL).hostname.split('.')[0] + '-auth-token');
         // Also try generic cleanup for robustness
         for (const key of Object.keys(localStorage)) {
@@ -242,7 +247,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (error) {
       if (isSupabaseConfigured) {
-        // console.warn("Supabase login failed, trying local fallback:", error.message);
+        errorAgent.log({ message: 'Supabase login failed, trying local fallback', type: 'WARN', context: { errorMessage: error.message } });
       }
       
       const hashPassword = async (p: string) => {

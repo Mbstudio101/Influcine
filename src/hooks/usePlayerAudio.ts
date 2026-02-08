@@ -57,9 +57,7 @@ export function usePlayerAudio(
             sourceNodeCache.set(videoRef.current, source);
             sourceNodeRef.current = source;
           } catch (e) {
-            // If creation fails, it might be because it was already created but not in our cache (unlikely if we use a global cache)
-            // or another error. We can't recover easily if we can't get the source.
-            // console.error("Failed to create MediaElementSource", e);
+            console.error('Failed to create MediaElementSource', e);
             throw e;
           }
         }
@@ -114,7 +112,7 @@ export function usePlayerAudio(
 
       setAudioEngineReady(true);
     } catch (e) {
-      // console.error('Audio Engine Init Failed:', e);
+      console.error('Audio Engine Init Failed:', e);
       setAudioMode('standard');
       setAudioFormat('Standard Stereo');
       setAudioEngineReady(false);
@@ -181,7 +179,7 @@ export function usePlayerAudio(
       try {
         await audioCtxRef.current.resume();
       } catch (e) {
-        // console.error("Failed to resume audio context", e);
+        console.error('Failed to resume audio context', e);
       }
     }
   }, []);

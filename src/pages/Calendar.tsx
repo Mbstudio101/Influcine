@@ -187,8 +187,8 @@ const CalendarPage = () => {
                  } as CalendarEvent;
                }
             }
-          } catch {
-            // console.warn(`Failed to fetch details for ${show.name}`, e);
+          } catch (e) {
+            console.warn(`Failed to fetch details for ${show.name}`, e);
           }
           return null;
         });

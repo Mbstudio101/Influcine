@@ -20,8 +20,8 @@ class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  public componentDidCatch() {
-    // console.error('Uncaught error:', error, errorInfo);
+  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Uncaught error:', error, errorInfo);
   }
 
   private handleReload = () => {

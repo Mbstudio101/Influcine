@@ -20,14 +20,13 @@ export const AchievementCard: React.FC<AchievementCardProps> = ({ def, tier, pro
   const Icon = IconMap[def.icon] || Trophy;
   const isLocked = tier === 0;
   
-  // Get current tier target
-  // const nextTierIndex = isLocked ? 0 : Math.min(tier, def.tiers.length - 1);
-  // const nextTarget = def.tiers[nextTierIndex].target;
+  // Get current tier target for progress display
+  const nextTierIndex = isLocked ? 0 : Math.min(tier, def.tiers.length - 1);
+  const nextTarget = def.tiers[nextTierIndex]?.target ?? 1;
   const isMaxed = tier >= def.tiers.length && progress >= def.tiers[def.tiers.length - 1].target;
 
-  // Calculate generic progress percentage for the card ring
-  // If locked, show progress towards first tier
-  const target = isLocked ? def.tiers[0].target : (isMaxed ? 100 : def.tiers[tier - 1]?.target || 100);
+  // Calculate progress percentage towards the next tier
+  const target = isLocked ? nextTarget : (isMaxed ? nextTarget : nextTarget);
   const percent = Math.min(100, (progress / target) * 100);
 
   const tierColors = [

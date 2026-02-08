@@ -61,10 +61,10 @@ class ErrorAgent {
 
     // Console log for dev
     if (import.meta.env.DEV) {
-      // console.groupCollapsed(`[ErrorAgent] ${error.type || 'ERROR'}: ${error.message}`);
-      // console.error(error.stack);
-      // console.log(error.context);
-      // console.groupEnd();
+      console.groupCollapsed(`[ErrorAgent] ${error.type || 'ERROR'}: ${error.message}`);
+      if (error.stack) console.error(error.stack);
+      if (error.context) console.log(error.context);
+      console.groupEnd();
     }
 
     // Send to Main Process
@@ -73,7 +73,7 @@ class ErrorAgent {
         await window.ipcRenderer.invoke('log-error', error);
       }
     } catch (e) {
-      // console.error('[ErrorAgent] Failed to send log to main process:', e);
+      console.warn('[ErrorAgent] Failed to send log to main process:', e);
     }
   }
 

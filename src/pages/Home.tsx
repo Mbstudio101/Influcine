@@ -42,7 +42,8 @@ const Home: React.FC = () => {
     if (featured) {
       const fetchBackgroundTrailer = async () => {
         try {
-          const videos = await getVideos(featured.media_type || 'movie', featured.id);
+          const type = featured.media_type || (featured.title ? 'movie' : 'tv');
+          const videos = await getVideos(type as 'movie' | 'tv', featured.id);
           const trailer = findBestTrailer(videos);
           if (trailer) {
             setBackgroundVideoKey(trailer.key);
@@ -52,8 +53,8 @@ const Home: React.FC = () => {
           } else {
             setBackgroundVideoKey(null);
           }
-        } catch {
-          // console.error('Failed to fetch background trailer', e);
+        } catch (e) {
+          console.error('Failed to fetch background trailer', e);
           setBackgroundVideoKey(null);
         }
       };
@@ -88,17 +89,18 @@ const Home: React.FC = () => {
   const handlePlayTrailer = async () => {
     if (!featured) return;
     try {
-      const videos = await getVideos(featured.media_type || 'movie', featured.id);
+      const type = featured.media_type || (featured.title ? 'movie' : 'tv');
+      const videos = await getVideos(type as 'movie' | 'tv', featured.id);
       const trailer = findBestTrailer(videos);
 
       if (trailer) {
         setTrailerKey(trailer.key);
         setShowTrailer(true);
       } else {
-        // console.warn('No trailer found');
+        console.warn('No trailer found');
       }
-    } catch {
-      // console.error('Failed to fetch trailer', e);
+    } catch (e) {
+      console.error('Failed to fetch trailer', e);
     }
   };
 
@@ -277,10 +279,11 @@ const Home: React.FC = () => {
                       // or just pass what we have if we want speed.
                       // Best to fetch details.
                       try {
-                        const details = await getDetails(featured.media_type, featured.id);
+                        const type = featured.media_type || (featured.title ? 'movie' : 'tv');
+                        const details = await getDetails(type as 'movie' | 'tv', featured.id);
                         play(details);
                       } catch (e) {
-                        // console.error('Failed to play featured item', e);
+                        console.error('Failed to play featured item', e);
                       }
                     }
                   }}
@@ -295,9 +298,10 @@ const Home: React.FC = () => {
                   onClick={handlePlayTrailer}
                   onMouseEnter={() => {
                     if (featured) {
-                      getVideos(featured.media_type || 'movie', featured.id).then(videos => {
+                      const type = featured.media_type || (featured.title ? 'movie' : 'tv');
+                      getVideos(type as 'movie' | 'tv', featured.id).then(videos => {
                         const trailer = findBestTrailer(videos);
-                        if (trailer) window.ipcRenderer?.invoke('trailer-prefetch', trailer.key).catch(() => {});
+                        if (trailer) window.ipcRenderer?.invoke('trailer-prefetch', trailer.key).catch(() => { /* prefetch is best-effort */ });
                       });
                     }
                   }}

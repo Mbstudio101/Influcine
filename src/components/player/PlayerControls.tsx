@@ -1,11 +1,12 @@
 import React from 'react';
-import { 
+import {
   RotateCcw, RotateCw,
-  Play, Pause, Volume2, VolumeX, Settings, 
-  Maximize, Minimize, PictureInPicture, SkipForward, 
-  ThumbsUp, ThumbsDown 
+  Play, Pause, Volume2, VolumeX, Settings,
+  Maximize, Minimize, PictureInPicture, SkipForward,
+  ThumbsUp, ThumbsDown, Moon
 } from 'lucide-react';
 import Focusable from '../Focusable';
+import { AudioVisualizer } from './AudioVisualizer';
 
 interface PlayerControlsProps {
   showControls: boolean;
@@ -28,6 +29,8 @@ interface PlayerControlsProps {
   onLike?: () => void;
   onDislike?: () => void;
   userVote?: 'like' | 'dislike' | null;
+  analyserNode?: AnalyserNode | null;
+  sleepTimerRemaining?: string | null;
 }
 
 export const PlayerControls: React.FC<PlayerControlsProps> = ({
@@ -50,11 +53,20 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   formatTime,
   onLike,
   onDislike,
-  userVote
+  userVote,
+  analyserNode,
+  sleepTimerRemaining
 }) => {
   return (
     <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pb-4 pt-12 transition-opacity duration-300 z-50 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-      
+
+      {/* Audio Visualizer */}
+      {analyserNode && (
+        <div className="mb-2">
+          <AudioVisualizer analyserNode={analyserNode} isPlaying={isPlaying} height={28} />
+        </div>
+      )}
+
       {/* Timeline */}
       <div className="group relative flex items-center mb-4 cursor-pointer">
         <input
@@ -141,6 +153,13 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             <span className="mx-1">/</span>
             <span className="opacity-60">{formatTime(duration)}</span>
           </div>
+
+          {sleepTimerRemaining && (
+            <div className="flex items-center gap-1 text-purple-400 text-xs font-medium bg-purple-500/10 px-2 py-1 rounded-full">
+              <Moon className="w-3 h-3" />
+              <span>{sleepTimerRemaining}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-4">

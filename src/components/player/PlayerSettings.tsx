@@ -1,9 +1,10 @@
 import React from 'react';
-import { 
-  Sparkles, Check, Volume2, Type, Gauge, X, Globe 
+import {
+  Sparkles, Check, Volume2, Type, Gauge, X, Globe, SlidersHorizontal, Moon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SubtitleFile } from '../../hooks/usePlayerSubtitles';
+import { VideoFilters } from '../InflucinePlayer';
 
 // Define types for tracks since they might not be globally available
 interface ExtendedAudioTrack {
@@ -19,8 +20,8 @@ interface PlayerSettingsProps {
   onClose: () => void;
   
   // Tabs
-  activeTab: 'speed' | 'audio' | 'subtitles' | 'source';
-  setActiveTab: (tab: 'speed' | 'audio' | 'subtitles' | 'source') => void;
+  activeTab: 'speed' | 'audio' | 'subtitles' | 'source' | 'video';
+  setActiveTab: (tab: 'speed' | 'audio' | 'subtitles' | 'source' | 'video') => void;
   
   // Speed
   playbackSpeed: number;
@@ -55,6 +56,16 @@ interface PlayerSettingsProps {
   onProviderChange?: (provider: string) => void;
   isNativeMode?: boolean;
   onToggleNativeMode?: () => void;
+
+  // Video Filters
+  videoFilters?: VideoFilters;
+  onVideoFiltersChange?: (filters: VideoFilters) => void;
+
+  // Sleep Timer
+  sleepTimerMinutes?: number | null;
+  onStartSleepTimer?: (minutes: number) => void;
+  onCancelSleepTimer?: () => void;
+  sleepTimerRemaining?: string | null;
 }
 
 export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
@@ -68,7 +79,9 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
   autoSubtitles, activeAutoSubtitleIndex, onAutoSubtitleChange,
   isSearchingSubs, onUploadClick, onSearchOnline,
   provider, onProviderChange,
-  isNativeMode, onToggleNativeMode
+  isNativeMode, onToggleNativeMode,
+  videoFilters, onVideoFiltersChange,
+  sleepTimerMinutes, onStartSleepTimer, onCancelSleepTimer, sleepTimerRemaining
 }) => {
   return (
     <AnimatePresence>
@@ -116,7 +129,14 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
               <Gauge className="w-5 h-5" />
               Speed
             </button>
-            <button 
+            <button
+              onClick={() => setActiveTab('video')}
+              className={`flex-1 p-3 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${activeTab === 'video' ? 'text-blue-400 bg-white/5' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+            >
+              <SlidersHorizontal className="w-5 h-5" />
+              Video
+            </button>
+            <button
               onClick={() => setActiveTab('source')}
               className={`flex-1 p-3 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${activeTab === 'source' ? 'text-blue-400 bg-white/5' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
             >
@@ -241,6 +261,118 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                      ))}
                    </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'video' && (
+              <div className="space-y-6">
+                {/* Video Filters */}
+                <div className="bg-white/5 rounded-xl p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-blue-400">
+                      <SlidersHorizontal className="w-4 h-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider">Video Filters</span>
+                    </div>
+                    {videoFilters && (videoFilters.brightness !== 1 || videoFilters.contrast !== 1 || videoFilters.saturation !== 1) && (
+                      <button
+                        onClick={() => onVideoFiltersChange?.({ brightness: 1, contrast: 1, saturation: 1 })}
+                        className="text-xs text-white/50 hover:text-white transition-colors"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between text-xs text-white/60 mb-1">
+                        <span>Brightness</span>
+                        <span>{Math.round((videoFilters?.brightness ?? 1) * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.5}
+                        max={1.5}
+                        step={0.05}
+                        value={videoFilters?.brightness ?? 1}
+                        onChange={(e) => onVideoFiltersChange?.({ ...videoFilters!, brightness: parseFloat(e.target.value) })}
+                        className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-blue-400 [&::-webkit-slider-thumb]:rounded-full"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs text-white/60 mb-1">
+                        <span>Contrast</span>
+                        <span>{Math.round((videoFilters?.contrast ?? 1) * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.5}
+                        max={1.5}
+                        step={0.05}
+                        value={videoFilters?.contrast ?? 1}
+                        onChange={(e) => onVideoFiltersChange?.({ ...videoFilters!, contrast: parseFloat(e.target.value) })}
+                        className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-blue-400 [&::-webkit-slider-thumb]:rounded-full"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs text-white/60 mb-1">
+                        <span>Saturation</span>
+                        <span>{Math.round((videoFilters?.saturation ?? 1) * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={2}
+                        step={0.05}
+                        value={videoFilters?.saturation ?? 1}
+                        onChange={(e) => onVideoFiltersChange?.({ ...videoFilters!, saturation: parseFloat(e.target.value) })}
+                        className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-blue-400 [&::-webkit-slider-thumb]:rounded-full"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sleep Timer */}
+                <div className="bg-white/5 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-purple-400 mb-2">
+                    <Moon className="w-4 h-4" />
+                    <span className="text-xs font-bold uppercase tracking-wider">Sleep Timer</span>
+                  </div>
+
+                  {sleepTimerMinutes ? (
+                    <div className="space-y-3">
+                      <div className="text-center py-2">
+                        <div className="text-2xl font-bold text-purple-300">{sleepTimerRemaining || '--:--'}</div>
+                        <div className="text-xs text-white/40 mt-1">remaining</div>
+                      </div>
+                      <button
+                        onClick={onCancelSleepTimer}
+                        className="w-full py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-lg text-sm font-medium text-red-300 transition-colors"
+                      >
+                        Cancel Timer
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: '15 min', value: 15 },
+                        { label: '30 min', value: 30 },
+                        { label: '45 min', value: 45 },
+                        { label: '1 hour', value: 60 },
+                        { label: '1.5 hours', value: 90 },
+                        { label: '2 hours', value: 120 },
+                      ].map(preset => (
+                        <button
+                          key={preset.value}
+                          onClick={() => onStartSleepTimer?.(preset.value)}
+                          className="py-2 bg-white/5 hover:bg-purple-500/20 border border-transparent hover:border-purple-500/30 rounded-lg text-sm font-medium text-white/70 hover:text-purple-300 transition-all"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

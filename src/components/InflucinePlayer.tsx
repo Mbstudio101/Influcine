@@ -20,6 +20,12 @@ import { PlayerSettings } from './player/PlayerSettings';
 import { PlayerErrorBoundary } from './player/PlayerErrorBoundary';
 import TitleBar from './TitleBar';
 
+export interface VideoFilters {
+  brightness: number; // 0.5 - 1.5, default 1
+  contrast: number;   // 0.5 - 1.5, default 1
+  saturation: number; // 0 - 2, default 1
+}
+
 interface InflucinePlayerProps {
   src?: string;
   embedSrc?: string;
@@ -113,8 +119,48 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const [adblockPath, setAdblockPath] = useState<string>('');
   const [isNativeMode, setIsNativeMode] = useState(true); // Default to true
 
+  // Video Filters
+  const [videoFilters, setVideoFilters] = useState<VideoFilters>({ brightness: 1, contrast: 1, saturation: 1 });
+
+  // Sleep Timer
+  const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null);
+  const [sleepTimerEnd, setSleepTimerEnd] = useState<number | null>(null);
+  const [sleepTimerRemaining, setSleepTimerRemaining] = useState<string | null>(null);
+
+  const startSleepTimer = useCallback((minutes: number) => {
+    const end = Date.now() + minutes * 60 * 1000;
+    setSleepTimerMinutes(minutes);
+    setSleepTimerEnd(end);
+  }, []);
+
+  const cancelSleepTimer = useCallback(() => {
+    setSleepTimerMinutes(null);
+    setSleepTimerEnd(null);
+    setSleepTimerRemaining(null);
+  }, []);
+
+  useEffect(() => {
+    if (!sleepTimerEnd) return;
+    const interval = setInterval(() => {
+      const remaining = sleepTimerEnd - Date.now();
+      if (remaining <= 0) {
+        // Timer expired — pause playback
+        if (videoRef.current && !videoRef.current.paused) {
+          videoRef.current.pause();
+          setIsPlaying(false);
+        }
+        cancelSleepTimer();
+        return;
+      }
+      const mins = Math.floor(remaining / 60000);
+      const secs = Math.floor((remaining % 60000) / 1000);
+      setSleepTimerRemaining(`${mins}:${secs.toString().padStart(2, '0')}`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [sleepTimerEnd, cancelSleepTimer]);
+
   // Settings Tab State
-  const [activeTab, setActiveTab] = useState<'speed' | 'audio' | 'subtitles' | 'source'>('audio');
+  const [activeTab, setActiveTab] = useState<'speed' | 'audio' | 'subtitles' | 'source' | 'video'>('audio');
   useEffect(() => {
     if (isEmbed) setActiveTab('source');
   }, [isEmbed]);
@@ -183,7 +229,8 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     audioFormat,
     resumeAudioContext,
     availableTracks, detectAudioCapabilities, switchAudioTrack,
-    setVolume: setAudioGain
+    setVolume: setAudioGain,
+    analyserNode
   } = usePlayerAudio(videoRef, isEmbed, src);
 
   const {
@@ -312,6 +359,15 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       document.exitFullscreen();
       setIsFullscreen(false);
     }
+  }, []);
+
+  // Sync fullscreen state when browser handles exit (e.g. Escape key)
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
 
   const handleVolumeChange = useCallback((newVolume: number) => {
@@ -447,6 +503,10 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
         if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
 
         switch(e.key.toLowerCase()) {
+            case 'escape':
+                e.preventDefault();
+                if (showSettings) setShowSettings(false);
+                break;
             case ' ':
             case 'k':
                 e.preventDefault();
@@ -483,7 +543,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, toggleFullscreen, toggleMute, currentTime, volume, handleSeek, handleVolumeChange]);
+  }, [togglePlay, toggleFullscreen, toggleMute, currentTime, volume, handleSeek, handleVolumeChange, showSettings]);
 
   const handleLoadedMetadata = () => {
     if (isEmbed) return;
@@ -690,6 +750,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
           <video
             ref={videoRef}
             src={src}
+            style={{ filter: `brightness(${videoFilters.brightness}) contrast(${videoFilters.contrast}) saturate(${videoFilters.saturation})` }}
             className={`w-full h-full object-contain bg-black transition-opacity duration-300 ${isBuffering ? 'opacity-50' : 'opacity-100'}`}
             onTimeUpdate={() => {
               if (videoRef.current) {
@@ -800,6 +861,8 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
                 onLike={mediaData?.tmdbId ? () => handleVote('like') : undefined}
                 onDislike={mediaData?.tmdbId ? () => handleVote('dislike') : undefined}
                 userVote={userVote}
+                analyserNode={analyserNode}
+                sleepTimerRemaining={sleepTimerRemaining}
             />
           </div>
       )}
@@ -839,6 +902,12 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
                 onProviderChange={onProviderChange}
                 isNativeMode={isNativeMode}
                 onToggleNativeMode={toggleNativeMode}
+                videoFilters={videoFilters}
+                onVideoFiltersChange={setVideoFilters}
+                sleepTimerMinutes={sleepTimerMinutes}
+                onStartSleepTimer={startSleepTimer}
+                onCancelSleepTimer={cancelSleepTimer}
+                sleepTimerRemaining={sleepTimerRemaining}
             />
           </div>
       )}

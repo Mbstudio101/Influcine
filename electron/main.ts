@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, shell, protocol, net } from 'electron'
+import { app, BrowserWindow, ipcMain, session, shell, protocol, net, safeStorage } from 'electron'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -577,6 +577,41 @@ ipcMain.handle('log-error', async (_event, errorData) => {
 
 ipcMain.handle('get-logs-path', () => {
   return path.join(app.getPath('userData'), 'logs');
+});
+
+// Credential storage using OS keychain encryption
+const CREDENTIALS_PATH = path.join(app.getPath('userData'), '.credentials');
+
+ipcMain.handle('credentials-save', async (_event, { email, password }: { email: string; password: string }) => {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return false;
+    const encrypted = safeStorage.encryptString(JSON.stringify({ email, password }));
+    fs.writeFileSync(CREDENTIALS_PATH, encrypted);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle('credentials-load', async () => {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    if (!fs.existsSync(CREDENTIALS_PATH)) return null;
+    const encrypted = fs.readFileSync(CREDENTIALS_PATH);
+    const decrypted = safeStorage.decryptString(encrypted);
+    return JSON.parse(decrypted);
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle('credentials-clear', async () => {
+  try {
+    if (fs.existsSync(CREDENTIALS_PATH)) fs.unlinkSync(CREDENTIALS_PATH);
+    return true;
+  } catch {
+    return false;
+  }
 });
 
 ipcMain.handle('trailer-invalidate', async (_event, videoId) => {

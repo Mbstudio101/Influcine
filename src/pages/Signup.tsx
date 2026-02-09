@@ -79,14 +79,17 @@ const Signup: React.FC = () => {
           <p className="text-gray-400">Join Influcine today</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="on">
           <div className="space-y-1">
-            <label className="text-sm font-medium text-gray-300 ml-1">Email Address</label>
+            <label htmlFor="signup-email" className="text-sm font-medium text-gray-300 ml-1">Email Address</label>
             <div className="relative group">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-primary transition-colors" size={18} />
               <Focusable
                 as="input"
+                id="signup-email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all"
@@ -98,12 +101,15 @@ const Signup: React.FC = () => {
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-gray-300 ml-1">Password</label>
+            <label htmlFor="signup-password" className="text-sm font-medium text-gray-300 ml-1">Password</label>
             <div className="relative group">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-primary transition-colors" size={18} />
               <Focusable
                 as="input"
+                id="signup-password"
+                name="password"
                 type="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all"
@@ -115,12 +121,15 @@ const Signup: React.FC = () => {
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-gray-300 ml-1">Confirm Password</label>
+            <label htmlFor="signup-confirm-password" className="text-sm font-medium text-gray-300 ml-1">Confirm Password</label>
             <div className="relative group">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-primary transition-colors" size={18} />
               <Focusable
                 as="input"
+                id="signup-confirm-password"
+                name="confirm-password"
                 type="password"
+                autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmPassword(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all"

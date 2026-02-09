@@ -13,16 +13,32 @@ const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
   const [hasUsedApp, setHasUsedApp] = useState(false);
   const { showToast } = useToast();
 
+  // Load saved credentials on mount
   useEffect(() => {
     const hasUsed = localStorage.getItem('influcine_has_used_app');
     if (hasUsed) {
       setHasUsedApp(true);
     }
+
+    const loadCredentials = async () => {
+      try {
+        const saved = await window.ipcRenderer?.invoke('credentials-load');
+        if (saved?.email) {
+          setEmail(saved.email);
+          setPassword(saved.password || '');
+          setRememberMe(true);
+        }
+      } catch {
+        // Credentials not available
+      }
+    };
+    loadCredentials();
   }, []);
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -31,6 +47,14 @@ const Login: React.FC = () => {
     try {
       await login(email, password);
       localStorage.setItem('influcine_has_used_app', 'true');
+
+      // Save or clear credentials based on "Remember me"
+      if (rememberMe) {
+        await window.ipcRenderer?.invoke('credentials-save', { email, password });
+      } else {
+        await window.ipcRenderer?.invoke('credentials-clear');
+      }
+
       showToast('Signed in successfully', 'success');
       navigate('/profiles', { state: { fromLogin: true } });
     } catch (err) {
@@ -80,14 +104,17 @@ const Login: React.FC = () => {
             <p className="text-gray-400">{hasUsedApp ? 'Sign in to continue to Influcine' : 'Sign in to start watching'}</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" autoComplete="on">
             <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-300 ml-1">Email Address</label>
+              <label htmlFor="login-email" className="text-sm font-medium text-gray-300 ml-1">Email Address</label>
               <div className="relative group">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-primary transition-colors" size={18} />
                 <Focusable
                   as="input"
+                  id="login-email"
+                  name="email"
                   type="email"
+                  autoComplete="email"
                   value={email}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                   className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all"
@@ -99,12 +126,15 @@ const Login: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-300 ml-1">Password</label>
+              <label htmlFor="login-password" className="text-sm font-medium text-gray-300 ml-1">Password</label>
               <div className="relative group">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-primary transition-colors" size={18} />
                 <Focusable
                   as="input"
+                  id="login-password"
+                  name="password"
                   type="password"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                   className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all"
@@ -114,6 +144,16 @@ const Login: React.FC = () => {
                 />
               </div>
             </div>
+
+            <label className="flex items-center gap-2 cursor-pointer select-none ml-1">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-black/40 text-primary focus:ring-primary/50 accent-primary cursor-pointer"
+              />
+              <span className="text-sm text-gray-400">Remember me</span>
+            </label>
 
             <Focusable
               as="button"

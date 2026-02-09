@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -178,9 +178,12 @@ const Details: React.FC = () => {
 
 
   const [activeTrailerKey, setActiveTrailerKey] = useState<string | null>(null);
+  const failedTrailerKeys = useRef<Set<string>>(new Set());
 
   React.useEffect(() => {
     let mounted = true;
+    // Reset failed keys when media changes
+    failedTrailerKeys.current.clear();
 
     const fetchTrailer = async () => {
       // 1. Try TMDB results first
@@ -218,10 +221,20 @@ const Details: React.FC = () => {
 
   const cachedTrailerUrl = useTrailerCache(activeTrailerKey || undefined);
   const [isTrailerReady, setIsTrailerReady] = useState(false);
+  const [trailerTimedOut, setTrailerTimedOut] = useState(false);
 
-  // Reset trailer ready state when URL changes
+  // Reset trailer ready state when URL changes + add loading timeout
   React.useEffect(() => {
     setIsTrailerReady(false);
+    setTrailerTimedOut(false);
+
+    if (!cachedTrailerUrl) return;
+
+    const timeout = setTimeout(() => {
+      setTrailerTimedOut(true);
+    }, 15000); // 15s timeout — if trailer can't load by then, show static image
+
+    return () => clearTimeout(timeout);
   }, [cachedTrailerUrl]);
 
   const handleWatch = async () => {
@@ -326,9 +339,10 @@ const Details: React.FC = () => {
       {/* Hero Section */}
       <div className="relative w-full h-[70vh]">
         <div className="absolute inset-0">
-          {activeTrailerKey && cachedTrailerUrl ? (
+          {activeTrailerKey && cachedTrailerUrl && !trailerTimedOut ? (
             <div className="w-full h-full relative pointer-events-none">
               <video
+                key={activeTrailerKey}
                 className={`w-full h-full object-cover object-top transition-opacity duration-1000 ${isTrailerReady ? 'opacity-100' : 'opacity-0'}`}
                 src={cachedTrailerUrl}
                 autoPlay
@@ -336,24 +350,29 @@ const Details: React.FC = () => {
                 loop
                 playsInline
                 onCanPlay={() => setIsTrailerReady(true)}
-                onError={(e) => {
-                  console.warn('Trailer playback unavailable', e);
+                onError={() => {
                   setIsTrailerReady(false);
-                  
-                  // Invalidate cache
+
+                  // Track this key as failed to prevent infinite retry loops
                   if (activeTrailerKey) {
-                    window.ipcRenderer?.invoke('trailer-invalidate', activeTrailerKey).catch(() => { /* cache invalidation is best-effort */ });
+                    failedTrailerKeys.current.add(activeTrailerKey);
+                    window.ipcRenderer?.invoke('trailer-invalidate', activeTrailerKey).catch(() => {});
                   }
 
-                  // Find next best trailer
+                  // Find next trailer that hasn't already failed
                   if (details?.videos?.results) {
-                    const remaining = details.videos.results.filter(v => v.key !== activeTrailerKey && v.site === 'YouTube');
+                    const remaining = details.videos.results.filter(
+                      v => v.site === 'YouTube' && !failedTrailerKeys.current.has(v.key)
+                    );
                     const nextBest = findBestTrailer(remaining);
                     if (nextBest) {
                       setActiveTrailerKey(nextBest.key);
                     } else {
+                      // All trailers failed — give up and show static image
                       setActiveTrailerKey(null);
                     }
+                  } else {
+                    setActiveTrailerKey(null);
                   }
                 }}
               />

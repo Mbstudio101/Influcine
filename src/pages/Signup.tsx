@@ -54,7 +54,7 @@ const Signup: React.FC = () => {
   }, []);
 
   return (
-    <div className="fixed inset-0 w-full h-full bg-black flex flex-col items-center justify-start pt-16 md:pt-24 p-4 overflow-hidden touch-none overscroll-none drag-region">
+    <div className="fixed inset-0 w-full h-full bg-black flex flex-col items-center justify-start pt-16 md:pt-24 p-4 overflow-clip touch-none overscroll-none drag-region">
       {isTVEnvironment ? (
         <div className="absolute inset-0 bg-black z-0" />
       ) : (

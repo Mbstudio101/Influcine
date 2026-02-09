@@ -95,9 +95,17 @@ function App() {
       setUpdateProgress(100);
     });
 
+    // Listen for update errors — reset downloading state so user can retry
+    const handleUpdateError = () => {
+      setUpdateDownloading(false);
+      setUpdateProgress(0);
+    };
+    window.ipcRenderer?.on('update-error', handleUpdateError);
+
     return () => {
       cleanupProgress();
       cleanupDownloaded();
+      window.ipcRenderer?.off('update-error', handleUpdateError);
     };
   }, []);
 
@@ -155,19 +163,30 @@ function App() {
       return;
     }
 
-    // Try Electron IPC download first
-    try {
-      await downloadUpdate();
-      setUpdateDownloading(true);
-      return;
-    } catch (e) {
-      // Fallback to browser download if not supported/failed
-      console.warn('IPC download not supported, falling back to browser', e);
+    // Check if this update came from the native Electron autoUpdater (platforms = 'ipc')
+    const isNativeUpdate = updateAvailable.platforms.macos === 'ipc' ||
+                           updateAvailable.platforms.windows === 'ipc' ||
+                           updateAvailable.platforms.linux === 'ipc';
+
+    if (isNativeUpdate) {
+      // Use Electron's autoUpdater for in-app download + install
+      try {
+        setUpdateDownloading(true);
+        setUpdateProgress(0);
+        await downloadUpdate();
+        // Progress and completion are handled by IPC event listeners
+      } catch (error) {
+        console.error('Native update download failed:', error);
+        setUpdateDownloading(false);
+        setUpdateProgress(0);
+      }
+    } else {
+      // GitHub API fallback — open download link in browser
       const link = getPlatformDownloadLink(updateAvailable);
       if (link) {
         window.open(link, '_blank');
       } else {
-        alert('Update available but no download link found for your platform.');
+        console.warn('No download link found for this platform');
       }
     }
   };

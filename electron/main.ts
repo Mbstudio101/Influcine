@@ -623,12 +623,19 @@ ipcMain.handle('trailer-download', async (_event, videoId) => {
 
     // console.log(`[Trailer] Downloading ${videoId} with yt-dlp...`);
     
-    // Execute yt-dlp
+    // Execute yt-dlp with 60s timeout for downloads
     await new Promise<void>((resolve, reject) => {
       const ytDlp = new YTDlpWrap(YTDLP_PATH);
-      ytDlp.exec(ytDlpArgs)
-        .on('error', (error: Error) => reject(error))
-        .on('close', () => resolve());
+      const proc = ytDlp.exec(ytDlpArgs);
+
+      const timeout = setTimeout(() => {
+        try { proc.kill(); } catch { /* ignore */ }
+        reject(new Error('yt-dlp download timed out after 60s'));
+      }, 60000);
+
+      proc
+        .on('error', (error: Error) => { clearTimeout(timeout); reject(error); })
+        .on('close', () => { clearTimeout(timeout); resolve(); });
     });
     
     // Verify file exists
@@ -658,13 +665,18 @@ ipcMain.handle('trailer-search', async (_event, query) => {
     return await new Promise<string | null>((resolve) => {
       const ytDlp = new YTDlpWrap(YTDLP_PATH);
       let output = '';
-      const process = ytDlp.exec(ytDlpArgs);
-      
-      process.on('data', (data: Buffer) => output += data.toString());
-      process.on('error', () => resolve(null));
-      process.on('close', () => {
+      const proc = ytDlp.exec(ytDlpArgs);
+
+      const timeout = setTimeout(() => {
+        try { proc.kill(); } catch { /* ignore */ }
+        resolve(null);
+      }, 10000);
+
+      proc.on('data', (data: Buffer) => output += data.toString());
+      proc.on('error', () => { clearTimeout(timeout); resolve(null); });
+      proc.on('close', () => {
+        clearTimeout(timeout);
         const id = output.trim();
-        // Simple validation for YouTube ID (11 chars)
         resolve(id.length === 11 ? id : null);
       });
     });
@@ -770,8 +782,8 @@ ipcMain.handle('update-check', async () => {
   }
 });
 
-ipcMain.handle('update-download', () => {
-  autoUpdater.downloadUpdate();
+ipcMain.handle('update-download', async () => {
+  return autoUpdater.downloadUpdate();
 });
 
 ipcMain.handle('update-install', () => {
@@ -779,28 +791,34 @@ ipcMain.handle('update-install', () => {
 });
 
 // Update events
+function sendToRenderer(channel: string, ...args: unknown[]) {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send(channel, ...args);
+  }
+}
+
 autoUpdater.on('update-available', (info) => {
   log.info('Update available:', info);
-  win?.webContents.send('update-available', info);
+  sendToRenderer('update-available', info);
 });
 
 autoUpdater.on('update-not-available', () => {
   log.info('Update not available');
-  win?.webContents.send('update-not-available');
+  sendToRenderer('update-not-available');
 });
 
 autoUpdater.on('download-progress', (progressObj) => {
-  win?.webContents.send('update-progress', progressObj);
+  sendToRenderer('update-progress', progressObj);
 });
 
 autoUpdater.on('update-downloaded', (info) => {
   log.info('Update downloaded', info);
-  win?.webContents.send('update-downloaded', info);
+  sendToRenderer('update-downloaded', info);
 });
 
 autoUpdater.on('error', (err) => {
   log.error('Update error:', err);
-  win?.webContents.send('update-error', err.message);
+  sendToRenderer('update-error', err.message);
 });
 
 // The built directory structure
@@ -1130,8 +1148,14 @@ function createWindow() {
 
   // Test main push message
   win.webContents.on('did-finish-load', () => {
-    win?.webContents.send('main-process-message', (new Date).toLocaleString())
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('main-process-message', (new Date).toLocaleString())
+    }
   })
+
+  win.on('closed', () => {
+    win = null;
+  });
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
@@ -1251,30 +1275,34 @@ app.whenReady().then(() => {
 
       if (!directUrl) {
         await ensureYtDlp();
-        // Simplified args for better compatibility
-        // Use -f b (best pre-muxed) to avoid separate video/audio streams which causes "video only" issues
-        // Remove player_client=android as it might cause UA mismatch
         const ytDlpArgs = [
           `https://www.youtube.com/watch?v=${safeId}`,
           '-f', 'b', // Best pre-muxed (video+audio)
           '-g',
           '--no-check-certificates',
-          '--force-ipv4' // Sometimes IPv6 causes issues with Google
+          '--force-ipv4',
+          '--extractor-args', 'youtube:player_client=android'
         ];
 
         directUrl = await new Promise<string>((resolve, reject) => {
           let output = '';
           const ytDlp = new YTDlpWrap(YTDLP_PATH);
-          ytDlp.exec(ytDlpArgs)
+          const proc = ytDlp.exec(ytDlpArgs);
+
+          // 10s timeout to prevent yt-dlp from hanging indefinitely
+          const timeout = setTimeout(() => {
+            try { proc.kill(); } catch { /* ignore */ }
+            reject(new Error('yt-dlp timed out after 10s'));
+          }, 10000);
+
+          proc
             .on('data', (data: string | Buffer) => output += data.toString())
-            .on('error', (err: Error) => reject(err))
+            .on('error', (err: Error) => { clearTimeout(timeout); reject(err); })
             .on('close', () => {
+              clearTimeout(timeout);
               const lines = output.trim().split('\n');
-              // If we get multiple lines, it usually means video+audio separate streams if we used 'best'.
-              // But with '-f b', we should get one.
-              // Just in case, take the first one.
-              resolve(lines[0]); 
-            }); 
+              resolve(lines[0]);
+            });
         });
         
         if (directUrl && directUrl.startsWith('http')) {
@@ -1329,21 +1357,8 @@ app.whenReady().then(() => {
     }
   });
 
-  createWindow();
-
   // Check for updates only in production
   if (app.isPackaged) {
     autoUpdater.checkForUpdatesAndNotify().catch(err => log.error('Auto-update error:', err));
   }
-
-  // Update events
-  autoUpdater.on('update-available', () => {
-    log.info('Update available.');
-    win?.webContents.send('update-message', 'Update available. Downloading...');
-  });
-
-  autoUpdater.on('update-downloaded', () => {
-    log.info('Update downloaded');
-    win?.webContents.send('update-message', 'Update downloaded. It will be installed on restart.');
-  });
 });

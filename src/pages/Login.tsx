@@ -54,7 +54,7 @@ const Login: React.FC = () => {
   }, []);
 
   return (
-    <div className="fixed inset-0 w-full h-full bg-black flex flex-col items-center justify-center p-4 overflow-hidden touch-none overscroll-none drag-region">
+    <div className="fixed inset-0 w-full h-full bg-black flex flex-col items-center justify-center p-4 overflow-clip touch-none overscroll-none drag-region">
       {isTVEnvironment ? (
         <div className="absolute inset-0 bg-black z-0" />
       ) : (
@@ -69,7 +69,7 @@ const Login: React.FC = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.8, ease: "easeOut" }}
-        className="w-full max-w-md bg-black/40 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl relative z-10 overflow-hidden no-drag"
+        className="w-full max-w-md bg-black/40 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl relative z-10 overflow-clip no-drag"
       >
         <div className="p-8 md:p-12">
           <div className="flex flex-col items-center mb-8 text-center">

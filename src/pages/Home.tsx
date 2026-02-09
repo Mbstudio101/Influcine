@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getTrending, getImageUrl, getMoviesByCategory, getTVShowsByCategory, discoverMedia, getDetails, getVideos } from '../services/tmdb';
 import { getPersonalizedRecommendations } from '../services/recommendations';
 import { findBestTrailer } from '../utils/videoUtils';
-import { Play, Plus, Check, Youtube } from 'lucide-react';
+import { Play, Plus, Check, Youtube, ChevronLeft, ChevronRight } from 'lucide-react';
 import { db } from '../db';
 import { useWatchlist } from '../hooks/useWatchlist';
 import ContentRow from '../components/ContentRow';
@@ -28,17 +28,51 @@ const Home: React.FC = () => {
   const [isVideoReady, setIsVideoReady] = useState(false);
   const cachedBackgroundUrl = useTrailerCache(backgroundVideoKey || undefined);
 
-  const { data: featured, isLoading: featuredLoading } = useQuery({
+  // Featured carousel state
+  const [featuredIndex, setFeaturedIndex] = useState(0);
+  const autoRotateRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { data: featuredList = [], isLoading: featuredLoading } = useQuery({
     queryKey: ['featured'],
     queryFn: async () => {
       const trending = await getTrending('day');
-      return trending[0];
+      return trending.slice(0, 10); // Top 10 trending
     },
     staleTime: 1000 * 60 * 30
   });
 
+  const featured = featuredList[featuredIndex] || null;
+
+  const goToFeatured = useCallback((index: number) => {
+    setFeaturedIndex(index);
+    // Reset auto-rotate timer on manual navigation
+    if (autoRotateRef.current) clearInterval(autoRotateRef.current);
+    autoRotateRef.current = setInterval(() => {
+      setFeaturedIndex(prev => (prev + 1) % (featuredList.length || 1));
+    }, 12000);
+  }, [featuredList.length]);
+
+  const goNext = useCallback(() => {
+    goToFeatured((featuredIndex + 1) % (featuredList.length || 1));
+  }, [featuredIndex, featuredList.length, goToFeatured]);
+
+  const goPrev = useCallback(() => {
+    goToFeatured((featuredIndex - 1 + (featuredList.length || 1)) % (featuredList.length || 1));
+  }, [featuredIndex, featuredList.length, goToFeatured]);
+
+  // Auto-rotate every 12 seconds
+  useEffect(() => {
+    if (featuredList.length <= 1) return;
+    autoRotateRef.current = setInterval(() => {
+      setFeaturedIndex(prev => (prev + 1) % featuredList.length);
+    }, 12000);
+    return () => {
+      if (autoRotateRef.current) clearInterval(autoRotateRef.current);
+    };
+  }, [featuredList.length]);
+
   // Fetch background trailer when featured changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (featured) {
       const fetchBackgroundTrailer = async () => {
         try {
@@ -47,9 +81,6 @@ const Home: React.FC = () => {
           const trailer = findBestTrailer(videos);
           if (trailer) {
             setBackgroundVideoKey(trailer.key);
-            // Store fallback options
-            // @ts-expect-error - Storing global fallbacks
-            window.availableTrailers = videos.filter(v => v.site === 'YouTube' && v.key !== trailer.key);
           } else {
             setBackgroundVideoKey(null);
           }
@@ -66,7 +97,7 @@ const Home: React.FC = () => {
   }, [featured]);
 
   // Reset video ready state when URL changes
-  React.useEffect(() => {
+  useEffect(() => {
     setIsVideoReady(false);
   }, [cachedBackgroundUrl]);
 
@@ -218,16 +249,7 @@ const Home: React.FC = () => {
                     onCanPlay={() => setIsVideoReady(true)}
                     onError={() => {
                       setIsVideoReady(false);
-                      
-                      // Try next available trailer
-                      // @ts-expect-error - window.availableTrailers is a custom global
-                      const fallbacks = window.availableTrailers || [];
-                      if (fallbacks.length > 0) {
-                        const next = fallbacks.shift();
-                        setBackgroundVideoKey(next.key);
-                      } else {
-                        setBackgroundVideoKey(null); // Fallback to image
-                      }
+                      setBackgroundVideoKey(null); // Fallback to static image
                     }}
                   />
                   {!isVideoReady && (
@@ -271,7 +293,7 @@ const Home: React.FC = () => {
                   {featured.overview}
                 </p>
               </div>
-              <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
+              <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-4">
                 <Focusable
                   onClick={async () => {
                     if (featured) {
@@ -324,6 +346,44 @@ const Home: React.FC = () => {
                 </Focusable>
               </div>
             </div>
+
+            {/* Carousel Navigation Arrows */}
+            {featuredList.length > 1 && (
+              <>
+                <button
+                  onClick={goPrev}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-black/50 hover:bg-black/80 text-white p-2 rounded-full backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 cursor-pointer"
+                  aria-label="Previous"
+                >
+                  <ChevronLeft size={24} />
+                </button>
+                <button
+                  onClick={goNext}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-black/50 hover:bg-black/80 text-white p-2 rounded-full backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 cursor-pointer"
+                  aria-label="Next"
+                >
+                  <ChevronRight size={24} />
+                </button>
+              </>
+            )}
+
+            {/* Dot Indicators */}
+            {featuredList.length > 1 && (
+              <div className="absolute bottom-4 right-6 z-20 flex gap-1.5">
+                {featuredList.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => goToFeatured(i)}
+                    className={`w-2 h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                      i === featuredIndex
+                        ? 'bg-primary w-6'
+                        : 'bg-white/40 hover:bg-white/70'
+                    }`}
+                    aria-label={`Go to slide ${i + 1}`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

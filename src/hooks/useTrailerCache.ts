@@ -5,8 +5,10 @@ export const useTrailerCache = (videoId: string | undefined) => {
   const [cachedUrl, setCachedUrl] = useState<string | null>(null);
 
   useEffect(() => {
+    // Reset immediately so we don't show a stale URL from the previous trailer key
+    setCachedUrl(null);
+
     if (!videoId) {
-        setCachedUrl(null);
         return;
     }
 

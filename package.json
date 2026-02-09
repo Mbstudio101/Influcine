@@ -79,6 +79,13 @@
     "directories": {
       "output": "release/${version}"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Mbstudio101",
+        "repo": "influcine"
+      }
+    ],
     "mac": {
       "icon": "build/icon.icns",
       "category": "public.app-category.entertainment"

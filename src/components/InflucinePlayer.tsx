@@ -889,7 +889,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
                 embedTracks={embedTracks}
                 activeEmbedTrackIndex={activeEmbedTrackIndex}
                 onEmbedTrackChange={loadEmbedTrack}
-                autoSubtitles={autoSubtitles}
+                autoSubtitles={autoSubtitles.map(s => ({ ...s, format: s.format || 'vtt' }))}
                 activeAutoSubtitleIndex={activeAutoSubtitleIndex}
                 onAutoSubtitleChange={loadAutoSubtitle}
                 isSearchingSubs={isSearchingSubs}

@@ -13,7 +13,7 @@ interface UseEmbedUrlProps {
   provider?: StreamProvider;
 }
 
-export const useEmbedUrl = ({ type, id, season, episode, startTime = 0, autoPlay = true, provider = 'vidfast' }: UseEmbedUrlProps) => {
+export const useEmbedUrl = ({ type, id, season, episode, startTime = 0, autoPlay = true, provider = 'vidlink' }: UseEmbedUrlProps) => {
   const { themeColor, autoplay: autoPlayNext } = useSettings();
 
   const embedUrl = useMemo(() => {

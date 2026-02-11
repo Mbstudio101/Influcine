@@ -647,7 +647,7 @@ ipcMain.handle('trailer-download', async (_event, videoId) => {
       '--ignore-errors',
       '--force-ipv4',
       '--no-check-certificates',
-      '--extractor-args', 'youtube:player_client=android'
+      // '--extractor-args', 'youtube:player_client=android'
     ];
 
     // If we have ffmpeg path, tell yt-dlp where it is
@@ -694,7 +694,7 @@ ipcMain.handle('trailer-search', async (_event, query) => {
       '--get-id',
       '--no-playlist',
       '--no-check-certificates',
-      '--extractor-args', 'youtube:player_client=android'
+      // '--extractor-args', 'youtube:player_client=android'
     ];
     
     return await new Promise<string | null>((resolve) => {
@@ -972,7 +972,7 @@ function createWindow() {
         ...details.responseHeaders,
         'Content-Security-Policy': [
           // Allow external images, scripts, and media for TMDB and streaming
-          "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; media-src 'self' https: http: blob: data:;"
+          "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https: http: trailer:; media-src 'self' https: http: blob: data: trailer:;"
         ]
       }
     })
@@ -1241,7 +1241,7 @@ app.whenReady().then(() => {
         '-g',
         '--force-ipv4',
         '--no-check-certificates',
-        '--extractor-args', 'youtube:player_client=android'
+        // '--extractor-args', 'youtube:player_client=android'
       ];
 
       const directUrl = await new Promise<string>((resolve, reject) => {
@@ -1316,7 +1316,7 @@ app.whenReady().then(() => {
           '-g',
           '--no-check-certificates',
           '--force-ipv4',
-          '--extractor-args', 'youtube:player_client=android'
+          // '--extractor-args', 'youtube:player_client=android' // Android client causing PO Token issues
         ];
 
         directUrl = await new Promise<string>((resolve, reject) => {
@@ -1324,11 +1324,11 @@ app.whenReady().then(() => {
           const ytDlp = new YTDlpWrap(YTDLP_PATH);
           const proc = ytDlp.exec(ytDlpArgs);
 
-          // 10s timeout to prevent yt-dlp from hanging indefinitely
+          // 30s timeout to prevent yt-dlp from hanging indefinitely
           const timeout = setTimeout(() => {
             try { proc.kill(); } catch { /* ignore */ }
-            reject(new Error('yt-dlp timed out after 10s'));
-          }, 10000);
+            reject(new Error('yt-dlp timed out after 30s'));
+          }, 30000);
 
           proc
             .on('data', (data: string | Buffer) => output += data.toString())
@@ -1372,11 +1372,13 @@ app.whenReady().then(() => {
       }
 
       // console.error('[Trailer Protocol] Error:', err);
+      console.error('[Trailer Protocol] Error:', err); // Uncommented for debugging
+      
       // Log to file for user debugging
       const errorData = {
           type: 'TRAILER_PROTOCOL_ERROR',
           message: errorMsg,
-          context: { url: request.url }
+          context: { url: request.url, stack: err instanceof Error ? err.stack : undefined }
       };
       // Try to log properly
       try {

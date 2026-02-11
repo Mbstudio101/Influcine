@@ -44,7 +44,7 @@ interface PlayerSettingsProps {
   activeEmbedTrackIndex: number;
   onEmbedTrackChange: (index: number) => void;
   
-  autoSubtitles: any[];
+  autoSubtitles: { label: string; content: string; format: string }[];
   activeAutoSubtitleIndex: number;
   onAutoSubtitleChange: (index: number) => void;
   
@@ -167,8 +167,8 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                 </div>
                 
                 {[
-                  { id: 'vidfast', name: 'VidFast', desc: 'Fastest, No Ads (Default)' },
-                  { id: 'vidlink', name: 'VidLink', desc: 'High Quality, Multi-Server' },
+                  { id: 'vidlink', name: 'VidLink', desc: 'High Quality, Multi-Server (Default)' },
+                  { id: 'vidfast', name: 'VidFast', desc: 'Fastest, No Ads' },
                   { id: 'vidsrc', name: 'VidSrc', desc: 'Reliable Backup' },
                   { id: 'superembed', name: 'SuperEmbed', desc: 'Aggregator' },
                   { id: '2embed', name: '2Embed', desc: 'Alternative' },

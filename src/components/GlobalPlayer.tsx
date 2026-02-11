@@ -27,7 +27,7 @@ const GlobalPlayer: React.FC = () => {
 
   const [startTime, setStartTime] = useState(requestedStartTime || 0);
   const isPlayingRef = useRef(false);
-  const [provider, setProvider] = useState<StreamProvider>('vidfast');
+  const [provider, setProvider] = useState<StreamProvider>('vidlink');
 
   // PiP Size Management
   const [pipSize, setPipSize] = useState<'sm' | 'md' | 'lg'>('md');

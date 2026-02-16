@@ -34,7 +34,7 @@ export interface ElectronService {
 
 class ElectronServiceImpl implements ElectronService {
   private get ipc() {
-    return window.ipcRenderer;
+    return typeof window !== 'undefined' ? window.ipcRenderer : undefined;
   }
 
   private async invoke<T>(channel: string, ...args: unknown[]): Promise<T> {

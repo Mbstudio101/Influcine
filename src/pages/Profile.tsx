@@ -4,12 +4,11 @@ import { motion } from 'framer-motion';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/useAuth';
 import { AVATARS, Avatar } from '../components/Avatars';
-import { Edit2, Check, X, Mail, Key, LogOut, Users, Shield, Download } from 'lucide-react';
+import { Edit2, Check, X, Mail, Key, LogOut, Users, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../db';
 import { LevelProgress } from '../components/Achievements/LevelProgress';
 import { AchievementGrid } from '../components/Achievements/AchievementGrid';
-import DownloadList from '../components/Downloads/DownloadList';
 import { useToast } from '../context/toast';
 
 const Profile: React.FC = () => {
@@ -218,15 +217,7 @@ const Profile: React.FC = () => {
           </div>
         </motion.div>
 
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <Download size={24} className="text-blue-400" />
-              Downloads
-            </h2>
-            <DownloadList />
-          </div>
-
-          {/* XP & Achievements */}
+        {/* XP & Achievements */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Media, MediaDetails, Video, CastMember, Episode } from '../types';
+import { Media, MediaDetails, Video, CastMember, Episode, PersonDetails } from '../types';
 
 const ACCESS_TOKEN = import.meta.env.VITE_TMDB_ACCESS_TOKEN;
 
@@ -151,4 +151,27 @@ export const getSimilar = async (type: 'movie' | 'tv', id: number): Promise<Medi
 export const getSeasonDetails = async (tvId: number, seasonNumber: number): Promise<{ episodes: Episode[] }> => {
   const data = await fetchApi<{ episodes: Episode[] }>(`/tv/${tvId}/season/${seasonNumber}`);
   return data;
+};
+
+export const getPersonDetails = async (personId: number): Promise<PersonDetails> => {
+  return fetchApi<PersonDetails>(`/person/${personId}`);
+};
+
+interface WikipediaSummaryResponse {
+  type?: string;
+  extract?: string;
+}
+
+export const getPersonBiographyFallback = async (name: string): Promise<string | null> => {
+  if (!name?.trim()) return null;
+  try {
+    const response = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name.trim())}`);
+    if (!response.ok) return null;
+    const data: WikipediaSummaryResponse = await response.json();
+    if (data.type === 'disambiguation') return null;
+    const extract = data.extract?.trim();
+    return extract && extract.length > 0 ? extract : null;
+  } catch {
+    return null;
+  }
 };

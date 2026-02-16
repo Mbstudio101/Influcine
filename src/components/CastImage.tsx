@@ -11,9 +11,11 @@ interface CastImageProps {
 
 export const CastImage: React.FC<CastImageProps> = ({ name, profilePath, className, alt }) => {
   const [src, setSrc] = useState<string | null>(profilePath ? getImageUrl(profilePath) : null);
+  const [triedFallback, setTriedFallback] = useState(false);
 
   useEffect(() => {
     let mounted = true;
+    setTriedFallback(false);
 
     const fetchImage = async () => {
       // If we have a TMDB profile path, use it
@@ -38,6 +40,23 @@ export const CastImage: React.FC<CastImageProps> = ({ name, profilePath, classNa
     return () => { mounted = false; };
   }, [name, profilePath]);
 
+  const tryFallbackImage = async () => {
+    if (triedFallback) return;
+    setTriedFallback(true);
+
+    try {
+      const url = await imageFallbackAgent.getActorImage(name);
+      if (url) {
+        setSrc(url);
+        return;
+      }
+    } catch {
+      // fall through to initials
+    }
+
+    setSrc(null);
+  };
+
   if (!src) {
     // Render Initials or Placeholder
     return (
@@ -52,11 +71,7 @@ export const CastImage: React.FC<CastImageProps> = ({ name, profilePath, classNa
       src={src}
       alt={alt}
       className={className}
-      onError={(e) => {
-        // If the fetched URL fails, hide the image and show fallback
-        e.currentTarget.style.display = 'none';
-        // We could replace with initials, but for now just let it be hidden or show parent background
-      }}
+      onError={tryFallbackImage}
     />
   );
 };

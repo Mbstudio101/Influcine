@@ -1,6 +1,6 @@
 import React, { memo, useState, useEffect } from 'react';
 import { Media, MediaDetails } from '../types';
-import { getImageUrl } from '../services/tmdb';
+import { getImageUrl, getDetails } from '../services/tmdb';
 import { useNavigate } from 'react-router-dom';
 import { Play, Plus, Check, Star, Youtube, ThumbsUp, ThumbsDown } from 'lucide-react';
 import Focusable from './Focusable';
@@ -14,6 +14,7 @@ import { getPreference, togglePreference } from '../services/recommendationEngin
 interface MediaCardProps {
   media: Media;
   onClick?: () => void;
+  variant?: 'poster' | 'backdrop';
 }
 
 interface SavedMediaWithProgress extends Media {
@@ -26,19 +27,17 @@ interface SavedMediaWithProgress extends Media {
   };
 }
 
-const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
+const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick, variant = 'poster' }) => {
   const { isSaved, toggleWatchlist } = useWatchlist(media);
   const { play } = usePlayer();
   const navigate = useNavigate();
   const [isFocused, setIsFocused] = useState(false);
-  
+
   const mediaType = media.media_type || (media.title ? 'movie' : 'tv');
   const { trailerKey, prefetch, cancelPrefetch, fetchTrailerNow } = useTrailerPrefetch(media, mediaType as 'movie' | 'tv');
-  
-  // Trailer State
+
   const [showTrailer, setShowTrailer] = useState(false);
 
-  // Preference State
   const { profile } = useAuth();
   const [userVote, setUserVote] = useState<'like' | 'dislike' | null>(null);
 
@@ -54,31 +53,40 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
   const handleVote = async (e: React.MouseEvent, vote: 'like' | 'dislike') => {
     e.stopPropagation();
     if (!profile?.id) return;
-    
-    // Optimistic update
+
     if (userVote === vote) {
-      setUserVote(null); // Toggle off
-      await togglePreference(profile.id, media.id, vote, mediaType as 'movie' | 'tv'); 
+      setUserVote(null);
+      await togglePreference(profile.id, media.id, vote, mediaType as 'movie' | 'tv');
     } else {
       setUserVote(vote);
       await togglePreference(profile.id, media.id, vote, mediaType as 'movie' | 'tv');
     }
   };
-  
-  const progress = (media as SavedMediaWithProgress).progress;
-  const hasProgress = progress && progress.percentage > 0 && progress.percentage < 95; // Don't show if almost finished (credits)
 
-  const handlePlayClick = (e: React.MouseEvent) => {
+  const progress = (media as SavedMediaWithProgress).progress;
+  const hasProgress = progress && progress.percentage > 0 && progress.percentage < 95;
+
+  const handlePlayClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
     try {
+      const details = await getDetails(mediaType as 'movie' | 'tv', media.id);
       if (mediaType === 'tv') {
-          play(media as unknown as MediaDetails, progress?.season || 1, progress?.episode || 1);
+        play(details as unknown as MediaDetails, progress?.season || 1, progress?.episode || 1);
       } else {
-          play(media as unknown as MediaDetails);
+        play(details as unknown as MediaDetails);
       }
     } catch (err) {
-      console.error('Failed to play media:', err);
+      console.error('Failed to fetch full media details, falling back to cached media:', err);
+      try {
+        if (mediaType === 'tv') {
+          play(media as unknown as MediaDetails, progress?.season || 1, progress?.episode || 1);
+        } else {
+          play(media as unknown as MediaDetails);
+        }
+      } catch (playErr) {
+        console.error('Failed to play media:', playErr);
+      }
     }
   };
 
@@ -92,7 +100,7 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
       }
 
       const key = await fetchTrailerNow();
-      
+
       if (key) {
         setShowTrailer(true);
       }
@@ -101,140 +109,136 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick }) => {
     }
   };
 
-  // Debounced Prefetch trailer on hover
   const handleMouseEnter = () => {
     prefetch();
   };
 
   const handleMouseLeave = () => {
-      cancelPrefetch();
+    cancelPrefetch();
   };
+
+  const imagePath = variant === 'backdrop' ? media.backdrop_path || media.poster_path : media.poster_path;
 
   return (
     <>
       <Focusable
-      className="relative aspect-2/3 rounded-xl overflow-hidden bg-surface group cursor-pointer shadow-lg ring-1 ring-white/5 transition-transform duration-300 hover:scale-105 hover:z-10 hover:shadow-[0_20px_25px_-5px_rgb(0_0_0/0.5),0_0_20px_rgba(124,58,237,0.3)]"
-      activeClassName="ring-4 ring-primary scale-105 z-10 shadow-[0_20px_25px_-5px_rgb(0_0_0/0.5),0_0_20px_rgba(124,58,237,0.3)]"
-      onClick={() => {
-        if (onClick) onClick();
-        navigate(`/details/${mediaType}/${media.id}`, { state: media });
-      }}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
-      <div className="block w-full h-full relative">
-        <img
-          src={getImageUrl(media.poster_path, 'w500')}
-          srcSet={`
-            ${getImageUrl(media.poster_path, 'w342')} 342w,
-            ${getImageUrl(media.poster_path, 'w500')} 500w,
-            ${getImageUrl(media.poster_path, 'w780')} 780w
-          `}
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-          alt={media.title || media.name}
-          className="w-full h-full object-cover bg-gray-900"
-          loading="lazy"
-          decoding="async"
-        />
-        
-        {/* Progress Bar (Always visible if exists) */}
-        {hasProgress && (
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/50 z-20">
-            <div 
-              className="h-full bg-linear-to-r from-primary to-purple-500 shadow-[0_0_10px_rgba(124,58,237,0.7)]" 
-              style={{ width: `${progress.percentage}%` }} 
-            />
-          </div>
-        )}
+        className={`relative overflow-hidden bg-surface group cursor-pointer ring-1 ring-white/10 transition-transform duration-300 hover:scale-[1.03] hover:z-10 hover:shadow-[0_16px_30px_rgba(0,0,0,0.45)] ${
+          variant === 'backdrop' ? 'aspect-video rounded-2xl' : 'aspect-2/3 rounded-xl'
+        }`}
+        activeClassName="ring-4 ring-primary scale-[1.03] z-10"
+        onClick={() => {
+          if (onClick) onClick();
+          navigate(`/details/${mediaType}/${media.id}`, { state: media });
+        }}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        <div className="block w-full h-full relative">
+          <img
+            src={getImageUrl(imagePath, variant === 'backdrop' ? 'w780' : 'w500')}
+            srcSet={
+              variant === 'backdrop'
+                ? `${getImageUrl(imagePath, 'w300')} 300w, ${getImageUrl(imagePath, 'w780')} 780w, ${getImageUrl(imagePath, 'w1280')} 1280w`
+                : `${getImageUrl(imagePath, 'w342')} 342w, ${getImageUrl(imagePath, 'w500')} 500w, ${getImageUrl(imagePath, 'w780')} 780w`
+            }
+            sizes={variant === 'backdrop' ? '(max-width: 1024px) 70vw, 25vw' : '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw'}
+            alt={media.title || media.name}
+            className="w-full h-full object-cover bg-gray-900"
+            loading="lazy"
+            decoding="async"
+          />
 
-        {/* TV Show Episode Badge */}
-        {hasProgress && progress.season && (
-          <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 px-2 py-1 rounded text-[10px] font-bold text-white z-20">
-            S{progress.season} E{progress.episode}
-          </div>
-        )}
-        
-        {/* Hover Overlay */}
-        <div className={`absolute inset-0 bg-linear-to-t from-black via-black/90 to-transparent transition-opacity duration-300 flex flex-col justify-end p-4 ${isFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-          <h3 className="text-white font-bold text-lg truncate leading-tight mb-1 drop-shadow-md pr-2">
-            {media.title || media.name}
-          </h3>
-          
-          <div className="flex items-center justify-between text-xs text-gray-300 mb-3 whitespace-nowrap">
-            <div className="flex items-center gap-1">
-              <Star size={12} className="text-yellow-400 fill-yellow-400" />
-              <span>{(media.vote_average || 0).toFixed(1)}</span>
+          {hasProgress && (
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/55 z-20">
+              <div className="h-full bg-linear-to-r from-[#ff4fa3] via-[#ff7ab6] to-[#7d7bff]" style={{ width: `${progress.percentage}%` }} />
             </div>
-            
-            {/* Atmos / Audio Badge */}
-            {(media.audio_format === 'atmos') && (
-               <span className="bg-black/50 border border-white/10 px-1.5 py-0.5 rounded backdrop-blur-sm flex items-center gap-1">
-                 <span className="text-[9px] font-bold tracking-wider text-white">ATMOS</span>
-               </span>
-            )}
-            
-            <span className="bg-white/10 px-1.5 py-0.5 rounded backdrop-blur-sm">
-              {new Date(media.release_date || media.first_air_date || '').getFullYear() || 'N/A'}
-            </span>
-          </div>
+          )}
 
-          <div className="flex items-center gap-2 mt-1 overflow-x-auto scrollbar-hide shrink-0 pb-1">
-            <button 
-              onClick={handlePlayClick}
-              className="flex-1 bg-linear-to-r from-primary to-purple-600 text-white py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:brightness-110 transition-all duration-300 text-sm shadow-[0_0_15px_rgba(124,58,237,0.4)] whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <Play size={14} fill="currentColor" /> {hasProgress ? 'Resume' : 'Play'}
-            </button>
-             <button
-              onClick={(e) => handleVote(e, 'like')}
-              className={`p-2.5 backdrop-blur-md border border-white/10 rounded-xl transition-colors shrink-0 ${
-                userVote === 'like' 
-                  ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' 
-                  : 'bg-white/10 text-white hover:bg-white/20'
-              }`}
-              title="Like"
-            >
-              <ThumbsUp size={16} className={userVote === 'like' ? 'fill-current' : ''} />
-            </button>
-             <button
-              onClick={(e) => handleVote(e, 'dislike')}
-              className={`p-2.5 backdrop-blur-md border border-white/10 rounded-xl transition-colors shrink-0 ${
-                userVote === 'dislike' 
-                  ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' 
-                  : 'bg-white/10 text-white hover:bg-white/20'
-              }`}
-              title="Dislike"
-            >
-              <ThumbsDown size={16} className={userVote === 'dislike' ? 'fill-current' : ''} />
-            </button>
-            <button
-              onClick={handlePlayTrailer}
-              className="p-2.5 bg-white/10 backdrop-blur-md border border-white/10 rounded-xl text-white hover:bg-white/20 transition-colors shrink-0"
-              title="Watch Trailer"
-            >
-              <Youtube size={16} />
-            </button>
-            <button
-              onClick={toggleWatchlist}
-              className="p-2.5 bg-white/10 backdrop-blur-md border border-white/10 rounded-xl text-white hover:bg-white/20 transition-colors shrink-0"
-              title={isSaved ? "Remove from Library" : "Add to Library"}
-            >
-              {isSaved ? <Check size={16} /> : <Plus size={16} />}
-            </button>
+          {hasProgress && progress.season && (
+            <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 px-2 py-1 rounded text-[10px] font-bold text-white z-20">
+              S{progress.season} E{progress.episode}
+            </div>
+          )}
+
+          <div className={`absolute inset-0 bg-linear-to-t from-black via-black/85 to-transparent transition-opacity duration-300 flex flex-col justify-end ${variant === 'backdrop' ? 'p-3' : 'p-4'} ${isFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+            <h3 className={`text-white font-semibold truncate leading-tight mb-1 drop-shadow-md pr-2 ${variant === 'backdrop' ? 'text-sm md:text-base' : 'text-lg'}`}>
+              {media.title || media.name}
+            </h3>
+
+            <div className="flex items-center justify-between text-xs text-gray-300 mb-2 whitespace-nowrap">
+              <div className="flex items-center gap-1">
+                <Star size={12} className="text-yellow-400 fill-yellow-400" />
+                <span>{(media.vote_average || 0).toFixed(1)}</span>
+              </div>
+
+              {(media.audio_format === 'atmos') && (
+                <span className="bg-black/45 border border-white/10 px-1.5 py-0.5 rounded backdrop-blur-sm text-[9px] font-bold tracking-wider text-white">
+                  ATMOS
+                </span>
+              )}
+
+              <span className="bg-white/10 px-1.5 py-0.5 rounded backdrop-blur-sm">
+                {new Date(media.release_date || media.first_air_date || '').getFullYear() || 'N/A'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 mt-1 overflow-x-auto scrollbar-hide shrink-0 pb-1">
+              <button
+                onClick={handlePlayClick}
+                className="flex-1 bg-linear-to-r from-[#ff4fa3] via-[#ff7ab6] to-[#7d7bff] text-white py-2 rounded-xl font-semibold flex items-center justify-center gap-2 hover:brightness-110 transition-all duration-300 text-xs md:text-sm whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Play size={14} fill="currentColor" /> {hasProgress ? 'Resume' : 'Play'}
+              </button>
+
+              <button
+                onClick={(e) => handleVote(e, 'like')}
+                className={`p-2.5 backdrop-blur-md border border-white/10 rounded-xl transition-colors shrink-0 ${
+                  userVote === 'like' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-white/10 text-white hover:bg-white/20'
+                }`}
+                title="Like"
+              >
+                <ThumbsUp size={14} className={userVote === 'like' ? 'fill-current' : ''} />
+              </button>
+
+              <button
+                onClick={(e) => handleVote(e, 'dislike')}
+                className={`p-2.5 backdrop-blur-md border border-white/10 rounded-xl transition-colors shrink-0 ${
+                  userVote === 'dislike' ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-white/10 text-white hover:bg-white/20'
+                }`}
+                title="Dislike"
+              >
+                <ThumbsDown size={14} className={userVote === 'dislike' ? 'fill-current' : ''} />
+              </button>
+
+              <button
+                onClick={handlePlayTrailer}
+                className="p-2.5 bg-[rgba(255,179,71,0.14)] backdrop-blur-md border border-[rgba(255,179,71,0.45)] rounded-xl text-white hover:bg-[rgba(255,179,71,0.24)] transition-colors shrink-0"
+                title="Watch Trailer"
+              >
+                <Youtube size={14} />
+              </button>
+
+              <button
+                onClick={toggleWatchlist}
+                className="p-2.5 bg-[rgba(94,234,212,0.14)] backdrop-blur-md border border-[rgba(94,234,212,0.45)] rounded-xl text-white hover:bg-[rgba(94,234,212,0.24)] transition-colors shrink-0"
+                title={isSaved ? 'Remove from Library' : 'Add to Library'}
+              >
+                {isSaved ? <Check size={14} /> : <Plus size={14} />}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    </Focusable>
-    {/* Trailer Modal */}
-    {showTrailer && trailerKey && (
-      <TrailerModal 
-        videoKey={trailerKey} 
-        title={media.title || media.name}
-        onClose={() => setShowTrailer(false)} 
-      />
-    )}
+      </Focusable>
+
+      {showTrailer && trailerKey && (
+        <TrailerModal
+          videoKey={trailerKey}
+          title={media.title || media.name}
+          onClose={() => setShowTrailer(false)}
+        />
+      )}
     </>
   );
 });

@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCcw } from 'lucide-react';
+import { logger } from '../../services/logger';
 
 interface Props {
   children: ReactNode;
@@ -24,7 +25,11 @@ export class PlayerErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('InflucinePlayer Error:', error, errorInfo);
+    logger.error('InflucinePlayer crashed', {
+      message: error.message,
+      stack: error.stack,
+      componentStack: errorInfo.componentStack,
+    });
     this.setState({
       error,
       errorInfo

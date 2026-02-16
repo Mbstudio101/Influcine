@@ -1171,6 +1171,22 @@ function createWindow() {
     }
   });
 
+  ipcMain.removeHandler('window-is-maximized');
+  ipcMain.handle('window-is-maximized', () => {
+    return Boolean(win?.isMaximized());
+  });
+
+  ipcMain.removeHandler('window-toggle-maximize');
+  ipcMain.handle('window-toggle-maximize', () => {
+    if (!win) return false;
+    if (win.isMaximized()) {
+      win.unmaximize();
+    } else {
+      win.maximize();
+    }
+    return win.isMaximized();
+  });
+
   ipcMain.on('window-close', () => {
     win?.close();
   });

@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ChevronLeft, Minimize2, Maximize2, X, Square } from 'lucide-react';
+import { ChevronLeft, Minimize2, Maximize2, X, Square, Crown } from 'lucide-react';
 import clsx from 'clsx';
+import { useAuth } from '../context/useAuth';
+import { Avatar } from './Avatars';
 
 interface TitleBarProps {
   className?: string;
@@ -11,27 +13,52 @@ interface TitleBarProps {
 const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { profile } = useAuth();
   const [isMaximized, setIsMaximized] = useState(false);
+  const ipc = typeof window !== 'undefined' ? window.ipcRenderer : undefined;
 
   // Handle window controls
-  const handleMinimize = () => {
-    if (window.ipcRenderer) {
-      window.ipcRenderer.send('window-minimize');
+  const handleMinimize = useCallback(() => {
+    if (ipc) {
+      ipc.send('window-minimize');
     }
-  };
+  }, [ipc]);
 
-  const handleMaximize = () => {
-    if (window.ipcRenderer) {
-      window.ipcRenderer.send('window-maximize');
-      setIsMaximized(!isMaximized);
+  const handleMaximize = useCallback(async () => {
+    if (ipc) {
+      // Prefer invoke so renderer and main stay in sync.
+      try {
+        const maximized = await ipc.invoke('window-toggle-maximize');
+        setIsMaximized(Boolean(maximized));
+      } catch {
+        ipc.send('window-maximize');
+        setIsMaximized(prev => !prev);
+      }
     }
-  };
+  }, [ipc]);
 
-  const handleClose = () => {
-    if (window.ipcRenderer) {
-      window.ipcRenderer.send('window-close');
+  const handleClose = useCallback(() => {
+    if (ipc) {
+      ipc.send('window-close');
     }
-  };
+  }, [ipc]);
+
+  useEffect(() => {
+    let active = true;
+    const syncMaxState = async () => {
+      if (!ipc) return;
+      try {
+        const maximized = await ipc.invoke('window-is-maximized');
+        if (active) setIsMaximized(Boolean(maximized));
+      } catch {
+        // Ignore in web mode or when channel is unavailable.
+      }
+    };
+    syncMaxState();
+    return () => {
+      active = false;
+    };
+  }, [ipc]);
 
   // Keyboard Shortcuts
   useEffect(() => {
@@ -57,7 +84,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isMaximized]);
+  }, [handleClose, handleMaximize, handleMinimize]);
 
   // Determine if we should show the back button
   // Don't show on root landing page, login, or main browse page if it's the root of the app
@@ -84,6 +111,22 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
       </div>
 
       <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        {!isOverlay && profile && (
+          <div className="mr-1 flex items-center gap-2.5 px-2 py-1 rounded-full bg-white/8 border border-white/15">
+            <div className="w-7 h-7 rounded-full overflow-hidden border border-white/30">
+              <Avatar id={profile.avatarId || 'human-m-1'} />
+            </div>
+            <div className="hidden md:block leading-tight">
+              <div className="text-[11px] text-white font-semibold">{profile.name || 'Account'}</div>
+              <div className="text-[10px] text-[#f7d26a] flex items-center gap-1">
+                <Crown size={10} className="fill-[#f7d26a] text-[#f7d26a]" />
+                Premium Member
+              </div>
+            </div>
+          </div>
+        )}
+        {!ipc ? null : (
+          <>
         <button 
           onClick={handleMinimize}
           className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-gray-400 hover:text-white"
@@ -105,6 +148,8 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
         >
           <X size={14} />
         </button>
+          </>
+        )}
       </div>
     </div>
   );

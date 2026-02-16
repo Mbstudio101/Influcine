@@ -10,30 +10,28 @@ import Logo from './Logo';
 import Focusable from './Focusable';
 import { useToast } from '../context/toast';
 import { usePlayer } from '../context/PlayerContext';
+import { Avatar } from './Avatars';
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
-const NavItem = ({ to, icon: Icon, label, active, onClick }: { to?: string; icon: React.ElementType; label: string; active: boolean; onClick?: () => void }) => {
+const NavItem = ({
+  to,
+  icon: Icon,
+  label,
+  active,
+  onClick,
+  customIcon,
+}: {
+  to?: string;
+  icon: React.ElementType;
+  label: string;
+  active: boolean;
+  onClick?: () => void;
+  customIcon?: React.ReactNode;
+}) => {
   const navigate = useNavigate();
-  
-  const content = (
-    <>
-      {active && (
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full shadow-[0_0_12px_rgba(124,58,237,0.5)]" />
-      )}
-      <Icon size={24} className={clsx("transition-transform duration-300 min-w-[24px]", active ? "scale-110 text-primary" : "group-hover/item:scale-110")} />
-      <span className="font-medium tracking-wide whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 -translate-x-4 group-hover:translate-x-0 transform">
-        {label}
-      </span>
-    </>
-  );
-
-  const className = clsx(
-    'flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 group/item relative overflow-hidden w-full text-left cursor-pointer',
-    active ? 'bg-primary/20 text-white' : 'text-textSecondary hover:text-white hover:bg-white/10'
-  );
 
   const handleInteract = () => {
     if (onClick) onClick();
@@ -41,12 +39,19 @@ const NavItem = ({ to, icon: Icon, label, active, onClick }: { to?: string; icon
   };
 
   return (
-    <Focusable 
-      onClick={handleInteract} 
-      className={className}
-      activeClassName="ring-2 ring-primary bg-white/10 z-10"
+    <Focusable
+      onClick={handleInteract}
+      className={clsx(
+        'relative h-11 w-11 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer border',
+        active
+          ? 'bg-linear-to-br from-[#ff4fa3] via-[#ff7ab6] to-[#7d7bff] text-white border-[rgba(255,255,255,0.45)] shadow-[0_10px_24px_rgba(255,79,163,0.35)]'
+          : 'bg-[#0f172a]/65 text-slate-100 border-white/15 hover:border-white/35 hover:bg-white/10'
+      )}
+      activeClassName="ring-2 ring-primary scale-105"
+      aria-label={label}
+      title={label}
     >
-      {content}
+      {customIcon || <Icon size={18} className="min-w-[18px]" />}
     </Focusable>
   );
 };
@@ -54,14 +59,12 @@ const NavItem = ({ to, icon: Icon, label, active, onClick }: { to?: string; icon
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, profile } = useAuth();
   const { showToast } = useToast();
   const { state } = usePlayer();
   const isPlayerFull = state.mode === 'full';
-  const dragStyle: React.CSSProperties & { WebkitAppRegion?: string } = { WebkitAppRegion: 'drag' };
 
   useEffect(() => {
-    // Check for reminders due today
     const checkReminders = async () => {
       if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
@@ -69,11 +72,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       const dueReminders = await db.reminders.where('releaseDate').equals(today).toArray();
 
       if (dueReminders.length > 0) {
-        // Show notification (limit to 1 summary or first few)
-        const title = dueReminders.length === 1 
+        const title = dueReminders.length === 1
           ? `Release Today: ${dueReminders[0].title}`
           : `${dueReminders.length} Releases Today!`;
-        
+
         const body = dueReminders.length === 1
           ? 'Check it out in your calendar.'
           : dueReminders.map(r => r.title).slice(0, 3).join(', ') + (dueReminders.length > 3 ? '...' : '');
@@ -98,46 +100,41 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="flex h-screen bg-background text-text overflow-hidden flex-col">
-      {/* TitleBar */}
-      <TitleBar className="left-20 right-0" />
+      <TitleBar className="left-0 right-0" />
 
-      {/* Sidebar - Fixed to Top-Left */}
-      <div className={`fixed left-0 top-0 bottom-0 z-210 w-20 ${isPlayerFull ? '' : 'hover:w-64'} bg-black/80 backdrop-blur-2xl border-r border-white/5 flex flex-col transition-all duration-300 group`}>
-        <div className="h-10 flex items-center px-4 overflow-hidden shrink-0" style={dragStyle}>
-           <Logo 
-             size="sm" 
-             className="group-hover:scale-110 transition-transform duration-300"
-             textClassName="opacity-0 group-hover:opacity-100 transition-opacity duration-300 -translate-x-4 group-hover:translate-x-0 transform pl-3"
-           />
-        </div>
+      {!isPlayerFull && (
+        <aside className="fixed left-4 top-1/2 -translate-y-1/2 z-[220] hidden md:flex">
+          <div className="w-14 rounded-[1.8rem] border border-white/15 bg-[#060b15]/80 backdrop-blur-2xl p-2.5 flex flex-col items-center gap-2 shadow-[0_20px_45px_rgba(2,8,23,0.7)]">
+            <div className="mb-1" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+              <Logo size="sm" showText={false} className="opacity-85" />
+            </div>
 
-        <nav className="flex-1 px-3 py-6 space-y-3 overflow-y-auto scrollbar-hide">
-          <NavItem to="/" icon={Home} label="Home" active={location.pathname === '/'} />
-          <NavItem to="/search" icon={Search} label="Search" active={location.pathname === '/search'} />
-          <NavItem to="/watchlist" icon={Library} label="My Library" active={location.pathname === '/watchlist'} />
-          <NavItem to="/calendar" icon={Calendar} label="Calendar" active={location.pathname === '/calendar'} />
-        </nav>
+            <NavItem to="/browse" icon={Home} label="Home" active={location.pathname === '/browse' || location.pathname === '/'} />
+            <NavItem to="/search" icon={Search} label="Search" active={location.pathname === '/search'} />
+            <NavItem to="/watchlist" icon={Library} label="My Library" active={location.pathname === '/watchlist'} />
+            <NavItem to="/calendar" icon={Calendar} label="Calendar" active={location.pathname === '/calendar'} />
 
-        <div className="p-3 border-t border-white/5 space-y-3 mb-4 shrink-0">
-          <NavItem 
-            icon={Users} 
-            label="Switch Profile" 
-            active={false} 
-            onClick={() => navigate('/profiles')}
-          />
-          <NavItem to="/profile" icon={User} label="Profile" active={location.pathname === '/profile'} />
-          <NavItem to="/settings" icon={Settings} label="Settings" active={location.pathname === '/settings'} />
-          <NavItem 
-            icon={LogOut} 
-            label="Log Out" 
-            active={false} 
-            onClick={handleLogout}
-          />
-        </div>
-      </div>
+            <div className="w-7 h-px bg-white/15 my-1" />
 
-      <div className="flex flex-1 relative overflow-hidden ml-20">
-        {/* Main Content */}
+            <NavItem icon={Users} label="Switch Profile" active={false} onClick={() => navigate('/profiles')} />
+            <NavItem
+              to="/profile"
+              icon={User}
+              label="Profile"
+              active={location.pathname === '/profile'}
+              customIcon={
+                <div className="w-9 h-9 rounded-full overflow-hidden border border-white/30">
+                  <Avatar id={profile?.avatarId || 'human-m-1'} />
+                </div>
+              }
+            />
+            <NavItem to="/settings" icon={Settings} label="Settings" active={location.pathname === '/settings'} />
+            <NavItem icon={LogOut} label="Log Out" active={false} onClick={handleLogout} />
+          </div>
+        </aside>
+      )}
+
+      <div className={clsx('flex flex-1 relative overflow-hidden pt-10', !isPlayerFull && 'md:ml-[5.5rem]')}>
         <div className="flex-1 overflow-hidden relative">
           {children}
         </div>

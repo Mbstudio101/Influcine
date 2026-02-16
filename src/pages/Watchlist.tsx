@@ -144,7 +144,7 @@ const Watchlist: React.FC = () => {
                         }
                       }
                     }}
-                    className="bg-linear-to-r from-primary to-purple-600 hover:from-primary-hover hover:to-purple-500 text-white px-8 py-4 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 hover:scale-105 shadow-[0_0_20px_rgba(124,58,237,0.5)] hover:shadow-[0_0_30px_rgba(124,58,237,0.7)] text-lg shrink-0 border border-white/10 uppercase tracking-wide group"
+                    className="bg-linear-to-r from-[#ff4fa3] via-[#ff7ab6] to-[#7d7bff] hover:brightness-110 text-white px-8 py-4 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 hover:scale-105 shadow-[0_0_22px_rgba(255,79,163,0.38)] hover:shadow-[0_0_30px_rgba(125,123,255,0.42)] text-lg shrink-0 border border-white/15 uppercase tracking-wide group"
                     activeClassName="ring-4 ring-white scale-110 z-20"
                   >
                     <Play fill="currentColor" size={20} className="group-hover:animate-pulse" />

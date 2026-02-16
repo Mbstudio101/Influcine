@@ -114,9 +114,9 @@ const Search: React.FC = () => {
             value={query}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="w-full bg-white/5 backdrop-blur-xl border border-white/10 text-white pl-14 pr-6 py-5 rounded-2xl text-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 shadow-[0_0_20px_rgba(124,58,237,0.1)] focus:shadow-[0_0_40px_rgba(124,58,237,0.4)] placeholder-gray-500 transition-all duration-300"
+            className="w-full bg-white/5 backdrop-blur-xl border border-white/10 text-white pl-14 pr-6 py-5 rounded-2xl text-xl focus:outline-none focus:ring-2 focus:ring-[rgba(255,79,163,0.55)] shadow-[0_0_20px_rgba(255,79,163,0.12)] focus:shadow-[0_0_40px_rgba(255,122,182,0.4)] placeholder-gray-500 transition-all duration-300"
             autoFocus
-            activeClassName="ring-2 ring-primary shadow-[0_0_40px_rgba(124,58,237,0.4)]"
+            activeClassName="ring-2 ring-primary shadow-[0_0_40px_rgba(255,122,182,0.4)]"
           />
           {isCached && !loading && (
              <div className="absolute right-6 top-1/2 -translate-y-1/2 text-emerald-400 flex items-center gap-1.5 text-xs font-bold tracking-wide uppercase bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20" title="Served from intelligent cache">

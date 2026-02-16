@@ -40,7 +40,7 @@ const RightSidebar: React.FC = () => {
     <div className="w-80 h-full border-l border-white/5 bg-black/20 backdrop-blur-md pt-20 px-6 pb-6 overflow-y-auto hidden xl:block">
       {/* User Profile Summary */}
       <div className="flex items-center gap-3 mb-8 p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer">
-        <div className="w-10 h-10 rounded-full bg-linear-to-br from-primary to-purple-800 flex items-center justify-center font-bold text-white shadow-lg overflow-hidden p-1">
+        <div className="w-10 h-10 rounded-full bg-linear-to-br from-[#ff4fa3] via-[#ff7ab6] to-[#7d7bff] flex items-center justify-center font-bold text-white shadow-lg overflow-hidden p-1">
           <Avatar id={profile?.avatarId || 'human-m-1'} />
         </div>
         <div>
@@ -56,20 +56,28 @@ const RightSidebar: React.FC = () => {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-white">Favorite Genres</h3>
-          <button className="text-primary text-xs hover:text-white transition-colors">Edit</button>
+          <button
+            onClick={() => navigate('/search')}
+            className="text-primary text-xs hover:text-white transition-colors cursor-pointer"
+          >
+            Edit
+          </button>
         </div>
         <div className="flex flex-wrap gap-2">
           {GENRES.slice(0, 8).map(genre => (
             <Focusable 
               key={genre.id} 
               onClick={() => navigate(`/genre/${genre.id}`)}
-              className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-xs text-gray-300 hover:bg-primary hover:text-white hover:border-primary transition-all duration-300 cursor-pointer"
-              activeClassName="ring-2 ring-primary bg-primary text-white scale-105 z-10"
+              className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-xs text-gray-300 hover:bg-[rgba(255,79,163,0.25)] hover:text-white hover:border-[rgba(255,122,182,0.55)] transition-all duration-300 cursor-pointer"
+              activeClassName="ring-2 ring-primary bg-[rgba(255,79,163,0.35)] text-white scale-105 z-10"
             >
               {genre.name}
             </Focusable>
           ))}
-          <Focusable className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-xs text-gray-300 hover:bg-white/10 transition-all flex items-center gap-1 cursor-pointer">
+          <Focusable
+            onClick={() => navigate('/search')}
+            className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-xs text-gray-300 hover:bg-white/10 transition-all flex items-center gap-1 cursor-pointer"
+          >
              <Hash size={10} /> More
           </Focusable>
         </div>

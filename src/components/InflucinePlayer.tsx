@@ -553,16 +553,55 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     }
   };
 
-  const switchSubtitleTrack = useCallback((index: number) => {
+  const switchSubtitleTrack = useCallback(async (index: number) => {
     if (isEmbed) return;
-    if (videoRef.current?.textTracks) {
-      for (let i = 0; i < videoRef.current.textTracks.length; i++) {
-        const track = videoRef.current.textTracks[i];
-        track.mode = i === index ? 'showing' : 'hidden';
-      }
-      setActiveSubtitleIndex(index);
+    const video = videoRef.current;
+    if (!video?.textTracks) return;
+
+    const nativeTrackCount = video.textTracks.length;
+
+    for (let i = 0; i < nativeTrackCount; i++) {
+      video.textTracks[i].mode = 'hidden';
     }
-  }, [isEmbed, setActiveSubtitleIndex]);
+
+    if (index === -1) {
+      setActiveSubtitleIndex(-1);
+      setCustomSubtitles([]);
+      return;
+    }
+
+    // Native text tracks attached to the video element
+    if (index < nativeTrackCount) {
+      video.textTracks[index].mode = 'showing';
+      setCustomSubtitles([]);
+      setActiveEmbedTrackIndex(-1);
+      setActiveAutoSubtitleIndex(-1);
+      setActiveSubtitleIndex(index);
+      return;
+    }
+
+    // External tracks are represented as virtual indexes after native tracks
+    const externalIndex = index - nativeTrackCount;
+    const externalTrack = externalSubtitles[externalIndex];
+    if (!externalTrack?.url) return;
+
+    try {
+      const response = await fetch(externalTrack.url);
+      if (!response.ok) throw new Error(`Failed to load subtitle: ${response.status}`);
+      const content = await response.text();
+      const cues = parseSubtitle(content);
+      setCustomSubtitles(cues);
+      setActiveEmbedTrackIndex(-1);
+      setActiveAutoSubtitleIndex(-1);
+      setActiveSubtitleIndex(index);
+    } catch (e) {
+      errorAgent.log({
+        message: 'Failed to load external subtitle track',
+        type: 'WARN',
+        context: { error: String(e), subtitleUrl: externalTrack.url },
+      });
+    }
+  }, [isEmbed, externalSubtitles, setActiveSubtitleIndex, setCustomSubtitles, setActiveEmbedTrackIndex, setActiveAutoSubtitleIndex]);
 
   // Embed messaging logic
   useEffect(() => {
@@ -671,6 +710,8 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
           setCustomSubtitles([]);
           return;
       }
+      setActiveSubtitleIndex(-1);
+      setActiveAutoSubtitleIndex(-1);
       setActiveEmbedTrackIndex(index);
       setCustomSubtitles([]);
       try {
@@ -891,7 +932,13 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
                 onEmbedTrackChange={loadEmbedTrack}
                 autoSubtitles={autoSubtitles.map(s => ({ ...s, format: s.format || 'vtt' }))}
                 activeAutoSubtitleIndex={activeAutoSubtitleIndex}
-                onAutoSubtitleChange={loadAutoSubtitle}
+                onAutoSubtitleChange={(index) => {
+                    if (index !== -1) {
+                        setActiveSubtitleIndex(-1);
+                        setActiveEmbedTrackIndex(-1);
+                    }
+                    loadAutoSubtitle(index);
+                }}
                 isSearchingSubs={isSearchingSubs}
                 onUploadClick={handleSubtitleUpload}
                 onSearchOnline={() => {

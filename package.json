@@ -1,7 +1,7 @@
 {
   "name": "influcine",
   "private": true,
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Influcine - Your Personal Streaming Companion",
   "repository": {
     "type": "git",
@@ -15,7 +15,8 @@
     "build:electron": "tsc && vite build && electron-builder",
     "build:web": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@capacitor/core": "^8.0.1",
@@ -23,7 +24,7 @@
     "@supabase/supabase-js": "^2.91.1",
     "@tanstack/react-query": "^5.90.20",
     "@tanstack/react-query-devtools": "^5.91.2",
-    "axios": "^1.13.2",
+    "axios": "^1.13.5",
     "better-sqlite3": "^12.6.2",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -70,12 +71,23 @@
     "typescript": "^5.2.2",
     "vite": "^5.1.6",
     "vite-plugin-electron": "^0.28.6",
-    "vite-plugin-electron-renderer": "^0.14.5"
+    "vite-plugin-electron-renderer": "^0.14.5",
+    "vitest": "^2.1.9"
   },
   "main": "dist-electron/main.js",
   "build": {
     "appId": "com.influcine.app",
     "productName": "Influcine",
+    "files": [
+      "dist",
+      "dist-electron",
+      "!**/*.{ts,tsx,map}",
+      "!**/*.d.ts",
+      "!src",
+      "!scripts",
+      "!trailers",
+      "!*-player-script.js"
+    ],
     "directories": {
       "output": "release/${version}"
     },

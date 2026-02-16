@@ -2,9 +2,9 @@ import React, { useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { getDetails, getCredits, getSimilar, getImageUrl, getSeasonDetails, findMediaByImdbId } from '../services/tmdb';
+import { getDetails, getCredits, getSimilar, getImageUrl, getSeasonDetails, findMediaByImdbId, getPersonDetails, getPersonBiographyFallback } from '../services/tmdb';
 import { MediaDetails, Episode, CastMember } from '../types';
-import { Play, Plus, Check, Star, ArrowLeft, Download, Youtube } from 'lucide-react';
+import { Play, Plus, Check, Star, ArrowLeft, Youtube, X } from 'lucide-react';
 import { db } from '../db';
 import { useAuth } from '../context/useAuth';
 import { usePlayer } from '../context/PlayerContext';
@@ -12,8 +12,6 @@ import ContentRow from '../components/ContentRow';
 import Focusable from '../components/Focusable';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useToast } from '../context/toast';
-import { downloadService } from '../services/downloadService';
 import { useEmbedUrl } from '../hooks/useEmbedUrl';
 import { findBestTrailer } from '../utils/videoUtils';
 import { useTrailerCache } from '../hooks/useTrailerCache';
@@ -25,10 +23,10 @@ const Details: React.FC = () => {
   const { type, id } = useParams<{ type: 'movie' | 'tv'; id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { showToast } = useToast();
   const { play } = usePlayer();
   const [showTrailer, setShowTrailer] = useState(false);
   const [userSelectedSeason, setUserSelectedSeason] = useState<number | null>(null);
+  const [selectedActor, setSelectedActor] = useState<CastMember | null>(null);
   const { profile } = useAuth();
 
   const { data: mediaData, isLoading, error: queryError } = useQuery({
@@ -81,6 +79,28 @@ const Details: React.FC = () => {
   const details = mediaData?.details || null;
   const credits = mediaData?.credits || null;
   const error = queryError ? 'Failed to load details' : null;
+
+  const { data: actorDetails, isLoading: actorDetailsLoading } = useQuery({
+    queryKey: ['person-details', selectedActor?.id, selectedActor?.name],
+    queryFn: async () => {
+      const person = await getPersonDetails(selectedActor!.id);
+      if (person.biography?.trim()) {
+        return person;
+      }
+
+      const fallbackBiography = await getPersonBiographyFallback(selectedActor!.name);
+      if (!fallbackBiography) {
+        return person;
+      }
+
+      return {
+        ...person,
+        biography: fallbackBiography,
+      };
+    },
+    enabled: !!selectedActor,
+    staleTime: 1000 * 60 * 60 * 24,
+  });
 
   const { isSaved, toggleWatchlist } = useWatchlist(details ? {
     ...details,
@@ -265,16 +285,6 @@ const Details: React.FC = () => {
     }
   };
 
-  const handleDownload = async () => {
-    if (!details) return;
-    try {
-      await downloadService.startDownload(details);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Download failed';
-      showToast(message, 'error');
-    }
-  };
-
   const handlePlayEpisode = async (season: number, episode: number) => {
     if (!details) return;
     try {
@@ -334,6 +344,68 @@ const Details: React.FC = () => {
           title={details.title || details.name}
           onClose={() => setShowTrailer(false)}
         />
+      )}
+
+      {/* Cast Biography Modal */}
+      {selectedActor && (
+        <div
+          className="fixed inset-0 z-[320] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setSelectedActor(null)}
+        >
+          <div
+            className="w-full max-w-3xl max-h-[88vh] overflow-hidden rounded-2xl border border-white/10 bg-[#0b101b] shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 md:p-5 border-b border-white/10 flex items-center justify-between">
+              <h3 className="text-lg md:text-xl font-bold text-white">Cast Biography</h3>
+              <button
+                onClick={() => setSelectedActor(null)}
+                className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+                aria-label="Close cast biography"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-5 md:p-6 overflow-y-auto max-h-[calc(88vh-72px)]">
+              <div className="flex flex-col md:flex-row gap-5 md:gap-6">
+                <div className="w-28 h-28 md:w-40 md:h-40 rounded-2xl overflow-hidden border border-white/10 shrink-0">
+                  <CastImage
+                    name={selectedActor.name}
+                    profilePath={actorDetails?.profile_path ?? selectedActor.profile_path}
+                    alt={selectedActor.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-2xl font-black text-white mb-2">{actorDetails?.name || selectedActor.name}</h4>
+                  <p className="text-sm text-white/70 mb-3">Character: {selectedActor.character || 'Unknown'}</p>
+
+                  {actorDetails && (
+                    <div className="flex flex-wrap gap-2 mb-4 text-xs">
+                      {actorDetails.known_for_department && (
+                        <span className="px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-white/90">{actorDetails.known_for_department}</span>
+                      )}
+                      {actorDetails.birthday && (
+                        <span className="px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-white/90">Born: {actorDetails.birthday}</span>
+                      )}
+                      {actorDetails.place_of_birth && (
+                        <span className="px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-white/90">{actorDetails.place_of_birth}</span>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="text-sm md:text-base leading-relaxed text-slate-200/95 whitespace-pre-line">
+                    {actorDetailsLoading
+                      ? 'Loading biography...'
+                      : actorDetails?.biography?.trim() || 'No biography available for this cast member.'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Hero Section */}
@@ -406,7 +478,7 @@ const Details: React.FC = () => {
           <div className="absolute inset-0 bg-linear-to-r from-background via-background/80 to-transparent" />
         </div>
 
-        <div className="absolute bottom-0 left-0 p-10 w-full max-w-4xl pb-10 z-10 flex gap-8 items-end">
+        <div className="absolute bottom-0 left-0 p-6 md:p-10 w-full max-w-6xl pb-10 z-10 flex gap-6 md:gap-8 items-end">
           {/* Poster */}
           <div className="hidden md:block w-72 rounded-lg overflow-hidden shadow-2xl border border-white/10 rotate-3 transform hover:rotate-0 transition-transform duration-500">
             <img
@@ -418,7 +490,7 @@ const Details: React.FC = () => {
             />
           </div>
 
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <h1 className="text-5xl font-black mb-2 drop-shadow-2xl leading-tight text-white tracking-tight line-clamp-2">
               {details.title || details.name}
             </h1>
@@ -443,10 +515,10 @@ const Details: React.FC = () => {
               </p>
             </div>
 
-            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
+            <div className="flex gap-4 overflow-x-auto [overflow-y:visible] scrollbar-hide pt-2 pb-4 pr-8 md:pr-12 snap-x snap-mandatory">
               <button
                 onClick={handleWatch}
-                className="bg-linear-to-r from-primary to-purple-600 hover:from-primary-hover hover:to-purple-500 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 hover:scale-105 shadow-[0_0_20px_rgba(124,58,237,0.5)] hover:shadow-[0_0_30px_rgba(124,58,237,0.7)] text-lg shrink-0 border border-white/10 uppercase tracking-wide group"
+                className="bg-linear-to-r from-[#ff4fa3] via-[#ff7ab6] to-[#7d7bff] hover:brightness-110 text-white px-6 md:px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 hover:scale-105 shadow-[0_0_24px_rgba(255,79,163,0.4)] hover:shadow-[0_0_30px_rgba(125,123,255,0.45)] text-base md:text-lg shrink-0 border border-white/15 uppercase tracking-wide group snap-start"
               >
                 <Play fill="currentColor" size={20} className="group-hover:animate-pulse" />
                 Watch Now
@@ -454,7 +526,7 @@ const Details: React.FC = () => {
               {activeTrailerKey && (
                 <button
                   onClick={() => setShowTrailer(true)}
-                  className="bg-white/5 hover:bg-white/10 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 backdrop-blur-md border border-white/10 hover:border-white/30 hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] text-lg shrink-0"
+                  className="bg-white/5 hover:bg-white/10 text-white px-6 md:px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 backdrop-blur-md border border-white/10 hover:border-white/30 hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] text-base md:text-lg shrink-0 snap-start"
                 >
                   <Youtube size={20} className="text-red-500" />
                   Trailer
@@ -462,22 +534,16 @@ const Details: React.FC = () => {
               )}
               <button
                 onClick={toggleWatchlist}
-                className={`px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 backdrop-blur-md border hover:scale-105 text-lg shrink-0 ${isSaved
-                  ? 'bg-primary border-primary text-white shadow-[0_0_20px_rgba(124,58,237,0.4)]'
-                  : 'bg-white/5 hover:bg-white/10 text-white border-white/10 hover:border-white/30 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]'
+                className={`px-6 md:px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 backdrop-blur-md border hover:scale-105 text-base md:text-lg shrink-0 snap-start ${isSaved
+                  ? 'bg-[rgba(94,234,212,0.24)] border-[rgba(94,234,212,0.7)] text-white shadow-[0_0_20px_rgba(94,234,212,0.35)]'
+                  : 'bg-[rgba(125,123,255,0.14)] hover:bg-[rgba(125,123,255,0.24)] text-white border-[rgba(125,123,255,0.4)] hover:shadow-[0_0_20px_rgba(125,123,255,0.2)]'
                   }`}
               >
                 {isSaved ? <Check size={20} /> : <Plus size={20} />}
                 {isSaved ? 'In Library' : 'Add to Library'}
               </button>
+              <div className="w-2 md:w-4 shrink-0" aria-hidden />
 
-              <button
-                onClick={handleDownload}
-                className="bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-3 transition-all duration-300 backdrop-blur-md border border-white/10 hover:border-white/30 hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] text-lg shrink-0"
-              >
-                <Download size={20} />
-                Download
-              </button>
             </div>
           </div>
         </div>
@@ -582,7 +648,11 @@ const Details: React.FC = () => {
           <h2 className="text-xl font-bold mb-4 text-white">Top Cast</h2>
           <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
             {credits.cast.slice(0, 10).map((actor: CastMember) => (
-              <div key={actor.id} className="min-w-[100px] flex flex-col items-center gap-2 text-center">
+              <button
+                key={actor.id}
+                onClick={() => setSelectedActor(actor)}
+                className="min-w-[100px] flex flex-col items-center gap-2 text-center cursor-pointer hover:scale-105 transition-transform"
+              >
                 <div className="w-20 h-20 rounded-full overflow-hidden border border-white/10">
                   <CastImage
                     name={actor.name}
@@ -595,7 +665,7 @@ const Details: React.FC = () => {
                   <p className="text-sm font-bold text-white leading-tight truncate px-1">{actor.name}</p>
                   <p className="text-xs text-gray-400 leading-tight truncate px-1">{actor.character}</p>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>

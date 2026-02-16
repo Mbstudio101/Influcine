@@ -137,6 +137,17 @@ export interface CastMember {
   order: number;
 }
 
+export interface PersonDetails {
+  id: number;
+  name: string;
+  biography: string;
+  birthday?: string;
+  deathday?: string | null;
+  place_of_birth?: string;
+  known_for_department?: string;
+  profile_path: string | null;
+}
+
 export interface CrewMember {
   id: number;
   name: string;

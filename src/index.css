@@ -1,17 +1,22 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #000000;
-  --color-surface: #1e293b;
-  --color-surface-hover: #334155;
-  --color-primary: #7c3aed;
-  --color-primary-hover: #6d28d9;
-  --color-text: #f8fafc;
-  --color-textSecondary: #94a3b8;
+  --color-background: #0b101b;
+  --color-surface: #121a29;
+  --color-surface-hover: #1a2438;
+  --color-primary: #2fc5c8;
+  --color-primary-hover: #28a9ac;
+  --color-accent-pink: #ff4fa3;
+  --color-accent-rose: #ff7ab6;
+  --color-accent-indigo: #7d7bff;
+  --color-accent-amber: #ffb347;
+  --color-accent-mint: #5eead4;
+  --color-text: #f1f5f9;
+  --color-textSecondary: #8ea2bf;
 }
 
 :root {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: 'Sora', 'Avenir Next', 'Poppins', 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -31,16 +36,23 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
-  background-color: var(--color-background);
-  /* overflow: hidden; Removed to allow scrolling on web */
-  overscroll-behavior: none; /* Prevent bounce effects */
+  background:
+    radial-gradient(circle at 50% -20%, rgba(255, 79, 163, 0.18), transparent 36%),
+    radial-gradient(circle at 15% -10%, rgba(47, 197, 200, 0.16), transparent 42%),
+    radial-gradient(circle at 82% 12%, rgba(255, 179, 71, 0.14), transparent 34%),
+    radial-gradient(circle at 90% 0%, rgba(88, 125, 255, 0.14), transparent 38%),
+    var(--color-background);
+  overscroll-behavior: none;
 }
 
-/* TV Mode: Apply overflow hidden only when needed or on specific TV routes if possible */
-/* For now, we allow scrolling because the Web Landing Page needs it. */
-/* If the TV app needs fixed layout, we should handle it in the App Layout container */
+.accent-gradient-main {
+  background-image: linear-gradient(115deg, var(--color-accent-pink), var(--color-accent-rose), var(--color-accent-indigo));
+}
 
-/* TV Specific: Remove default browser focus outline */
+.accent-gradient-soft {
+  background-image: linear-gradient(120deg, rgba(255, 79, 163, 0.24), rgba(125, 123, 255, 0.24), rgba(94, 234, 212, 0.24));
+}
+
 *:focus {
   outline: none !important;
 }
@@ -50,25 +62,23 @@ body {
   height: 100vh;
 }
 
-/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #141414;
+  background: #0a0f19;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #333;
+  background: #273449;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #334967;
 }
 
-/* Reduced Motion Support */
 .reduced-motion *,
 .reduced-motion *::before,
 .reduced-motion *::after {
@@ -78,7 +88,6 @@ body {
   scroll-behavior: auto !important;
 }
 
-/* Window Dragging */
 .drag-region {
   -webkit-app-region: drag;
 }
@@ -88,29 +97,26 @@ body {
 }
 
 .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+  display: none;
 }
 
 .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-/* Performance Optimizations */
 .gpu-accelerated {
   transform: translateZ(0);
   backface-visibility: hidden;
   perspective: 1000px;
 }
 
-/* Reduce paint cost for glassmorphism */
 .glass-panel {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   will-change: transform, opacity;
 }
 
-/* Optimize image decoding */
 img {
   content-visibility: auto;
 }

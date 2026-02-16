@@ -83,6 +83,12 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
   videoFilters, onVideoFiltersChange,
   sleepTimerMinutes, onStartSleepTimer, onCancelSleepTimer, sleepTimerRemaining
 }) => {
+  const hasSubtitleOptions =
+    autoSubtitles.length > 0 ||
+    embedTracks.length > 0 ||
+    availableSubtitles.length > 0 ||
+    externalSubtitles.length > 0;
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -110,35 +116,35 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
           <div className="flex border-b border-white/10">
             <button 
               onClick={() => setActiveTab('audio')}
-              className={`flex-1 p-3 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${activeTab === 'audio' ? 'text-blue-400 bg-white/5' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+              className={`flex-1 p-3 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${activeTab === 'audio' ? 'text-[#ff7ab6] bg-white/5' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
             >
               <Volume2 className="w-5 h-5" />
               Audio
             </button>
             <button 
               onClick={() => setActiveTab('subtitles')}
-              className={`flex-1 p-3 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${activeTab === 'subtitles' ? 'text-blue-400 bg-white/5' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+              className={`flex-1 p-3 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${activeTab === 'subtitles' ? 'text-[#ff7ab6] bg-white/5' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
             >
               <Type className="w-5 h-5" />
               Subtitles
             </button>
             <button 
               onClick={() => setActiveTab('speed')}
-              className={`flex-1 p-3 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${activeTab === 'speed' ? 'text-blue-400 bg-white/5' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+              className={`flex-1 p-3 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${activeTab === 'speed' ? 'text-[#ff7ab6] bg-white/5' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
             >
               <Gauge className="w-5 h-5" />
               Speed
             </button>
             <button
               onClick={() => setActiveTab('video')}
-              className={`flex-1 p-3 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${activeTab === 'video' ? 'text-blue-400 bg-white/5' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+              className={`flex-1 p-3 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${activeTab === 'video' ? 'text-[#ff7ab6] bg-white/5' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
             >
               <SlidersHorizontal className="w-5 h-5" />
               Video
             </button>
             <button
               onClick={() => setActiveTab('source')}
-              className={`flex-1 p-3 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${activeTab === 'source' ? 'text-blue-400 bg-white/5' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+              className={`flex-1 p-3 flex flex-col items-center gap-1 text-xs font-medium transition-colors ${activeTab === 'source' ? 'text-[#ff7ab6] bg-white/5' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
             >
               <Globe className="w-5 h-5" />
               Source
@@ -176,13 +182,13 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                     <button
                         key={p.id}
                         onClick={() => onProviderChange?.(p.id)}
-                        className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${provider === p.id ? 'bg-blue-500/20 border-blue-500/50 text-white' : 'bg-white/5 border-transparent text-white/70 hover:bg-white/10'}`}
+                        className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${provider === p.id ? 'bg-[rgba(255,79,163,0.2)] border-[rgba(255,122,182,0.55)] text-white' : 'bg-white/5 border-transparent text-white/70 hover:bg-white/10'}`}
                     >
                         <div className="text-left">
                             <div className="font-medium">{p.name}</div>
                             <div className="text-xs opacity-60">{p.desc}</div>
                         </div>
-                        {provider === p.id && <Check className="w-5 h-5 text-blue-400" />}
+                        {provider === p.id && <Check className="w-5 h-5 text-[#ff7ab6]" />}
                     </button>
                 ))}
               </div>
@@ -194,7 +200,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                   <button
                     key={speed}
                     onClick={() => onSpeedChange(speed)}
-                    className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${playbackSpeed === speed ? 'bg-white/10 text-blue-400' : 'text-white/80'}`}
+                    className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${playbackSpeed === speed ? 'bg-white/10 text-[#ff7ab6]' : 'text-white/80'}`}
                   >
                     <span>{speed}x</span>
                     {playbackSpeed === speed && <Check className="w-4 h-4" />}
@@ -207,31 +213,31 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
               <div className="space-y-6">
                 {/* Cinema Audio Toggle */}
                 <div className="bg-white/5 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-blue-400 mb-2">
+                  <div className="flex items-center gap-2 text-[#ff7ab6] mb-2">
                     <Sparkles className="w-4 h-4" />
                     <span className="text-xs font-bold uppercase tracking-wider">Influcine Audio Engine</span>
                   </div>
                   
                   <button
                     onClick={() => onAudioModeChange('cinema')}
-                    className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${audioMode === 'cinema' ? 'bg-blue-500/20 border-blue-500/50 text-white' : 'bg-black/20 border-white/10 text-white/60 hover:border-white/30'}`}
+                    className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${audioMode === 'cinema' ? 'bg-[rgba(255,79,163,0.2)] border-[rgba(255,122,182,0.55)] text-white' : 'bg-black/20 border-white/10 text-white/60 hover:border-white/30'}`}
                   >
                     <div className="text-left">
                       <div className="font-medium">Cinema Mode</div>
                       <div className="text-xs opacity-70">Dynamic Range Compression & Normalization</div>
                     </div>
-                    {audioMode === 'cinema' && <Check className="w-5 h-5 text-blue-400" />}
+                    {audioMode === 'cinema' && <Check className="w-5 h-5 text-[#ff7ab6]" />}
                   </button>
 
                   <button
                     onClick={() => onAudioModeChange('standard')}
-                    className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${audioMode === 'standard' ? 'bg-blue-500/20 border-blue-500/50 text-white' : 'bg-black/20 border-white/10 text-white/60 hover:border-white/30'}`}
+                    className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${audioMode === 'standard' ? 'bg-[rgba(255,79,163,0.2)] border-[rgba(255,122,182,0.55)] text-white' : 'bg-black/20 border-white/10 text-white/60 hover:border-white/30'}`}
                   >
                     <div className="text-left">
                       <div className="font-medium">Standard</div>
                       <div className="text-xs opacity-70">Original Mix (Passthrough)</div>
                     </div>
-                    {audioMode === 'standard' && <Check className="w-5 h-5 text-blue-400" />}
+                    {audioMode === 'standard' && <Check className="w-5 h-5 text-[#ff7ab6]" />}
                   </button>
 
                   <div className="pt-2 border-t border-white/10">
@@ -250,7 +256,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                        <button
                          key={i}
                          onClick={() => onTrackChange(track)}
-                         className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${track.enabled ? 'bg-white/10 text-blue-400' : 'text-white/80'}`}
+                         className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${track.enabled ? 'bg-white/10 text-[#ff7ab6]' : 'text-white/80'}`}
                        >
                          <div className="text-left">
                            <div>{track.label || `Track ${i + 1}`}</div>
@@ -269,7 +275,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                 {/* Video Filters */}
                 <div className="bg-white/5 rounded-xl p-4 space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-blue-400">
+                    <div className="flex items-center gap-2 text-[#ff7ab6]">
                       <SlidersHorizontal className="w-4 h-4" />
                       <span className="text-xs font-bold uppercase tracking-wider">Video Filters</span>
                     </div>
@@ -296,7 +302,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                         step={0.05}
                         value={videoFilters?.brightness ?? 1}
                         onChange={(e) => onVideoFiltersChange?.({ ...videoFilters!, brightness: parseFloat(e.target.value) })}
-                        className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-blue-400 [&::-webkit-slider-thumb]:rounded-full"
+                        className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-[#ff7ab6] [&::-webkit-slider-thumb]:rounded-full"
                       />
                     </div>
                     <div>
@@ -311,7 +317,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                         step={0.05}
                         value={videoFilters?.contrast ?? 1}
                         onChange={(e) => onVideoFiltersChange?.({ ...videoFilters!, contrast: parseFloat(e.target.value) })}
-                        className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-blue-400 [&::-webkit-slider-thumb]:rounded-full"
+                        className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-[#ff7ab6] [&::-webkit-slider-thumb]:rounded-full"
                       />
                     </div>
                     <div>
@@ -326,7 +332,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                         step={0.05}
                         value={videoFilters?.saturation ?? 1}
                         onChange={(e) => onVideoFiltersChange?.({ ...videoFilters!, saturation: parseFloat(e.target.value) })}
-                        className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-blue-400 [&::-webkit-slider-thumb]:rounded-full"
+                        className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-[#ff7ab6] [&::-webkit-slider-thumb]:rounded-full"
                       />
                     </div>
                   </div>
@@ -334,7 +340,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
 
                 {/* Sleep Timer */}
                 <div className="bg-white/5 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-purple-400 mb-2">
+                  <div className="flex items-center gap-2 text-[#ffb347] mb-2">
                     <Moon className="w-4 h-4" />
                     <span className="text-xs font-bold uppercase tracking-wider">Sleep Timer</span>
                   </div>
@@ -342,7 +348,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                   {sleepTimerMinutes ? (
                     <div className="space-y-3">
                       <div className="text-center py-2">
-                        <div className="text-2xl font-bold text-purple-300">{sleepTimerRemaining || '--:--'}</div>
+                        <div className="text-2xl font-bold text-[#ffc18b]">{sleepTimerRemaining || '--:--'}</div>
                         <div className="text-xs text-white/40 mt-1">remaining</div>
                       </div>
                       <button
@@ -365,7 +371,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                         <button
                           key={preset.value}
                           onClick={() => onStartSleepTimer?.(preset.value)}
-                          className="py-2 bg-white/5 hover:bg-purple-500/20 border border-transparent hover:border-purple-500/30 rounded-lg text-sm font-medium text-white/70 hover:text-purple-300 transition-all"
+                          className="py-2 bg-white/5 hover:bg-[rgba(255,79,163,0.22)] border border-transparent hover:border-[rgba(255,122,182,0.45)] rounded-lg text-sm font-medium text-white/70 hover:text-[#ffc18b] transition-all"
                         >
                           {preset.label}
                         </button>
@@ -399,6 +405,12 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                     </div>
                 )}
 
+                {!isSearchingSubs && !hasSubtitleOptions && (
+                  <div className="text-center py-4 text-white/45 text-sm">
+                    No subtitle tracks found yet. Try switching source, uploading a file, or searching online.
+                  </div>
+                )}
+
                 <div className="space-y-1">
                   <button
                     onClick={() => {
@@ -406,7 +418,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                         onEmbedTrackChange(-1);
                         onAutoSubtitleChange(-1);
                     }}
-                    className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${activeSubtitleIndex === -1 && activeEmbedTrackIndex === -1 && activeAutoSubtitleIndex === -1 ? 'bg-white/10 text-blue-400' : 'text-white/80'}`}
+                    className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${activeSubtitleIndex === -1 && activeEmbedTrackIndex === -1 && activeAutoSubtitleIndex === -1 ? 'bg-white/10 text-[#ff7ab6]' : 'text-white/80'}`}
                   >
                     <span>Off</span>
                     {activeSubtitleIndex === -1 && activeEmbedTrackIndex === -1 && activeAutoSubtitleIndex === -1 && <Check className="w-4 h-4" />}
@@ -415,12 +427,12 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                   {/* Auto-Fetched Subs */}
                   {autoSubtitles.length > 0 && (
                       <>
-                        <div className="px-2 py-1 text-xs font-bold text-blue-400 uppercase tracking-wider mt-4">Auto-Matched</div>
+                        <div className="px-2 py-1 text-xs font-bold text-[#ff7ab6] uppercase tracking-wider mt-4">Auto-Matched</div>
                         {autoSubtitles.map((sub, i) => (
                             <button
                                 key={`auto-${i}`}
                                 onClick={() => onAutoSubtitleChange(i)}
-                                className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${activeAutoSubtitleIndex === i ? 'bg-white/10 text-blue-400' : 'text-white/80'}`}
+                                className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${activeAutoSubtitleIndex === i ? 'bg-white/10 text-[#ff7ab6]' : 'text-white/80'}`}
                             >
                                 <span className="truncate pr-2">{sub.label}</span>
                                 {activeAutoSubtitleIndex === i && <Check className="w-4 h-4 flex-shrink-0" />}
@@ -437,7 +449,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                             <button
                                 key={`embed-${track.index}`}
                                 onClick={() => onEmbedTrackChange(track.index)}
-                                className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${activeEmbedTrackIndex === track.index ? 'bg-white/10 text-blue-400' : 'text-white/80'}`}
+                                className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${activeEmbedTrackIndex === track.index ? 'bg-white/10 text-[#ff7ab6]' : 'text-white/80'}`}
                             >
                                 <span>{track.label}</span>
                                 {activeEmbedTrackIndex === track.index && <Check className="w-4 h-4" />}
@@ -457,7 +469,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                                 <button
                                     key={`ext-${i}`}
                                     onClick={() => onSubtitleChange(virtIndex)}
-                                    className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${activeSubtitleIndex === virtIndex ? 'bg-white/10 text-blue-400' : 'text-white/80'}`}
+                                    className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${activeSubtitleIndex === virtIndex ? 'bg-white/10 text-[#ff7ab6]' : 'text-white/80'}`}
                                 >
                                     <span>{sub.label}</span>
                                     {activeSubtitleIndex === virtIndex && <Check className="w-4 h-4" />}
@@ -469,7 +481,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                             <button
                             key={i}
                             onClick={() => onSubtitleChange(i)}
-                            className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${activeSubtitleIndex === i ? 'bg-white/10 text-blue-400' : 'text-white/80'}`}
+                            className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition-colors ${activeSubtitleIndex === i ? 'bg-white/10 text-[#ff7ab6]' : 'text-white/80'}`}
                             >
                             <span>{track.label || `Track ${i + 1}`}</span>
                             {activeSubtitleIndex === i && <Check className="w-4 h-4" />}

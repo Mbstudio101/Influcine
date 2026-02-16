@@ -19,6 +19,7 @@ import { CleanupAgent } from './services/CleanupAgent';
 import { PlayerProvider } from './context/PlayerContext';
 import GlobalPlayer from './components/GlobalPlayer';
 import BugReporter from './components/BugReporter';
+import { logger } from './services/logger';
 
 // Lazy load components
 const UpdateModal = lazy(() => import('./components/UpdateModal'));
@@ -145,7 +146,7 @@ function App() {
           setUpdateAvailable(update);
         }
       } catch (error) {
-        console.warn('Update check failed', error);
+        logger.warn('Update check failed', { error: String(error) });
       }
     };
     check();
@@ -158,7 +159,7 @@ function App() {
       try {
         await installUpdate();
       } catch (error) {
-        console.error('Failed to install update:', error);
+        logger.error('Failed to install update', { error: String(error) });
       }
       return;
     }
@@ -176,7 +177,7 @@ function App() {
         await downloadUpdate();
         // Progress and completion are handled by IPC event listeners
       } catch (error) {
-        console.error('Native update download failed:', error);
+        logger.error('Native update download failed', { error: String(error) });
         setUpdateDownloading(false);
         setUpdateProgress(0);
       }
@@ -186,7 +187,7 @@ function App() {
       if (link) {
         window.open(link, '_blank');
       } else {
-        console.warn('No download link found for this platform');
+        logger.warn('No download link found for this platform');
       }
     }
   };

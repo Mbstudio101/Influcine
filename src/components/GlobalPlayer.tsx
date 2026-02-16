@@ -3,15 +3,13 @@ import { usePlayer } from '../context/PlayerContext';
 import InflucinePlayer from './InflucinePlayer';
 import { useEmbedUrl, StreamProvider } from '../hooks/useEmbedUrl';
 import { X, Maximize2, Monitor } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { downloadService } from '../services/downloadService';
 import { usePlayerProgress } from '../hooks/usePlayerProgress';
 import { usePlayerAnalytics } from '../hooks/usePlayerAnalytics';
 import { useLocation } from 'react-router-dom';
 
 const GlobalPlayer: React.FC = () => {
   const { state, close, maximize, togglePip, play } = usePlayer();
-  const { mode, media, season, episode, startTime: requestedStartTime, localFilePath } = state;
+  const { mode, media, season, episode, startTime: requestedStartTime } = state;
   const location = useLocation();
   const prevPathRef = useRef(location.pathname);
   
@@ -57,22 +55,8 @@ const GlobalPlayer: React.FC = () => {
   const type = media?.media_type === 'tv' ? 'tv' : 'movie';
   const id = media?.id?.toString();
 
-  // 1. Check Download
-  const downloadId = type === 'movie' ? `movie-${id}` : `tv-${id}-s${season}-e${episode}`;
-  const { data: downloadItem } = useQuery({
-    queryKey: ['download', downloadId],
-    queryFn: async () => {
-      const item = await downloadService.getDownload(downloadId);
-      return item || null;
-    },
-    enabled: !!media && !localFilePath && mode !== 'hidden',
-  });
-
-  const effectiveLocalPath = localFilePath || downloadItem?.filePath;
-
-  // 2. Resolve Stream
-  // Native resolution removed in favor of VidFast embed
-  const streamUrl = effectiveLocalPath || null;
+  // Resolve stream
+  const streamUrl = null;
   const isResolving = false;
 
   const embedUrl = useEmbedUrl({
@@ -179,7 +163,7 @@ const GlobalPlayer: React.FC = () => {
 
   // Show loading only if we are resolving AND have no embed URL to fall back to immediately?
   // Actually, we prefer source, so show loading.
-  if (isResolving && !effectiveLocalPath) {
+  if (isResolving) {
      // We can show a loading overlay inside the player component instead of returning null
      // But for now, let's just return a simple loader if full screen, or keep it hidden if mini?
   }
@@ -187,8 +171,8 @@ const GlobalPlayer: React.FC = () => {
   return (
     <div 
         className={isMini 
-            ? "fixed bottom-4 right-4 z-200 shadow-2xl rounded-lg overflow-hidden border border-white/10 transition-all duration-300 bg-black group/mini"
-            : "fixed top-0 bottom-0 right-0 left-20 z-200 bg-black"
+            ? "fixed bottom-4 right-4 z-[200] shadow-2xl rounded-lg overflow-hidden border border-white/10 transition-all duration-300 bg-black group/mini"
+            : "fixed inset-0 z-[200] bg-black"
         }
         style={isMini ? getPipStyle() : {}}
     >

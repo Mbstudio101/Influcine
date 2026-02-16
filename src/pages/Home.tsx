@@ -1,32 +1,41 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { getTrending, getImageUrl, getMoviesByCategory, getTVShowsByCategory, discoverMedia, getDetails, getVideos } from '../services/tmdb';
+import {
+  getTrending,
+  getImageUrl,
+  getMoviesByCategory,
+  getTVShowsByCategory,
+  discoverMedia,
+  getDetails,
+  getVideos,
+} from '../services/tmdb';
 import { getPersonalizedRecommendations } from '../services/recommendations';
 import { findBestTrailer } from '../utils/videoUtils';
-import { Play, Plus, Check, Youtube } from 'lucide-react';
+import { Play, Plus, Check, Youtube, Info } from 'lucide-react';
 import { db } from '../db';
 import { useWatchlist } from '../hooks/useWatchlist';
 import ContentRow from '../components/ContentRow';
 import { Media } from '../types';
 import { usePlayer } from '../context/PlayerContext';
-import RightSidebar from '../components/RightSidebar';
 import Focusable from '../components/Focusable';
 import TrailerModal from '../components/TrailerModal';
 import { useAuth } from '../context/useAuth';
-import { useTrailerCache } from '../hooks/useTrailerCache';
+import { useNavigate } from 'react-router-dom';
+
+const ROW_PRESET = {
+  cardSize: 'large' as const,
+  cardVariant: 'backdrop' as const,
+};
 
 const Home: React.FC = () => {
+  const navigate = useNavigate();
   const { profile } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const { play } = usePlayer();
 
-  // Trailer State
   const [showTrailer, setShowTrailer] = useState(false);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
-  const [backgroundVideoKey, setBackgroundVideoKey] = useState<string | null>(null);
-  const [isVideoReady, setIsVideoReady] = useState(false);
-  const cachedBackgroundUrl = useTrailerCache(backgroundVideoKey || undefined);
 
   const { data: featured, isLoading: featuredLoading } = useQuery({
     queryKey: ['featured'],
@@ -34,57 +43,44 @@ const Home: React.FC = () => {
       const trending = await getTrending('day');
       return trending[0];
     },
-    staleTime: 1000 * 60 * 30
+    staleTime: 1000 * 60 * 30,
   });
 
-  // Fetch background trailer when featured changes
-  React.useEffect(() => {
-    if (featured) {
-      const fetchBackgroundTrailer = async () => {
-        try {
-          const type = featured.media_type || (featured.title ? 'movie' : 'tv');
-          const videos = await getVideos(type as 'movie' | 'tv', featured.id);
-          const trailer = findBestTrailer(videos);
-          if (trailer) {
-            setBackgroundVideoKey(trailer.key);
-            // Store fallback options
-            // @ts-expect-error - Storing global fallbacks
-            window.availableTrailers = videos.filter(v => v.site === 'YouTube' && v.key !== trailer.key);
-          } else {
-            setBackgroundVideoKey(null);
-          }
-        } catch (e) {
-          console.error('Failed to fetch background trailer', e);
-          setBackgroundVideoKey(null);
-        }
-      };
-      fetchBackgroundTrailer();
-    } else {
-      setBackgroundVideoKey(null);
-      setIsVideoReady(false);
-    }
-  }, [featured]);
-
-  // Reset video ready state when URL changes
-  React.useEffect(() => {
-    setIsVideoReady(false);
-  }, [cachedBackgroundUrl]);
+  const { data: featuredDetails } = useQuery({
+    queryKey: ['featured-details', featured?.id, featured?.media_type],
+    queryFn: async () => {
+      if (!featured) return null;
+      const type = featured.media_type || (featured.title ? 'movie' : 'tv');
+      return getDetails(type as 'movie' | 'tv', featured.id);
+    },
+    enabled: !!featured,
+    staleTime: 1000 * 60 * 30,
+  });
 
   const { data: recommendations = [] } = useQuery({
     queryKey: ['recommendations-home', profile?.id],
     queryFn: () => getPersonalizedRecommendations(profile?.id),
-    staleTime: 1000 * 60 * 60, // 1 hour
+    staleTime: 1000 * 60 * 60,
     enabled: !!profile,
   });
 
-  const historyQuery = useLiveQuery(
-    () => db.history.orderBy('savedAt').reverse().limit(10).toArray()
+  const historyQuery = useLiveQuery(() => db.history.orderBy('savedAt').reverse().limit(10).toArray());
+  const history = React.useMemo<Media[]>(() => historyQuery ?? [], [historyQuery]);
+
+  const { isSaved: isFeaturedSaved, toggleWatchlist: toggleFeaturedWatchlist } = useWatchlist(
+    (featured || { id: 0, media_type: 'movie' }) as unknown as Media
   );
-
-  const defaultHistory: Media[] = [];
-  const history = historyQuery ?? defaultHistory;
-
-  const { isSaved: isFeaturedSaved, toggleWatchlist: toggleFeaturedWatchlist } = useWatchlist(featured || { id: 0, media_type: 'movie' } as unknown as Media);
+  const featuredYear = featured ? (new Date(featured.release_date || featured.first_air_date || '').getFullYear() || 'N/A') : 'N/A';
+  const featuredScore = featured && typeof featured.vote_average === 'number' ? featured.vote_average.toFixed(1) : 'N/A';
+  const featuredType = featured ? (featured.media_type || (featured.title ? 'movie' : 'tv')).toUpperCase() : 'N/A';
+  const featuredMatch = featured && typeof featured.vote_average === 'number' ? `${Math.round(featured.vote_average * 10)}% Match` : 'Top Pick';
+  const featuredLength =
+    featuredDetails?.runtime
+      ? `${Math.floor(featuredDetails.runtime / 60)}h ${featuredDetails.runtime % 60}m`
+      : featuredDetails?.number_of_seasons
+      ? `${featuredDetails.number_of_seasons} Seasons`
+      : null;
+  const featuredGenres = featuredDetails?.genres?.slice(0, 3) || [];
 
   const handlePlayTrailer = async () => {
     if (!featured) return;
@@ -104,46 +100,87 @@ const Home: React.FC = () => {
     }
   };
 
-  // Memoize content sections to prevent unnecessary re-renders
-  const moviesContent = React.useMemo(() => (
-    <>
-      <ContentRow title="Popular Movies" fetcher={() => getMoviesByCategory('popular')} />
-      <ContentRow title="Top Rated Movies" fetcher={() => getMoviesByCategory('top_rated')} />
-      <ContentRow title="New Releases" fetcher={() => getMoviesByCategory('now_playing')} />
-      <ContentRow title="Upcoming" fetcher={() => getMoviesByCategory('upcoming')} />
-      <ContentRow title="Action Movies" fetcher={() => discoverMedia('movie', { with_genres: '28' })} />
-      <ContentRow title="Comedy Movies" fetcher={() => discoverMedia('movie', { with_genres: '35' })} />
-      <ContentRow title="Sci-Fi Movies" fetcher={() => discoverMedia('movie', { with_genres: '878' })} />
-    </>
-  ), []);
+  const moviesContent = React.useMemo(
+    () => (
+      <>
+        <ContentRow title="Popular Movies" fetcher={() => getMoviesByCategory('popular')} {...ROW_PRESET} />
+        <ContentRow title="Top Rated Movies" fetcher={() => getMoviesByCategory('top_rated')} {...ROW_PRESET} />
+        <ContentRow title="New Releases" fetcher={() => getMoviesByCategory('now_playing')} {...ROW_PRESET} />
+        <ContentRow title="Upcoming" fetcher={() => getMoviesByCategory('upcoming')} {...ROW_PRESET} />
+        <ContentRow title="Action Movies" fetcher={() => discoverMedia('movie', { with_genres: '28' })} {...ROW_PRESET} />
+        <ContentRow title="Comedy Movies" fetcher={() => discoverMedia('movie', { with_genres: '35' })} {...ROW_PRESET} />
+        <ContentRow title="Sci-Fi Movies" fetcher={() => discoverMedia('movie', { with_genres: '878' })} {...ROW_PRESET} />
+      </>
+    ),
+    []
+  );
 
-  const tvShowsContent = React.useMemo(() => (
-    <>
-      <ContentRow title="Popular TV Shows" fetcher={() => getTVShowsByCategory('popular')} />
-      <ContentRow title="Top Rated TV Shows" fetcher={() => getTVShowsByCategory('top_rated')} />
-      <ContentRow title="On The Air" fetcher={() => getTVShowsByCategory('on_the_air')} />
-      <ContentRow title="Action & Adventure" fetcher={() => discoverMedia('tv', { with_genres: '10759' })} />
-      <ContentRow title="Comedy Series" fetcher={() => discoverMedia('tv', { with_genres: '35' })} />
-      <ContentRow title="Drama Series" fetcher={() => discoverMedia('tv', { with_genres: '18' })} />
-    </>
-  ), []);
+  const tvShowsContent = React.useMemo(
+    () => (
+      <>
+        <ContentRow title="Popular TV Shows" fetcher={() => getTVShowsByCategory('popular')} {...ROW_PRESET} />
+        <ContentRow title="Top Rated TV Shows" fetcher={() => getTVShowsByCategory('top_rated')} {...ROW_PRESET} />
+        <ContentRow title="On The Air" fetcher={() => getTVShowsByCategory('on_the_air')} {...ROW_PRESET} />
+        <ContentRow title="Action & Adventure" fetcher={() => discoverMedia('tv', { with_genres: '10759' })} {...ROW_PRESET} />
+        <ContentRow title="Comedy Series" fetcher={() => discoverMedia('tv', { with_genres: '35' })} {...ROW_PRESET} />
+        <ContentRow title="Drama Series" fetcher={() => discoverMedia('tv', { with_genres: '18' })} {...ROW_PRESET} />
+      </>
+    ),
+    []
+  );
 
-  const animeContent = React.useMemo(() => (
-    <>
-      <ContentRow title="Popular Anime" fetcher={() => discoverMedia('tv', { with_genres: '16', with_original_language: 'ja', sort_by: 'popularity.desc' })} />
-      <ContentRow title="Top Rated Anime" fetcher={() => discoverMedia('tv', { with_genres: '16', with_original_language: 'ja', sort_by: 'vote_average.desc', 'vote_count.gte': 100 })} />
-      <ContentRow title="Anime Movies" fetcher={() => discoverMedia('movie', { with_genres: '16', with_original_language: 'ja', sort_by: 'popularity.desc' })} />
-      <ContentRow title="New Anime Releases" fetcher={() => discoverMedia('tv', { with_genres: '16', with_original_language: 'ja', 'first_air_date.gte': new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], sort_by: 'popularity.desc' })} />
-    </>
-  ), []);
+  const animeContent = React.useMemo(
+    () => (
+      <>
+        <ContentRow
+          title="Popular Anime"
+          fetcher={() => discoverMedia('tv', { with_genres: '16', with_original_language: 'ja', sort_by: 'popularity.desc' })}
+          {...ROW_PRESET}
+        />
+        <ContentRow
+          title="Top Rated Anime"
+          fetcher={() =>
+            discoverMedia('tv', {
+              with_genres: '16',
+              with_original_language: 'ja',
+              sort_by: 'vote_average.desc',
+              'vote_count.gte': 100,
+            })
+          }
+          {...ROW_PRESET}
+        />
+        <ContentRow
+          title="Anime Movies"
+          fetcher={() => discoverMedia('movie', { with_genres: '16', with_original_language: 'ja', sort_by: 'popularity.desc' })}
+          {...ROW_PRESET}
+        />
+        <ContentRow
+          title="New Anime Releases"
+          fetcher={() =>
+            discoverMedia('tv', {
+              with_genres: '16',
+              with_original_language: 'ja',
+              'first_air_date.gte': new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              sort_by: 'popularity.desc',
+            })
+          }
+          {...ROW_PRESET}
+        />
+      </>
+    ),
+    []
+  );
 
-  const documentaryContent = React.useMemo(() => (
-    <>
-      <ContentRow title="Popular Documentaries" fetcher={() => discoverMedia('movie', { with_genres: '99', sort_by: 'popularity.desc' })} />
-      <ContentRow title="Docuseries" fetcher={() => discoverMedia('tv', { with_genres: '99', sort_by: 'popularity.desc' })} />
-      <ContentRow title="Nature & Science" fetcher={() => discoverMedia('movie', { with_genres: '99', sort_by: 'vote_average.desc', 'vote_count.gte': 50 })} />
-    </>
-  ), []);
+  const documentaryContent = React.useMemo(
+    () => (
+      <>
+        <ContentRow title="Popular Documentaries" fetcher={() => discoverMedia('movie', { with_genres: '99', sort_by: 'popularity.desc' })} {...ROW_PRESET} />
+        <ContentRow title="Docuseries" fetcher={() => discoverMedia('tv', { with_genres: '99', sort_by: 'popularity.desc' })} {...ROW_PRESET} />
+        <ContentRow title="Nature & Science" fetcher={() => discoverMedia('movie', { with_genres: '99', sort_by: 'vote_average.desc', 'vote_count.gte': 50 })} {...ROW_PRESET} />
+      </>
+    ),
+    []
+  );
 
   const content = React.useMemo(() => {
     switch (selectedCategory) {
@@ -158,26 +195,18 @@ const Home: React.FC = () => {
       default:
         return (
           <>
-            {history.length > 0 && (
-              <ContentRow 
-                title="Continue Watching" 
-                data={history}
-              />
-            )}
-            
-            {recommendations.length > 0 && recommendations.map((rec, index) => (
-              <ContentRow
-                key={`${rec.type}-${index}`}
-                title={rec.title}
-                data={rec.items}
-              />
-            ))}
+            {history.length > 0 && <ContentRow title="Continue Watching" data={history} {...ROW_PRESET} />}
 
-            <ContentRow title="Trending Now" fetcher={() => getTrending('day')} />
-            <ContentRow title="Popular Movies" fetcher={() => getMoviesByCategory('popular')} />
-            <ContentRow title="Popular TV Shows" fetcher={() => getTVShowsByCategory('popular')} />
-            <ContentRow title="Top Rated" fetcher={() => getTrending('week')} />
-            <ContentRow title="Action Movies" fetcher={() => discoverMedia('movie', { with_genres: '28' })} />
+            {recommendations.length > 0 &&
+              recommendations.map((rec, index) => (
+                <ContentRow key={`${rec.type}-${index}`} title={rec.title} data={rec.items} {...ROW_PRESET} />
+              ))}
+
+            <ContentRow title="Trending Now" fetcher={() => getTrending('day')} {...ROW_PRESET} />
+            <ContentRow title="Popular Movies" fetcher={() => getMoviesByCategory('popular')} {...ROW_PRESET} />
+            <ContentRow title="Popular TV Shows" fetcher={() => getTVShowsByCategory('popular')} {...ROW_PRESET} />
+            <ContentRow title="Top Rated" fetcher={() => getTrending('week')} {...ROW_PRESET} />
+            <ContentRow title="Action Movies" fetcher={() => discoverMedia('movie', { with_genres: '28' })} {...ROW_PRESET} />
           </>
         );
     }
@@ -187,97 +216,59 @@ const Home: React.FC = () => {
   if (!featured) return <div className="flex items-center justify-center h-full text-white">No content available</div>;
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Main Dashboard Area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20 scrollbar-hide">
-
-        {/* Brand/Category Quick Links */}
-        <div className="flex gap-4 px-10 pt-20 pb-4 overflow-x-auto scrollbar-hide">
-          {['All', 'Movies', 'TV Shows', 'Anime', 'Documentary'].map((cat) => (
-            <Focusable
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-6 py-2 rounded-full text-sm font-bold border transition-all cursor-pointer ${selectedCategory === cat ? 'bg-white text-black border-white' : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30 hover:text-white'}`}
-              activeClassName="ring-2 ring-primary scale-105 bg-white text-black"
-            >
-              {cat}
-            </Focusable>
-          ))}
-        </div>
-
-        {/* Hero Section - Dashboard Style */}
-        <div className="px-10 mb-8">
-          <div className="relative w-full h-[60vh] rounded-3xl overflow-hidden shadow-2xl border border-white/5 group">
+    <div className="flex h-full overflow-hidden bg-transparent">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-10 scrollbar-hide">
+        <div className="px-4 md:px-8 lg:px-10 pt-12 md:pt-14">
+          <div className="relative w-full h-[56vh] min-h-[380px] max-h-[620px] overflow-visible bg-transparent">
             <div className="absolute inset-0">
-              {backgroundVideoKey && cachedBackgroundUrl ? (
-                <div className="w-full h-full relative pointer-events-none">
-                  <video
-                    className={`w-full h-full object-cover object-top transition-opacity duration-1000 ${isVideoReady ? 'opacity-100' : 'opacity-0'}`}
-                    src={cachedBackgroundUrl}
-                    autoPlay muted loop playsInline
-                    onCanPlay={() => setIsVideoReady(true)}
-                    onError={() => {
-                      setIsVideoReady(false);
-                      
-                      // Try next available trailer
-                      // @ts-expect-error - window.availableTrailers is a custom global
-                      const fallbacks = window.availableTrailers || [];
-                      if (fallbacks.length > 0) {
-                        const next = fallbacks.shift();
-                        setBackgroundVideoKey(next.key);
-                      } else {
-                        setBackgroundVideoKey(null); // Fallback to image
-                      }
-                    }}
-                  />
-                  {!isVideoReady && (
-                    <img
-                      src={getImageUrl(featured.backdrop_path, 'original')}
-                      className="absolute inset-0 w-full h-full object-cover object-center"
-                      alt=""
-                    />
-                  )}
-                  {/* Overlay to ensure clicks pass through and darken the video slightly */}
-                  <div className="absolute inset-0 bg-black/20" />
-                </div>
-              ) : (
-                <img
-                  src={getImageUrl(featured.backdrop_path, 'original')}
-                  srcSet={`
-                    ${getImageUrl(featured.backdrop_path, 'w780')} 780w,
-                    ${getImageUrl(featured.backdrop_path, 'w1280')} 1280w,
-                    ${getImageUrl(featured.backdrop_path, 'original')} 1920w
-                  `}
-                  sizes="(max-width: 1024px) 100vw, 80vw"
-                  alt={featured.title || featured.name}
-                  className="w-full h-full object-cover object-center transition-transform duration-1000 group-hover:scale-105"
-                  loading="eager"
-                />
-              )}
-              <div className="absolute inset-0 bg-linear-to-t from-black via-black/20 to-transparent" />
-              <div className="absolute inset-0 bg-linear-to-r from-black/80 via-transparent to-transparent" />
+              <img
+                src={getImageUrl(featured.backdrop_path, 'original')}
+                srcSet={`
+                  ${getImageUrl(featured.backdrop_path, 'w780')} 780w,
+                  ${getImageUrl(featured.backdrop_path, 'w1280')} 1280w,
+                  ${getImageUrl(featured.backdrop_path, 'original')} 1920w
+                `}
+                sizes="(max-width: 1024px) 100vw, 80vw"
+                alt={featured.title || featured.name}
+                className="w-full h-full object-cover object-top"
+                loading="eager"
+              />
+              <div className="absolute inset-0 bg-linear-to-t from-[#02050d] via-[#02050d]/45 to-transparent" />
+              <div className="absolute inset-0 bg-linear-to-r from-[#02050d]/92 via-[#02050d]/25 to-transparent" />
             </div>
 
-            <div className="absolute bottom-0 left-0 p-10 w-full max-w-2xl z-10">
-              <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/20 backdrop-blur-md border border-primary/20 text-xs font-bold text-primary uppercase tracking-wider">
-                <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-                Trending Now
+            <div className="absolute bottom-0 left-0 p-5 md:p-8 lg:p-10 w-full max-w-3xl z-10">
+              <div className="mb-4 flex items-center gap-3 text-sm font-semibold text-slate-200">
+                <span className="px-3 py-1 rounded-full bg-[rgba(255,79,163,0.2)] border border-[rgba(255,122,182,0.45)] text-xs tracking-[0.16em] uppercase text-[#ffd1e8]">Featured</span>
+                <span className="hidden sm:inline text-white/70">English | Hindi | Tamil | Telugu | Malayalam | Kannada</span>
               </div>
-              <h1 className="text-5xl font-black mb-4 drop-shadow-2xl leading-tight text-white tracking-tight line-clamp-2">
+
+              <h1 className="text-4xl md:text-6xl font-black mb-3 text-white tracking-[0.22em] uppercase leading-none">
                 {featured.title || featured.name}
               </h1>
-              <div className="max-h-[15vh] overflow-y-auto scrollbar-hide mb-8">
-                <p className="text-base text-gray-200 drop-shadow-md leading-relaxed font-medium">
-                  {featured.overview}
-                </p>
+
+              <p className="text-sm md:text-base text-slate-200/95 leading-relaxed max-w-2xl mb-4 line-clamp-3">
+                {featured.overview}
+              </p>
+
+              <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
+                <span className="px-2.5 py-1 rounded-full bg-[#22c55e]/20 border border-[#22c55e]/35 text-[#d9ffe4] font-semibold">{featuredMatch}</span>
+                <span className="px-2.5 py-1 rounded-full bg-white/12 border border-white/15 text-white/90">{featuredYear}</span>
+                <span className="px-2.5 py-1 rounded-full bg-white/12 border border-white/15 text-white/90">IMDb {featuredScore}</span>
+                <span className="px-2.5 py-1 rounded-full bg-white/12 border border-white/15 text-white/90">{featuredType}</span>
+                {featuredLength && (
+                  <span className="px-2.5 py-1 rounded-full bg-white/12 border border-white/15 text-white/90">{featuredLength}</span>
+                )}
+                {featuredGenres.map((genre) => (
+                  <span key={genre.id} className="px-2.5 py-1 rounded-full bg-white/8 border border-white/10 text-white/80">{genre.name}</span>
+                ))}
+                <span className="text-white/60">Contains mature themes and violence.</span>
               </div>
-              <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
+
+              <div className="flex gap-3 md:gap-4 overflow-x-auto scrollbar-hide pb-1">
                 <Focusable
                   onClick={async () => {
                     if (featured) {
-                      // Fetch full details to ensure we have seasons/episodes if it's a TV show
-                      // or just pass what we have if we want speed.
-                      // Best to fetch details.
                       try {
                         const type = featured.media_type || (featured.title ? 'movie' : 'tv');
                         const details = await getDetails(type as 'movie' | 'tv', featured.id);
@@ -287,55 +278,72 @@ const Home: React.FC = () => {
                       }
                     }
                   }}
-                  className="bg-linear-to-r from-primary to-purple-600 hover:from-primary-hover hover:to-purple-500 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all duration-300 hover:scale-105 shadow-[0_0_20px_rgba(124,58,237,0.5)] hover:shadow-[0_0_30px_rgba(124,58,237,0.7)] cursor-pointer shrink-0 border border-white/10 uppercase tracking-wide group"
-                  activeClassName="ring-4 ring-white scale-110 z-20"
+                  className="bg-linear-to-r from-[#ff4fa3] via-[#ff7ab6] to-[#7d7bff] text-white px-6 md:px-7 py-3 rounded-full font-semibold flex items-center gap-2 transition-all duration-300 hover:brightness-110 cursor-pointer shrink-0 shadow-[0_10px_24px_rgba(255,79,163,0.35)]"
+                  activeClassName="ring-4 ring-primary scale-105 z-20"
                 >
-                  <Play fill="currentColor" size={20} className="group-hover:animate-pulse" />
-                  Watch Now
-                </Focusable>
-
-                <Focusable
-                  onClick={handlePlayTrailer}
-                  onMouseEnter={() => {
-                    if (featured) {
-                      const type = featured.media_type || (featured.title ? 'movie' : 'tv');
-                      getVideos(type as 'movie' | 'tv', featured.id).then(videos => {
-                        const trailer = findBestTrailer(videos);
-                        if (trailer) window.ipcRenderer?.invoke('trailer-prefetch', trailer.key).catch(() => { /* prefetch is best-effort */ });
-                      });
-                    }
-                  }}
-                  className="bg-white/10 hover:bg-white/20 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all duration-300 backdrop-blur-md border border-white/10 hover:border-white/30 hover:scale-105 cursor-pointer shrink-0"
-                >
-                  <Youtube size={20} className="text-red-500" />
-                  Trailer
+                  <Play fill="currentColor" size={18} />
+                  Play S1 E1
                 </Focusable>
 
                 <Focusable
                   onClick={toggleFeaturedWatchlist}
-                  className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all duration-300 backdrop-blur-md border hover:scale-105 cursor-pointer shrink-0 ${isFeaturedSaved
-                    ? 'bg-primary border-primary text-white shadow-[0_0_20px_rgba(124,58,237,0.4)]'
-                    : 'bg-white/5 hover:bg-white/10 text-white border-white/10 hover:border-white/30 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]'
-                    }`}
+                  className={`px-5 py-3 rounded-full font-semibold flex items-center gap-2 transition-all duration-300 backdrop-blur-md border cursor-pointer shrink-0 ${
+                    isFeaturedSaved
+                      ? 'bg-[#5eead4]/30 border-[#5eead4] text-white shadow-[0_0_20px_rgba(94,234,212,0.4)]'
+                      : 'bg-[rgba(125,123,255,0.16)] hover:bg-[rgba(125,123,255,0.28)] text-white border-[rgba(125,123,255,0.45)]'
+                  }`}
                   activeClassName="ring-4 ring-white scale-110 z-20"
+                  title={isFeaturedSaved ? 'Remove from Watchlist' : 'Add to Watchlist'}
                 >
-                  {isFeaturedSaved ? <Check size={20} /> : <Plus size={20} />}
+                  {isFeaturedSaved ? <Check size={18} /> : <Plus size={18} />}
                   {isFeaturedSaved ? 'Saved' : 'Add List'}
+                </Focusable>
+
+                <Focusable
+                  onClick={handlePlayTrailer}
+                  className="px-5 py-3 rounded-full font-semibold flex items-center gap-2 bg-[rgba(255,179,71,0.14)] hover:bg-[rgba(255,179,71,0.28)] text-white border border-[rgba(255,179,71,0.5)] transition-all duration-300 cursor-pointer shrink-0"
+                  title="Play trailer"
+                >
+                  <Youtube size={18} className="text-[#ff9ca9]" />
+                  Trailer
+                </Focusable>
+
+                <Focusable
+                  onClick={() => {
+                    const type = featured.media_type || (featured.title ? 'movie' : 'tv');
+                    navigate(`/details/${type}/${featured.id}`, { state: featured });
+                  }}
+                  className="px-5 py-3 rounded-full font-semibold flex items-center gap-2 bg-[rgba(94,234,212,0.14)] hover:bg-[rgba(94,234,212,0.26)] text-white border border-[rgba(94,234,212,0.5)] transition-all duration-300 cursor-pointer shrink-0"
+                  title="More info"
+                >
+                  <Info size={18} />
+                  Details
                 </Focusable>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Content Rows */}
-        <div className="space-y-2">
-          {content}
+        <div className="mt-6 md:mt-7 space-y-1 pb-12">
+          {['All', 'Movies', 'TV Shows', 'Anime', 'Documentary'].map(cat => (
+            <Focusable
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`ml-4 md:ml-8 lg:ml-10 mr-2 inline-flex px-4 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer tracking-wide ${
+                selectedCategory === cat
+                  ? 'bg-white text-[#111827] border-white'
+                  : 'bg-transparent text-slate-300 border-white/15 hover:border-white/35 hover:text-white'
+              }`}
+              activeClassName="ring-2 ring-primary scale-105"
+            >
+              {cat}
+            </Focusable>
+          ))}
+
+          <div className="pt-5">{content}</div>
         </div>
       </div>
 
-      {/* Right Sidebar - Dashboard Widgets */}
-      <RightSidebar />
-      {/* Trailer Modal */}
       {showTrailer && trailerKey && (
         <TrailerModal
           videoKey={trailerKey}

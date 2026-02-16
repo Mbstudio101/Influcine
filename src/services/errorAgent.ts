@@ -1,4 +1,5 @@
 // import { ipcRenderer } from 'electron';
+import { logger } from './logger';
 
 interface ErrorLog {
   message: string;
@@ -62,8 +63,8 @@ class ErrorAgent {
     // Console log for dev
     if (import.meta.env.DEV) {
       console.groupCollapsed(`[ErrorAgent] ${error.type || 'ERROR'}: ${error.message}`);
-      if (error.stack) console.error(error.stack);
-      if (error.context) console.log(error.context);
+      if (error.stack) logger.error('Error stack', { stack: error.stack });
+      if (error.context) logger.debug('Error context', error.context);
       console.groupEnd();
     }
 
@@ -73,7 +74,7 @@ class ErrorAgent {
         await window.ipcRenderer.invoke('log-error', error);
       }
     } catch (e) {
-      console.warn('[ErrorAgent] Failed to send log to main process:', e);
+      logger.warn('Failed to send log to main process', { error: String(e) });
     }
   }
 

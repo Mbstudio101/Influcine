@@ -284,6 +284,24 @@ class InflucineDB extends Dexie {
         preferences: '++id, profileId, tmdbId, [profileId+tmdbId]',
         recommendationCache: 'profileId, generatedAt'
     });
+
+    // Version 19: definitive schema checkpoint to stabilize future upgrades.
+    // Keeps legacy `watchlist` removed and preserves all active stores.
+    this.version(19).stores({
+      library: 'id, title, name, savedAt',
+      history: 'id, title, name, savedAt, [savedAt]',
+      users: '++id, &email',
+      profiles: '++id, userId, [userId]',
+      recentSearches: '++id, &query, timestamp',
+      achievements: '++id, profileId, achievementId, [profileId+achievementId]',
+      sourceMemory: '++id, tmdbId, [tmdbId+season+episode]',
+      reminders: '++id, mediaId, releaseDate, [mediaId+mediaType]',
+      cachedReleases: '++id, tmdbId, releaseDate, [tmdbId+mediaType]',
+      queryCache: '++id, query, normalizedQuery, timestamp',
+      episodeProgress: '++id, profileId, showId, season, episode, [profileId+showId+season+episode], [profileId+showId]',
+      preferences: '++id, profileId, tmdbId, [profileId+tmdbId]',
+      recommendationCache: 'profileId, generatedAt'
+    });
   }
 }
 

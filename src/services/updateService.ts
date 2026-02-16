@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { AppVersion } from '../types';
+import { logger } from './logger';
 
 const GITHUB_REPO = 'Mbstudio101/influcine';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
@@ -10,7 +11,7 @@ const STORAGE_KEY_SKIPPED_VERSION = 'update_skipped_version';
 // const CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 // Helper to compare semantic versions (e.g. "1.0.0" vs "1.0.1")
-const compareVersions = (v1: string, v2: string): number => {
+export const compareVersions = (v1: string, v2: string): number => {
   const p1 = v1.replace(/[^\d.]/g, '').split('.').map(Number);
   const p2 = v2.replace(/[^\d.]/g, '').split('.').map(Number);
   
@@ -95,7 +96,7 @@ export const checkForUpdates = async (currentVersion: string): Promise<AppVersio
              }
         }
       } catch (err) {
-        console.warn('Electron update check failed, falling back to GitHub API', err);
+        logger.warn('Electron update check failed, falling back to GitHub API', { error: String(err) });
         // Fallback to GitHub API below
       }
     }
@@ -109,7 +110,7 @@ export const checkForUpdates = async (currentVersion: string): Promise<AppVersio
     
     if (!response.ok) {
       if (response.status === 403 || response.status === 429) {
-        console.warn('GitHub API rate limit reached');
+        logger.warn('GitHub API rate limit reached');
       }
       return null;
     }
@@ -159,7 +160,7 @@ export const checkForUpdates = async (currentVersion: string): Promise<AppVersio
     // Fallback: If no assets match, check if version.json exists in repo
     // This handles the case where we just released but assets are uploading
     if (Object.keys(platforms).length === 0) {
-      console.warn('No platform assets found in GitHub release');
+      logger.warn('No platform assets found in GitHub release');
     }
 
     return {
@@ -170,7 +171,7 @@ export const checkForUpdates = async (currentVersion: string): Promise<AppVersio
     };
 
   } catch (error) {
-    console.warn('Failed to check for updates:', error);
+    logger.warn('Failed to check for updates', { error: String(error) });
     return null;
   }
 };

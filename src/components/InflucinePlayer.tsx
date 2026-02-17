@@ -3,6 +3,7 @@ import { useSettings } from '../context/SettingsContext';
 import { SubtitleOverlay } from './SubtitleOverlay';
 import { electronService } from '../services/electron';
 import { errorAgent } from '../services/errorAgent';
+import { SkipForward, X } from 'lucide-react';
 
 // Hooks
 import { usePlayerAudio } from '../hooks/usePlayerAudio';
@@ -50,6 +51,13 @@ interface InflucinePlayerProps {
     episode?: number;
     audio_format?: 'atmos' | '5.1' | 'stereo';
   };
+  upNext?: {
+    season: number;
+    episode: number;
+    countdown: number;
+  };
+  onUpNextNow?: () => void;
+  onUpNextDismiss?: () => void;
 }
 
 const InflucinePlayer: React.FC<InflucinePlayerProps> = ({ 
@@ -68,7 +76,10 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   isPip = false,
   provider,
   onProviderChange,
-  mediaData
+  mediaData,
+  upNext,
+  onUpNextNow,
+  onUpNextDismiss
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const iframeRef = useRef<HTMLElement & { send?: (channel: string, ...args: unknown[]) => void; contentWindow?: Window; getWebContentsId?: () => number; isLoading?: () => boolean }>(null);
@@ -843,24 +854,22 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
           </div>
       )}
       
-      {/* Native Mode Back Button - Z-Index 50 */}
+      {/* Native Mode Action Cluster - Z-Index 50 */}
       {isNativeMode && (
-          <div className="absolute top-4 left-4 z-50">
-              <button 
+          <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+              <button
                 onClick={onBack}
                 className="p-2 bg-black/50 hover:bg-black/80 rounded-full text-white transition-colors backdrop-blur-md pointer-events-auto"
+                title="Back"
+                aria-label="Back"
               >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
               </button>
-          </div>
-      )}
-      
-      {/* Native Mode Settings Trigger - Z-Index 50 */}
-      {isNativeMode && (
-          <div className="absolute top-4 right-4 z-50">
               <button 
                 onClick={() => setShowSettings(true)}
                 className="p-2 bg-black/50 hover:bg-black/80 rounded-full text-white transition-colors backdrop-blur-md pointer-events-auto"
+                title="Settings"
+                aria-label="Settings"
               >
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
@@ -906,6 +915,38 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
                 sleepTimerRemaining={sleepTimerRemaining}
             />
           </div>
+      )}
+
+      {/* Up Next Card */}
+      {upNext && onUpNextNow && (
+        <div className="absolute right-4 bottom-24 z-[45] pointer-events-auto">
+          <div className="rounded-xl border border-white/20 bg-black/75 backdrop-blur-lg p-3 shadow-2xl w-[260px]">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 mb-1">Up Next</div>
+            <div className="text-sm font-semibold text-white mb-2">
+              Season {upNext.season} • Episode {upNext.episode}
+            </div>
+            <div className="text-xs text-white/70 mb-3">
+              Playing automatically in {Math.max(0, upNext.countdown)}s
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onUpNextNow}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary text-white px-3 py-2 text-sm font-semibold hover:brightness-110 transition"
+              >
+                <SkipForward size={15} />
+                Play Next
+              </button>
+              <button
+                onClick={onUpNextDismiss}
+                className="inline-flex items-center justify-center rounded-lg border border-white/20 text-white/80 hover:text-white hover:bg-white/10 px-2.5 py-2 transition"
+                aria-label="Dismiss next episode"
+                title="Dismiss"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Settings Panel - Z-Index 50 */}

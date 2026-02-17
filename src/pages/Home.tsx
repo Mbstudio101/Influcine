@@ -23,6 +23,12 @@ import TrailerModal from '../components/TrailerModal';
 import { useAuth } from '../context/useAuth';
 import { useNavigate } from 'react-router-dom';
 
+type MediaWithProgress = Media & {
+  progress?: {
+    percentage: number;
+  };
+};
+
 const ROW_PRESET = {
   cardSize: 'large' as const,
   cardVariant: 'backdrop' as const,
@@ -64,8 +70,18 @@ const Home: React.FC = () => {
     enabled: !!profile,
   });
 
-  const historyQuery = useLiveQuery(() => db.history.orderBy('savedAt').reverse().limit(10).toArray());
+  const historyQuery = useLiveQuery(() => db.history.orderBy('savedAt').reverse().limit(20).toArray());
   const history = React.useMemo<Media[]>(() => historyQuery ?? [], [historyQuery]);
+  const continueWatching = React.useMemo(
+    () =>
+      history.filter(
+        item => {
+          const progress = (item as MediaWithProgress).progress;
+          return !!progress && progress.percentage > 1 && progress.percentage < 95;
+        }
+      ),
+    [history]
+  );
 
   const { isSaved: isFeaturedSaved, toggleWatchlist: toggleFeaturedWatchlist } = useWatchlist(
     (featured || { id: 0, media_type: 'movie' }) as unknown as Media
@@ -195,7 +211,7 @@ const Home: React.FC = () => {
       default:
         return (
           <>
-            {history.length > 0 && <ContentRow title="Continue Watching" data={history} {...ROW_PRESET} />}
+            {continueWatching.length > 0 && <ContentRow title="Continue Watching" data={continueWatching} {...ROW_PRESET} />}
 
             {recommendations.length > 0 &&
               recommendations.map((rec, index) => (
@@ -210,7 +226,7 @@ const Home: React.FC = () => {
           </>
         );
     }
-  }, [selectedCategory, history, recommendations, moviesContent, tvShowsContent, animeContent, documentaryContent]);
+  }, [selectedCategory, continueWatching, recommendations, moviesContent, tvShowsContent, animeContent, documentaryContent]);
 
   if (featuredLoading) return <div className="flex items-center justify-center h-full text-white">Loading...</div>;
   if (!featured) return <div className="flex items-center justify-center h-full text-white">No content available</div>;

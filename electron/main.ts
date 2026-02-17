@@ -85,7 +85,8 @@ if (!app.isPackaged) {
 // Configure logging
 log.transports.file.level = 'info';
 autoUpdater.logger = log;
-autoUpdater.autoDownload = false; // Disable auto download to support user flow: Check -> Prompt -> Download
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
 
 const ADBLOCK_SCRIPT = `
 // Influcine AdBlock & Anti-Sandblock Script
@@ -822,7 +823,7 @@ ipcMain.handle('update-download', async () => {
 });
 
 ipcMain.handle('update-install', () => {
-  autoUpdater.quitAndInstall();
+  autoUpdater.quitAndInstall(true, true);
 });
 
 // Update events
@@ -849,6 +850,17 @@ autoUpdater.on('download-progress', (progressObj) => {
 autoUpdater.on('update-downloaded', (info) => {
   log.info('Update downloaded', info);
   sendToRenderer('update-downloaded', info);
+
+  // Fully silent immediate install/restart in packaged app.
+  if (app.isPackaged) {
+    setTimeout(() => {
+      try {
+        autoUpdater.quitAndInstall(true, true);
+      } catch (err) {
+        log.error('Silent immediate install failed', err);
+      }
+    }, 1000);
+  }
 });
 
 autoUpdater.on('error', (err) => {
@@ -1187,6 +1199,18 @@ function createWindow() {
     return win.isMaximized();
   });
 
+  ipcMain.removeHandler('window-is-fullscreen');
+  ipcMain.handle('window-is-fullscreen', () => {
+    return Boolean(win?.isFullScreen());
+  });
+
+  ipcMain.removeHandler('window-toggle-fullscreen');
+  ipcMain.handle('window-toggle-fullscreen', () => {
+    if (!win) return false;
+    win.setFullScreen(!win.isFullScreen());
+    return win.isFullScreen();
+  });
+
   ipcMain.on('window-close', () => {
     win?.close();
   });
@@ -1231,7 +1255,7 @@ app.on('activate', () => {
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow()
-    autoUpdater.checkForUpdatesAndNotify().catch(err => log.error('Auto-update error:', err));
+    autoUpdater.checkForUpdates().catch(err => log.error('Auto-update error:', err));
   }
 })
 
@@ -1412,6 +1436,6 @@ app.whenReady().then(() => {
 
   // Check for updates only in production
   if (app.isPackaged) {
-    autoUpdater.checkForUpdatesAndNotify().catch(err => log.error('Auto-update error:', err));
+    autoUpdater.checkForUpdates().catch(err => log.error('Auto-update error:', err));
   }
 });

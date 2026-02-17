@@ -110,8 +110,8 @@ const Details: React.FC = () => {
 
   // History for progress tracking
   const historyItem = useLiveQuery(
-    () => (effectiveType === 'tv' && id) ? db.history.get(parseInt(id)) : undefined,
-    [effectiveType, id]
+    () => (id ? db.history.get(parseInt(id)) : undefined),
+    [id]
   );
 
   const activeSeason = useMemo(() => {
@@ -259,6 +259,9 @@ const Details: React.FC = () => {
 
   const handleWatch = async () => {
     if (!details) return;
+    const startFrom = historyItem?.progress?.percentage && historyItem.progress.percentage < 95
+      ? (historyItem.progress.watched || 0)
+      : 0;
     try {
       // Explicitly construct to avoid Dexie errors
       await db.history.put({
@@ -279,9 +282,9 @@ const Details: React.FC = () => {
     if (effectiveType === 'tv') {
       const s = historyItem?.progress?.season || 1;
       const e = historyItem?.progress?.episode || 1;
-      play(details, s, e);
+      play(details, s, e, startFrom);
     } else {
-      play(details);
+      play(details, undefined, undefined, startFrom);
     }
   };
 

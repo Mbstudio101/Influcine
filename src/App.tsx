@@ -81,6 +81,7 @@ function App() {
   const [updateProgress, setUpdateProgress] = useState(0);
   const [updateReady, setUpdateReady] = useState(false);
   const initialized = useRef(false);
+  const isElectronRuntime = typeof window !== 'undefined' && !!window.ipcRenderer;
 
   useEffect(() => {
     // Listen for update progress
@@ -140,6 +141,7 @@ function App() {
     }
 
     const check = async () => {
+      if (isElectronRuntime) return;
       try {
         const update = await checkForUpdates(pkg.version);
         if (update) {
@@ -150,7 +152,7 @@ function App() {
       }
     };
     check();
-  }, []);
+  }, [isElectronRuntime]);
 
   const handleUpdate = async () => {
     if (!updateAvailable) return;
@@ -199,7 +201,7 @@ function App() {
   return (
     <PlayerProvider>
       <>
-        {updateAvailable && (
+        {updateAvailable && !isElectronRuntime && (
           <UpdateModal 
             update={updateAvailable} 
             onClose={() => {

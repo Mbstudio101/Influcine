@@ -127,7 +127,7 @@ const ContentRow: React.FC<ContentRowProps> = ({
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           {media.map(item => (
-            <div key={item.id} className={`${getSizeClass()} snap-start`}>
+            <div key={`${item.media_type || 'media'}-${item.id}`} className={`${getSizeClass()} snap-start`}>
               <MediaCard media={item} variant={cardVariant} />
             </div>
           ))}

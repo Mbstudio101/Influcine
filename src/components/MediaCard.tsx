@@ -3,6 +3,7 @@ import { Media, MediaDetails } from '../types';
 import { getImageUrl, getDetails } from '../services/tmdb';
 import { useNavigate } from 'react-router-dom';
 import { Play, Plus, Check, Star, Youtube, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import Focusable from './Focusable';
 import { usePlayer } from '../context/PlayerContext';
 import { useWatchlist } from '../hooks/useWatchlist';
@@ -10,6 +11,7 @@ import TrailerModal from './TrailerModal';
 import { useTrailerPrefetch } from '../hooks/useTrailerPrefetch';
 import { useAuth } from '../context/useAuth';
 import { getPreference, togglePreference } from '../services/recommendationEngine';
+import { db } from '../db';
 
 interface MediaCardProps {
   media: Media;
@@ -63,8 +65,17 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick, variant = 'p
     }
   };
 
-  const progress = (media as SavedMediaWithProgress).progress;
-  const hasProgress = progress && progress.percentage > 0 && progress.percentage < 95;
+  const savedHistory = useLiveQuery(() => db.history.get(media.id), [media.id]);
+  const savedProgress =
+    savedHistory?.media_type === mediaType
+      ? savedHistory.progress
+      : undefined;
+
+  const fallbackProgress = (media as SavedMediaWithProgress).progress;
+  const progress = savedProgress ?? fallbackProgress;
+  const progressPct = Math.max(0, Math.min(100, Math.round(progress?.percentage || 0)));
+  const hasProgressBar = progressPct > 0;
+  const hasResume = progressPct > 0 && progressPct < 95;
 
   const handlePlayClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -72,17 +83,17 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick, variant = 'p
     try {
       const details = await getDetails(mediaType as 'movie' | 'tv', media.id);
       if (mediaType === 'tv') {
-        play(details as unknown as MediaDetails, progress?.season || 1, progress?.episode || 1);
+        play(details as unknown as MediaDetails, progress?.season || 1, progress?.episode || 1, progress?.watched || 0);
       } else {
-        play(details as unknown as MediaDetails);
+        play(details as unknown as MediaDetails, undefined, undefined, progress?.watched || 0);
       }
     } catch (err) {
       console.error('Failed to fetch full media details, falling back to cached media:', err);
       try {
         if (mediaType === 'tv') {
-          play(media as unknown as MediaDetails, progress?.season || 1, progress?.episode || 1);
+          play(media as unknown as MediaDetails, progress?.season || 1, progress?.episode || 1, progress?.watched || 0);
         } else {
-          play(media as unknown as MediaDetails);
+          play(media as unknown as MediaDetails, undefined, undefined, progress?.watched || 0);
         }
       } catch (playErr) {
         console.error('Failed to play media:', playErr);
@@ -150,13 +161,13 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick, variant = 'p
             decoding="async"
           />
 
-          {hasProgress && (
+          {hasProgressBar && (
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/55 z-20">
-              <div className="h-full bg-linear-to-r from-[#ff4fa3] via-[#ff7ab6] to-[#7d7bff]" style={{ width: `${progress.percentage}%` }} />
+              <div className="h-full bg-linear-to-r from-[#ff4fa3] via-[#ff7ab6] to-[#7d7bff]" style={{ width: `${progressPct}%` }} />
             </div>
           )}
 
-          {hasProgress && progress.season && (
+          {hasResume && progress?.season && (
             <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 px-2 py-1 rounded text-[10px] font-bold text-white z-20">
               S{progress.season} E{progress.episode}
             </div>
@@ -189,7 +200,7 @@ const MediaCard: React.FC<MediaCardProps> = memo(({ media, onClick, variant = 'p
                 onClick={handlePlayClick}
                 className="flex-1 bg-linear-to-r from-[#ff4fa3] via-[#ff7ab6] to-[#7d7bff] text-white py-2 rounded-xl font-semibold flex items-center justify-center gap-2 hover:brightness-110 transition-all duration-300 text-xs md:text-sm whitespace-nowrap shrink-0 cursor-pointer"
               >
-                <Play size={14} fill="currentColor" /> {hasProgress ? 'Resume' : 'Play'}
+                <Play size={14} fill="currentColor" /> {hasResume ? 'Resume' : 'Play'}
               </button>
 
               <button

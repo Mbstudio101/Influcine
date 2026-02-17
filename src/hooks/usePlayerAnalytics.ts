@@ -21,9 +21,14 @@ export const usePlayerAnalytics = ({
   
   const lastXPAwardTimeRef = useRef(0);
   const lastStatUpdateTimeRef = useRef(0);
-  const accumulatedTimeRef = useRef(0);
+  const accumulatedTimeRef = useRef(0); // seconds
 
   const trackPlayStart = useCallback(async (startTime: number) => {
+    // Reset tracking baselines for this playback session
+    lastXPAwardTimeRef.current = startTime;
+    lastStatUpdateTimeRef.current = startTime;
+    accumulatedTimeRef.current = 0;
+
     // Check Sleep/Time Achievements
     if (profile?.id) {
       const hour = new Date().getHours();
@@ -103,30 +108,54 @@ export const usePlayerAnalytics = ({
     }
   }, [profile, type, season, episode, details]);
 
+  const flushWatchTime = useCallback(async () => {
+    if (!profile?.id) return;
+    if (accumulatedTimeRef.current <= 0) return;
+
+    const minutes = accumulatedTimeRef.current / 60;
+    accumulatedTimeRef.current = 0;
+
+    await updateWatchStats(profile.id, { minutesWatched: minutes });
+  }, [profile]);
+
   const trackTimeUpdate = useCallback(async (currentTime: number) => {
     if (!profile?.id) return;
 
+    // Initialize baseline on first meaningful update.
+    if (lastStatUpdateTimeRef.current === 0) {
+      lastStatUpdateTimeRef.current = currentTime;
+      lastXPAwardTimeRef.current = currentTime;
+      return;
+    }
+
     // XP Accumulation (every 5 mins = 300s)
-    if (currentTime - lastXPAwardTimeRef.current > 300) {
+    if (currentTime - lastXPAwardTimeRef.current >= 300) {
         await awardXP(profile.id, 20); // 20 XP per 5 mins
         lastXPAwardTimeRef.current = currentTime;
     }
 
-    // Stats Accumulation (every 1 min = 60s)
+    // Stats accumulation based on elapsed playback seconds.
     const delta = currentTime - lastStatUpdateTimeRef.current;
-    if (delta > 0 && delta < 5) {
-        accumulatedTimeRef.current += delta;
+    // Ignore jumps from seeking or stream desync spikes.
+    if (delta > 0 && delta <= 15) {
+      accumulatedTimeRef.current += delta;
     }
     lastStatUpdateTimeRef.current = currentTime;
 
     if (accumulatedTimeRef.current >= 60) {
-        await updateWatchStats(profile.id, { minutesWatched: 1 });
-        accumulatedTimeRef.current -= 60;
+        const fullMinutes = Math.floor(accumulatedTimeRef.current / 60);
+        await updateWatchStats(profile.id, { minutesWatched: fullMinutes });
+        accumulatedTimeRef.current -= fullMinutes * 60;
     }
   }, [profile]);
 
+  const trackPause = useCallback(async () => {
+    await flushWatchTime();
+  }, [flushWatchTime]);
+
   const trackEnded = useCallback(async () => {
     if (!profile?.id) return;
+    await flushWatchTime();
 
     // 1. Award Bonus XP
     const bonus = type === 'movie' ? 150 : 75;
@@ -165,11 +194,12 @@ export const usePlayerAnalytics = ({
             await unlockAchievement(profile.id, 'drama_queen', historyCount); 
         }
     }
-  }, [profile, type, details]);
+  }, [profile, type, details, flushWatchTime]);
 
   return {
     trackPlayStart,
     trackTimeUpdate,
+    trackPause,
     trackEnded
   };
 };

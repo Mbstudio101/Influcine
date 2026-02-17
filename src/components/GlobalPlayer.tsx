@@ -51,6 +51,10 @@ const GlobalPlayer: React.FC = () => {
   }, [pipSize]);
 
   const [nextEpisode, setNextEpisode] = useState<{ season: number; episode: number } | null>(null);
+  const [showUpNext, setShowUpNext] = useState(false);
+  const [upNextCountdown, setUpNextCountdown] = useState<number | null>(null);
+  const [upNextDismissed, setUpNextDismissed] = useState(false);
+  const hasAutoAdvancedRef = useRef(false);
 
   const type = media?.media_type === 'tv' ? 'tv' : 'movie';
   const id = media?.id?.toString();
@@ -105,6 +109,7 @@ const GlobalPlayer: React.FC = () => {
   const {
     trackPlayStart,
     trackTimeUpdate,
+    trackPause,
     trackEnded
   } = usePlayerAnalytics({
     type: type,
@@ -126,9 +131,16 @@ const GlobalPlayer: React.FC = () => {
 
   const handleNext = useCallback(() => {
     if (nextEpisode && media) {
+      hasAutoAdvancedRef.current = true;
       play(media, nextEpisode.season, nextEpisode.episode);
     }
   }, [nextEpisode, media, play]);
+
+  const dismissUpNext = useCallback(() => {
+    setShowUpNext(false);
+    setUpNextCountdown(null);
+    setUpNextDismissed(true);
+  }, []);
 
   const handlePlay = useCallback(async () => {
     isPlayingRef.current = true;
@@ -137,19 +149,56 @@ const GlobalPlayer: React.FC = () => {
 
   const handlePause = useCallback(() => {
     isPlayingRef.current = false;
+    trackPause();
     flushProgress();
-  }, [flushProgress]);
+  }, [trackPause, flushProgress]);
 
   const handleTimeUpdate = useCallback(async (currentTime: number, duration: number) => {
     await trackTimeUpdate(currentTime);
     await saveProgress(currentTime, duration);
-  }, [trackTimeUpdate, saveProgress]);
+
+    if (!nextEpisode || !duration || duration <= 0 || upNextDismissed) return;
+
+    const remaining = duration - currentTime;
+    if (remaining <= 30 && remaining > 0) {
+      setShowUpNext(true);
+      setUpNextCountdown(prev => prev ?? 10);
+    } else if (remaining > 45) {
+      setShowUpNext(false);
+      setUpNextCountdown(null);
+    }
+  }, [trackTimeUpdate, saveProgress, nextEpisode, upNextDismissed]);
 
   const handleEnded = useCallback(async () => {
     await trackEnded();
     await flushProgress();
-    // Auto-play next?
-  }, [trackEnded, flushProgress]);
+    if (nextEpisode && !hasAutoAdvancedRef.current) {
+      handleNext();
+    }
+  }, [trackEnded, flushProgress, nextEpisode, handleNext]);
+
+  useEffect(() => {
+    hasAutoAdvancedRef.current = false;
+    setShowUpNext(false);
+    setUpNextCountdown(null);
+    setUpNextDismissed(false);
+  }, [media?.id, season, episode, nextEpisode?.season, nextEpisode?.episode]);
+
+  useEffect(() => {
+    if (!showUpNext || upNextCountdown === null || upNextDismissed || !nextEpisode) return;
+    if (upNextCountdown <= 0) {
+      if (!hasAutoAdvancedRef.current) {
+        handleNext();
+      }
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setUpNextCountdown(prev => (prev === null ? null : prev - 1));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [showUpNext, upNextCountdown, upNextDismissed, nextEpisode, handleNext]);
 
   if (mode === 'hidden' || !media) return null;
 
@@ -240,6 +289,9 @@ const GlobalPlayer: React.FC = () => {
                 onTimeUpdate={handleTimeUpdate}
                 provider={provider}
                 onProviderChange={(p) => setProvider(p as StreamProvider)}
+                upNext={showUpNext && nextEpisode ? { countdown: upNextCountdown ?? 0, season: nextEpisode.season, episode: nextEpisode.episode } : undefined}
+                onUpNextNow={nextEpisode ? handleNext : undefined}
+                onUpNextDismiss={dismissUpNext}
             />
         )}
     </div>

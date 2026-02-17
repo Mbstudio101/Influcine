@@ -14,7 +14,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
   const navigate = useNavigate();
   const location = useLocation();
   const { profile } = useAuth();
-  const [isMaximized, setIsMaximized] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const ipc = typeof window !== 'undefined' ? window.ipcRenderer : undefined;
 
   // Handle window controls
@@ -26,13 +26,13 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
 
   const handleMaximize = useCallback(async () => {
     if (ipc) {
-      // Prefer invoke so renderer and main stay in sync.
+      // Window control button toggles true fullscreen.
       try {
-        const maximized = await ipc.invoke('window-toggle-maximize');
-        setIsMaximized(Boolean(maximized));
+        const fullscreen = await ipc.invoke('window-toggle-fullscreen');
+        setIsFullscreen(Boolean(fullscreen));
       } catch {
-        ipc.send('window-maximize');
-        setIsMaximized(prev => !prev);
+        ipc.send('window-fullscreen');
+        setIsFullscreen(prev => !prev);
       }
     }
   }, [ipc]);
@@ -48,8 +48,8 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
     const syncMaxState = async () => {
       if (!ipc) return;
       try {
-        const maximized = await ipc.invoke('window-is-maximized');
-        if (active) setIsMaximized(Boolean(maximized));
+        const fullscreen = await ipc.invoke('window-is-fullscreen');
+        if (active) setIsFullscreen(Boolean(fullscreen));
       } catch {
         // Ignore in web mode or when channel is unavailable.
       }
@@ -137,9 +137,9 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
         <button 
           onClick={handleMaximize}
           className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-gray-400 hover:text-white"
-          title={isMaximized ? "Restore Down" : "Maximize"}
+          title={isFullscreen ? "Exit Full Screen" : "Full Screen"}
         >
-          {isMaximized ? <Square size={12} /> : <Maximize2 size={14} />}
+          {isFullscreen ? <Square size={12} /> : <Maximize2 size={14} />}
         </button>
         <button 
           onClick={handleClose}

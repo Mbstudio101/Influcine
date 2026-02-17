@@ -292,6 +292,8 @@ const ADBLOCK_SCRIPT = `
   try {
     const { ipcRenderer } = require('electron');
     ipcRenderer.on('player-command', (_event, data) => {
+        const video = findVideo(document);
+
         if (data.command === 'showNativeControls') {
             isNativeMode = true;
             removeStyle();
@@ -305,22 +307,31 @@ const ADBLOCK_SCRIPT = `
             const videos = document.querySelectorAll('video');
             videos.forEach(v => { v.controls = false; });
         }
+        if (data.command === 'play') {
+            if (video) {
+                const p = video.play();
+                if (p && p.catch) p.catch(() => {});
+            }
+        }
+        if (data.command === 'pause') {
+            if (video) video.pause();
+        }
         if (data.command === 'setVolume') {
+            const vol = Math.max(0, Math.min(1, Number(data.volume ?? 1)));
             const videos = document.querySelectorAll('video');
-            videos.forEach(v => { 
-                v.volume = 1; // Keep full volume, let GainNode handle it in main app if possible, or sets it.
-                // Actually, if we are in embed, the main app audio context might not work perfectly across process boundaries 
-                // unless we capture audio. 
-                // But for now, just set it.
-                // v.volume = data.volume; // If we want to control it here.
-            });
+            videos.forEach(v => { v.volume = vol; });
         }
         if (data.command === 'setMute') {
             const videos = document.querySelectorAll('video');
             videos.forEach(v => { v.muted = data.muted; });
         }
+        if (data.command === 'setSpeed' || data.command === 'ratechange') {
+            const speed = Number(data.speed ?? data.playbackRate ?? 1);
+            if (video && Number.isFinite(speed) && speed > 0) {
+                video.playbackRate = speed;
+            }
+        }
         if (data.command === 'seek') {
-             const video = findVideo(document);
              if (video) video.currentTime = data.time;
         }
     });

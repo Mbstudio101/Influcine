@@ -14,6 +14,7 @@ interface ContentRowProps {
   cardSize?: 'small' | 'medium' | 'large';
   cardVariant?: 'poster' | 'backdrop';
   staleTime?: number;
+  onTitleClick?: () => void;
 }
 
 const ContentRow: React.FC<ContentRowProps> = ({
@@ -23,6 +24,7 @@ const ContentRow: React.FC<ContentRowProps> = ({
   cardSize = 'medium',
   cardVariant = 'poster',
   staleTime = 1000 * 60 * 15,
+  onTitleClick,
 }) => {
   const rowRef = useRef<HTMLDivElement>(null);
   const [containerRef, isVisible] = useIntersectionObserver({ freezeOnceVisible: true, rootMargin: '200px' });
@@ -101,11 +103,18 @@ const ContentRow: React.FC<ContentRowProps> = ({
 
   return (
     <div ref={containerRef} className="mb-8 group/row relative px-4 md:px-8 lg:px-10">
-      <h2 className="text-xl md:text-2xl font-semibold mb-4 text-white flex items-center gap-2 group/title cursor-pointer tracking-tight">
-        <Focusable as="span" className="bg-linear-to-r from-[#ffd3e8] via-[#ff9ac9] to-[#9f9dff] bg-clip-text text-transparent transition-colors duration-300">
+      <h2 className="text-xl md:text-2xl font-semibold mb-4 text-white flex items-center gap-2 group/title tracking-tight">
+        <Focusable
+          as={onTitleClick ? 'button' : 'span'}
+          onClick={onTitleClick}
+          className={`bg-linear-to-r from-[#ffd3e8] via-[#ff9ac9] to-[#9f9dff] bg-clip-text text-transparent transition-colors duration-300 ${onTitleClick ? 'cursor-pointer' : ''}`}
+          activeClassName={onTitleClick ? 'ring-2 ring-primary rounded px-1' : undefined}
+        >
           {title}
         </Focusable>
-        <ChevronRight size={18} className="text-[#ff9ac9] opacity-0 -translate-x-2 group-hover/title:opacity-100 group-hover/title:translate-x-0 transition-all duration-300" />
+        {onTitleClick && (
+          <ChevronRight size={18} className="text-[#ff9ac9] opacity-0 -translate-x-2 group-hover/title:opacity-100 group-hover/title:translate-x-0 transition-all duration-300" />
+        )}
       </h2>
 
       <div className="relative">

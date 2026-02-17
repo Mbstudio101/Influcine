@@ -157,6 +157,79 @@ export const getPersonDetails = async (personId: number): Promise<PersonDetails>
   return fetchApi<PersonDetails>(`/person/${personId}`);
 };
 
+interface WatchProviderItem {
+  provider_id: number;
+  provider_name: string;
+}
+
+const normalizeProviderName = (name: string) =>
+  name.toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+export const getNewOnTopPlatforms = async (limit = 5, watchRegion = 'US'): Promise<Media[]> => {
+  const providerResponse = await fetchApi<{ results: WatchProviderItem[] }>('/watch/providers/movie', {
+    watch_region: watchRegion,
+  });
+
+  const targetProviders = [
+    ['Netflix'],
+    ['Amazon Prime Video', 'Prime Video'],
+    ['Disney Plus', 'Disney+'],
+    ['Hulu'],
+    ['Max', 'HBO Max'],
+    ['Apple TV Plus', 'Apple TV+'],
+    ['Paramount Plus', 'Paramount+'],
+    ['Tubi', 'Tubi TV'],
+    ['SkyShowtime'],
+    ['BET Plus', 'BET+'],
+    ['Peacock', 'Peacock Premium'],
+    ['Starz', 'STARZ'],
+    ['Mubi', 'MUBI'],
+    ['Pluto TV'],
+  ];
+
+  const providers = providerResponse.results || [];
+  const providerIds = targetProviders
+    .map((aliases) => {
+      const normalizedAliases = aliases.map((name) => normalizeProviderName(name));
+      const found = providers.find((provider) => {
+        const normalized = normalizeProviderName(provider.provider_name);
+        return normalizedAliases.some(
+          (alias) => normalized === alias || normalized.includes(alias) || alias.includes(normalized)
+        );
+      });
+      return found?.provider_id;
+    })
+    .filter((id): id is number => typeof id === 'number');
+
+  if (providerIds.length === 0) return [];
+
+  const since = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const providerResults = await Promise.all(
+    providerIds.map((providerId) =>
+      discoverMedia('movie', {
+        watch_region: watchRegion,
+        with_watch_monetization_types: 'flatrate',
+        with_watch_providers: String(providerId),
+        sort_by: 'primary_release_date.desc',
+        'primary_release_date.gte': since,
+        'vote_count.gte': 60,
+      })
+    )
+  );
+
+  const unique: Media[] = [];
+  const seen = new Set<number>();
+  for (const resultSet of providerResults) {
+    const item = resultSet.find((m) => !seen.has(m.id));
+    if (!item) continue;
+    seen.add(item.id);
+    unique.push(item);
+    if (unique.length >= limit) break;
+  }
+
+  return unique.slice(0, limit);
+};
+
 interface WikipediaSummaryResponse {
   type?: string;
   extract?: string;

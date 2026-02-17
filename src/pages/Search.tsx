@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { db } from '../db';
 import { VideoAgent } from '../services/VideoAgent';
+import { discoverMedia } from '../services/tmdb';
 import { useDebounce } from '../hooks/useDebounce';
 import { useSearchFilter, FilterType } from '../hooks/useSearchFilter';
 import { Search as SearchIcon, Zap, Clock, X, Film, Tv, LayoutGrid } from 'lucide-react';
@@ -14,8 +15,13 @@ import { motion } from 'framer-motion';
 
 const Search: React.FC = () => {
   const [query, setQuery] = useState('');
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const debouncedQuery = useDebounce(query, 500);
   const { showToast } = useToast();
+  const yearOptions = React.useMemo(() => {
+    const current = new Date().getFullYear();
+    return Array.from({ length: 18 }, (_, idx) => current - idx);
+  }, []);
   
   const recentSearches = useLiveQuery(
     () => db.recentSearches.orderBy('timestamp').reverse().limit(10).toArray()
@@ -31,6 +37,22 @@ const Search: React.FC = () => {
     staleTime: 1000 * 60 * 5, // 5 minutes cache
     gcTime: 1000 * 60 * 30, // 30 minutes garbage collection
     placeholderData: keepPreviousData,
+  });
+
+  const { data: yearResults = [], isLoading: loadingYearResults } = useQuery({
+    queryKey: ['search-by-year', selectedYear],
+    queryFn: async () => {
+      if (!selectedYear) return [];
+      return discoverMedia('movie', {
+        sort_by: 'primary_release_date.desc',
+        'primary_release_date.gte': `${selectedYear}-01-01`,
+        'primary_release_date.lte': `${selectedYear}-12-31`,
+        'vote_count.gte': 10,
+        page: 1,
+      });
+    },
+    enabled: !!selectedYear && debouncedQuery.trim().length === 0,
+    staleTime: 1000 * 60 * 10,
   });
 
   // Use the new hook for filtering
@@ -64,6 +86,7 @@ const Search: React.FC = () => {
   }, [error, showToast]);
 
   const handleRecentClick = (term: string) => {
+    setSelectedYear(null);
     setQuery(term);
   };
 
@@ -112,7 +135,13 @@ const Search: React.FC = () => {
             type="text"
             placeholder="Search for movies and TV shows..."
             value={query}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              const value = e.target.value;
+              setQuery(value);
+              if (value.trim().length > 0 && selectedYear !== null) {
+                setSelectedYear(null);
+              }
+            }}
             onKeyDown={handleKeyDown}
             className="w-full bg-white/5 backdrop-blur-xl border border-white/10 text-white pl-14 pr-6 py-5 rounded-2xl text-xl focus:outline-none focus:ring-2 focus:ring-[rgba(255,79,163,0.55)] shadow-[0_0_20px_rgba(255,79,163,0.12)] focus:shadow-[0_0_40px_rgba(255,122,182,0.4)] placeholder-gray-500 transition-all duration-300"
             autoFocus
@@ -134,6 +163,40 @@ const Search: React.FC = () => {
             <FilterButton type="tv" label="TV Shows" icon={Tv} />
           </div>
         )}
+
+        {!query && (
+          <div className="max-w-5xl mx-auto mt-6">
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Browse Movies By Year</h3>
+              {selectedYear && (
+                <button
+                  onClick={() => setSelectedYear(null)}
+                  className="text-xs font-medium text-gray-500 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
+                >
+                  Clear Year
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+              {yearOptions.map((year) => (
+                <button
+                  key={year}
+                  onClick={() => {
+                    setSelectedYear(year);
+                    setQuery('');
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border transition-all duration-200 ${
+                    selectedYear === year
+                      ? 'bg-primary text-white border-primary shadow-lg shadow-primary/25'
+                      : 'bg-white/5 text-gray-300 border-white/10 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  {year}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
     </div>
   );
 
@@ -142,7 +205,7 @@ const Search: React.FC = () => {
       {SearchHeader}
       
       <div className="flex-1 min-h-0 relative">
-        {loading ? (
+        {loading || loadingYearResults ? (
           <div className="h-full overflow-y-auto scrollbar-hide">
               <div className="flex flex-col items-center justify-center py-20">
               <div className="w-12 h-12 rounded-full border-4 border-primary/30 border-t-primary animate-spin mb-4"></div>
@@ -158,6 +221,23 @@ const Search: React.FC = () => {
               </div>
             </div>
           </div>
+        ) : !query && selectedYear ? (
+          yearResults.length === 0 ? (
+            <div className="h-full overflow-y-auto scrollbar-hide">
+              <div className="max-w-2xl mx-auto mt-10 p-10 rounded-3xl bg-white/5 border border-white/5 text-center backdrop-blur-sm">
+                <div className="text-2xl font-bold text-white mb-2">No results for {selectedYear}</div>
+                <p className="text-gray-400 text-lg">Try another year from the filter above.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="h-full overflow-y-auto scrollbar-hide">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-6 px-8 py-8">
+                {yearResults.map((item) => (
+                  <MediaCard key={`${item.media_type || 'movie'}-${item.id}`} media={item} />
+                ))}
+              </div>
+            </div>
+          )
         ) : !query ? (
           <div className="h-full overflow-y-auto scrollbar-hide">
             {recentSearches && recentSearches.length > 0 && (
@@ -232,6 +312,7 @@ const Search: React.FC = () => {
           </div>
         ) : (
           <VirtualMediaGrid 
+              key={`search-grid-${filterType}-${debouncedQuery}`}
               items={filteredResults} 
               renderItem={(item) => (
                   <motion.div

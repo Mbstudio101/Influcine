@@ -36,6 +36,7 @@ const Login = lazy(() => import('./pages/Login'));
 const Signup = lazy(() => import('./pages/Signup'));
 const ProfileSelection = lazy(() => import('./pages/ProfileSelection'));
 const Genre = lazy(() => import('./pages/Genre'));
+const JustReleased = lazy(() => import('./pages/JustReleased'));
 
 const LoadingFallback = () => (
   <div className="h-screen w-full bg-black flex items-center justify-center">
@@ -248,6 +249,7 @@ function App() {
                       <Route path="/settings" element={<Settings />} />
                       <Route path="/details/:type/:id" element={<Details />} />
                       <Route path="/genre/:id" element={<Genre />} />
+                      <Route path="/collections/just-released" element={<JustReleased />} />
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
                   </Layout>

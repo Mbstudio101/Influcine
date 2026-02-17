@@ -9,8 +9,10 @@ import {
   discoverMedia,
   getDetails,
   getVideos,
+  getNewOnTopPlatforms,
 } from '../services/tmdb';
 import { getPersonalizedRecommendations } from '../services/recommendations';
+import { getFeaturedHeroItems } from '../services/FeaturedAgent';
 import { findBestTrailer } from '../utils/videoUtils';
 import { Play, Plus, Check, Youtube, Info } from 'lucide-react';
 import { db } from '../db';
@@ -38,19 +40,37 @@ const Home: React.FC = () => {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [featuredIndex, setFeaturedIndex] = useState(0);
   const { play } = usePlayer();
 
   const [showTrailer, setShowTrailer] = useState(false);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
 
-  const { data: featured, isLoading: featuredLoading } = useQuery({
-    queryKey: ['featured'],
-    queryFn: async () => {
-      const trending = await getTrending('day');
-      return trending[0];
-    },
+  const { data: featuredItems = [], isLoading: featuredLoading } = useQuery({
+    queryKey: ['featured-list'],
+    queryFn: () => getFeaturedHeroItems('US', 10),
     staleTime: 1000 * 60 * 30,
+    refetchInterval: 1000 * 60 * 30,
+    refetchOnWindowFocus: true,
   });
+
+  React.useEffect(() => {
+    if (featuredItems.length === 0) {
+      setFeaturedIndex(0);
+      return;
+    }
+    setFeaturedIndex((prev) => (prev >= featuredItems.length ? 0 : prev));
+  }, [featuredItems.length]);
+
+  React.useEffect(() => {
+    if (featuredItems.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setFeaturedIndex((prev) => (prev + 1) % featuredItems.length);
+    }, 9000);
+    return () => window.clearInterval(timer);
+  }, [featuredItems.length]);
+
+  const featured = featuredItems[featuredIndex] || null;
 
   const { data: featuredDetails } = useQuery({
     queryKey: ['featured-details', featured?.id, featured?.media_type],
@@ -68,6 +88,12 @@ const Home: React.FC = () => {
     queryFn: () => getPersonalizedRecommendations(profile?.id),
     staleTime: 1000 * 60 * 60,
     enabled: !!profile,
+  });
+
+  const { data: newOnTopPlatforms = [] } = useQuery({
+    queryKey: ['new-on-top-platforms'],
+    queryFn: () => getNewOnTopPlatforms(5, 'US'),
+    staleTime: 1000 * 60 * 60 * 6,
   });
 
   const historyQuery = useLiveQuery(() => db.history.orderBy('savedAt').reverse().limit(20).toArray());
@@ -88,7 +114,9 @@ const Home: React.FC = () => {
   );
   const featuredYear = featured ? (new Date(featured.release_date || featured.first_air_date || '').getFullYear() || 'N/A') : 'N/A';
   const featuredScore = featured && typeof featured.vote_average === 'number' ? featured.vote_average.toFixed(1) : 'N/A';
-  const featuredType = featured ? (featured.media_type || (featured.title ? 'movie' : 'tv')).toUpperCase() : 'N/A';
+  const featuredMediaType = featured ? (featured.media_type || (featured.title ? 'movie' : 'tv')) : null;
+  const featuredType = featuredMediaType ? featuredMediaType.toUpperCase() : 'N/A';
+  const featuredPlayLabel = featuredMediaType === 'tv' ? 'Play S1 E1' : 'Watch Movie';
   const featuredMatch = featured && typeof featured.vote_average === 'number' ? `${Math.round(featured.vote_average * 10)}% Match` : 'Top Pick';
   const featuredLength =
     featuredDetails?.runtime
@@ -219,6 +247,14 @@ const Home: React.FC = () => {
               ))}
 
             <ContentRow title="Trending Now" fetcher={() => getTrending('day')} {...ROW_PRESET} />
+            {newOnTopPlatforms.length > 0 && (
+              <ContentRow
+                title="Just Released: Netflix + Top Platforms"
+                data={newOnTopPlatforms}
+                onTitleClick={() => navigate('/collections/just-released')}
+                {...ROW_PRESET}
+              />
+            )}
             <ContentRow title="Popular Movies" fetcher={() => getMoviesByCategory('popular')} {...ROW_PRESET} />
             <ContentRow title="Popular TV Shows" fetcher={() => getTVShowsByCategory('popular')} {...ROW_PRESET} />
             <ContentRow title="Top Rated" fetcher={() => getTrending('week')} {...ROW_PRESET} />
@@ -226,7 +262,7 @@ const Home: React.FC = () => {
           </>
         );
     }
-  }, [selectedCategory, continueWatching, recommendations, moviesContent, tvShowsContent, animeContent, documentaryContent]);
+  }, [selectedCategory, continueWatching, recommendations, newOnTopPlatforms, moviesContent, tvShowsContent, animeContent, documentaryContent, navigate]);
 
   if (featuredLoading) return <div className="flex items-center justify-center h-full text-white">Loading...</div>;
   if (!featured) return <div className="flex items-center justify-center h-full text-white">No content available</div>;
@@ -256,7 +292,6 @@ const Home: React.FC = () => {
             <div className="absolute bottom-0 left-0 p-5 md:p-8 lg:p-10 w-full max-w-3xl z-10">
               <div className="mb-4 flex items-center gap-3 text-sm font-semibold text-slate-200">
                 <span className="px-3 py-1 rounded-full bg-[rgba(255,79,163,0.2)] border border-[rgba(255,122,182,0.45)] text-xs tracking-[0.16em] uppercase text-[#ffd1e8]">Featured</span>
-                <span className="hidden sm:inline text-white/70">English | Hindi | Tamil | Telugu | Malayalam | Kannada</span>
               </div>
 
               <h1 className="text-4xl md:text-6xl font-black mb-3 text-white tracking-[0.22em] uppercase leading-none">
@@ -288,7 +323,11 @@ const Home: React.FC = () => {
                       try {
                         const type = featured.media_type || (featured.title ? 'movie' : 'tv');
                         const details = await getDetails(type as 'movie' | 'tv', featured.id);
-                        play(details);
+                        if (type === 'tv') {
+                          play(details, 1, 1);
+                        } else {
+                          play(details);
+                        }
                       } catch (e) {
                         console.error('Failed to play featured item', e);
                       }
@@ -298,7 +337,7 @@ const Home: React.FC = () => {
                   activeClassName="ring-4 ring-primary scale-105 z-20"
                 >
                   <Play fill="currentColor" size={18} />
-                  Play S1 E1
+                  {featuredPlayLabel}
                 </Focusable>
 
                 <Focusable
@@ -336,6 +375,22 @@ const Home: React.FC = () => {
                   Details
                 </Focusable>
               </div>
+
+              {featuredItems.length > 1 && (
+                <div className="mt-4 flex items-center gap-2">
+                  {featuredItems.map((item, index) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setFeaturedIndex(index)}
+                      className={`h-2.5 rounded-full transition-all duration-300 ${
+                        index === featuredIndex ? 'w-7 bg-white' : 'w-2.5 bg-white/45 hover:bg-white/70'
+                      }`}
+                      aria-label={`Show featured item ${index + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

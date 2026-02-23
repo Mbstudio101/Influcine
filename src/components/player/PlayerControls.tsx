@@ -87,7 +87,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
         <div className="flex items-center gap-4">
           <Focusable onEnter={onTogglePlay}>
             <button 
-              onClick={onTogglePlay}
+              type="button"
               className="p-2 hover:bg-white/10 rounded-full text-white transition-colors"
             >
               {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current" />}
@@ -96,7 +96,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
 
           <Focusable onEnter={() => onSeek(currentTime - 10)}>
             <button 
-              onClick={() => onSeek(currentTime - 10)}
+              type="button"
               className="p-2 hover:bg-white/10 rounded-full text-white transition-colors"
               title="Rewind 10s"
             >
@@ -106,7 +106,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
 
           <Focusable onEnter={() => onSeek(currentTime + 10)}>
             <button 
-              onClick={() => onSeek(currentTime + 10)}
+              type="button"
               className="p-2 hover:bg-white/10 rounded-full text-white transition-colors"
               title="Forward 10s"
             >
@@ -117,7 +117,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
           {onNext && (
             <Focusable onEnter={onNext}>
               <button 
-                onClick={onNext}
+                type="button"
                 className="p-2 hover:bg-white/10 rounded-full text-white transition-colors group"
                 title="Next Episode"
               >
@@ -129,7 +129,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
           <div className="group relative flex items-center gap-2">
             <Focusable onEnter={onToggleMute}>
               <button 
-                onClick={onToggleMute}
+                type="button"
                 className="p-2 hover:bg-white/10 rounded-full text-white transition-colors"
               >
                 {isMuted || volume === 0 ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
@@ -168,7 +168,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
              <div className="flex items-center gap-2 mr-4 border-r border-white/10 pr-4">
                 <Focusable onEnter={onLike}>
                   <button 
-                    onClick={onLike}
+                    type="button"
                     className={`p-2 rounded-full transition-colors ${userVote === 'like' ? 'text-green-400 bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
                     title="I like this"
                   >
@@ -177,7 +177,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                 </Focusable>
                 <Focusable onEnter={onDislike}>
                   <button 
-                    onClick={onDislike}
+                    type="button"
                     className={`p-2 rounded-full transition-colors ${userVote === 'dislike' ? 'text-red-400 bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
                     title="Not for me"
                   >
@@ -190,7 +190,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
           {onPipToggle && document.pictureInPictureEnabled && (
              <Focusable onEnter={onPipToggle}>
                <button 
-                 onClick={onPipToggle}
+                 type="button"
                  className={`p-2 hover:bg-white/10 rounded-full text-white transition-colors ${isPip ? 'text-blue-400' : ''}`}
                  title="Picture in Picture"
                >
@@ -201,7 +201,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
 
           <Focusable onEnter={onOpenSettings}>
             <button 
-              onClick={onOpenSettings}
+              type="button"
               className="p-2 hover:bg-white/10 rounded-full text-white transition-colors"
             >
               <Settings className="w-6 h-6" />
@@ -210,7 +210,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
 
           <Focusable onEnter={onToggleFullscreen}>
             <button 
-              onClick={onToggleFullscreen}
+              type="button"
               className="p-2 hover:bg-white/10 rounded-full text-white transition-colors"
             >
               {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}

@@ -94,6 +94,7 @@ const ADBLOCK_SCRIPT = `
   // console.log("[Influcine] AdBlocker Active");
   
   let knownTracks = [];
+  let knownAudioTracks = [];
   let isNativeMode = false; // Default state
 
   // IPC Bridge for Player Control
@@ -118,6 +119,60 @@ const ADBLOCK_SCRIPT = `
         return null;
     }
 
+    function findAllVideos(root, out = []) {
+        if (!root) return out;
+        try {
+            if (root.querySelectorAll) {
+                const vids = root.querySelectorAll('video');
+                vids.forEach(v => out.push(v));
+            }
+        } catch (e) {
+            // ignore
+        }
+        try {
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, null);
+            let node;
+            while (node = walker.nextNode()) {
+                if (node.shadowRoot) {
+                    findAllVideos(node.shadowRoot, out);
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
+        return out;
+    }
+
+    function triggerKeyboardToggle() {
+        try {
+            const evtSpace = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true });
+            document.dispatchEvent(evtSpace);
+            window.dispatchEvent(evtSpace);
+        } catch (e) { /* ignore */ }
+        try {
+            const evtK = new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', bubbles: true });
+            document.dispatchEvent(evtK);
+            window.dispatchEvent(evtK);
+        } catch (e) { /* ignore */ }
+    }
+
+    function clickLikelyControl(kind) {
+        const terms = kind === 'pause'
+          ? ['pause', 'stop']
+          : ['play', 'resume'];
+        const controls = Array.from(document.querySelectorAll('button, [role="button"], .jw-icon, .vjs-play-control'));
+        for (const control of controls) {
+            const text = (control.getAttribute?.('aria-label') || control.getAttribute?.('title') || control.textContent || '').toLowerCase();
+            if (terms.some(t => text.includes(t))) {
+                try {
+                    control.click();
+                    return true;
+                } catch (e) { /* ignore */ }
+            }
+        }
+        return false;
+    }
+
     function notify() {
         const video = findVideo(document);
         if (video) {
@@ -132,16 +187,100 @@ const ADBLOCK_SCRIPT = `
         }
     }
 
-    setInterval(() => {
-        const video = findVideo(document);
-        if (video) {
-            video.addEventListener('play', notify);
-            video.addEventListener('pause', notify);
+    const boundVideos = new WeakSet();
+    let lastPeriodicNotify = 0;
+
+    function scoreVideo(video) {
+        try {
+            const rect = video.getBoundingClientRect();
+            const area = Math.max(0, rect.width) * Math.max(0, rect.height);
+            const visible = rect.width > 120 && rect.height > 90 ? 1 : 0;
+            const notHidden = getComputedStyle(video).display !== 'none' && getComputedStyle(video).visibility !== 'hidden' ? 1 : 0;
+            return area + visible * 100000 + notHidden * 50000;
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    function getPrimaryVideo() {
+        const videos = findAllVideos(document);
+        if (videos.length === 0) return null;
+        let best = videos[0];
+        let bestScore = scoreVideo(best);
+        for (let i = 1; i < videos.length; i++) {
+            const s = scoreVideo(videos[i]);
+            if (s > bestScore) {
+                bestScore = s;
+                best = videos[i];
+            }
+        }
+        return best;
+    }
+    function pauseAllExcept(activeVideo) {
+        const videos = findAllVideos(document);
+        videos.forEach((v) => {
+            if (v === activeVideo) return;
+            try { v.pause(); } catch (e) { /* ignore */ }
+        });
+    }
+    function pauseAllVideos() {
+        const videos = findAllVideos(document);
+        videos.forEach((v) => {
+            try { v.pause(); } catch (e) { /* ignore */ }
+        });
+    }
+
+    function enforceSingleActiveVideo() {
+        const primary = getPrimaryVideo();
+        if (!primary) return;
+        const videos = findAllVideos(document);
+        videos.forEach((v) => {
+            if (v === primary) return;
+            try {
+                if (!v.paused && !v.ended) v.pause();
+            } catch (e) { /* ignore */ }
+        });
+    }
+
+    function bindVideoEvents() {
+        const videos = findAllVideos(document);
+        videos.forEach((video) => {
+            if (boundVideos.has(video)) return;
+            boundVideos.add(video);
+
+            video.addEventListener('play', () => {
+                if (isNativeMode) {
+                    // Keep a single active element in native mode to avoid pause/play conflicts.
+                    pauseAllExcept(video);
+                }
+                notify();
+            });
+
+            video.addEventListener('pause', () => {
+                if (isNativeMode) {
+                    // When user pauses via native controls, stop every mirrored video too.
+                    pauseAllVideos();
+                }
+                notify();
+            });
+
             video.addEventListener('ended', notify);
             video.addEventListener('timeupdate', notify);
             video.addEventListener('loadedmetadata', notify);
+        });
+    }
+
+    setInterval(bindVideoEvents, 1000);
+    setInterval(() => {
+        if (isNativeMode) {
+            enforceSingleActiveVideo();
         }
-    }, 1000);
+        const now = Date.now();
+        if (now - lastPeriodicNotify > 900) {
+            lastPeriodicNotify = now;
+            notify();
+        }
+    }, 500);
 
 
      function checkTracks() {
@@ -184,8 +323,54 @@ const ADBLOCK_SCRIPT = `
              ipcRenderer.send('embed-tracks-found', knownTracks);
          }
      }
+
+     function checkAudioTracks() {
+         const video = findVideo(document);
+         let currentAudioTracks = [];
+
+         // 1. Native audioTracks API when available
+         if (video && video.audioTracks && video.audioTracks.length > 0) {
+            currentAudioTracks = Array.from(video.audioTracks).map((t, i) => ({
+              index: i,
+              id: 'native-' + i,
+              label: t.label || t.language || ('Audio ' + (i + 1)),
+              language: t.language || 'unknown',
+              kind: t.kind || 'main',
+              enabled: !!t.enabled,
+              source: 'native'
+            }));
+         }
+
+         // 2. JWPlayer fallback
+         // @ts-ignore
+         if (currentAudioTracks.length === 0 && window.jwplayer) {
+            try {
+              // @ts-ignore
+              const player = window.jwplayer();
+              if (player && player.getAudioTracks) {
+                const tracks = player.getAudioTracks() || [];
+                const current = player.getCurrentAudioTrack ? player.getCurrentAudioTrack() : -1;
+                currentAudioTracks = tracks.map((t, i) => ({
+                  index: i,
+                  id: 'jw-' + i,
+                  label: t.name || t.label || ('Audio ' + (i + 1)),
+                  language: t.language || t.lang || 'unknown',
+                  kind: 'main',
+                  enabled: i === current,
+                  source: 'jwplayer'
+                }));
+              }
+            } catch (e) { /* ignore */ }
+         }
+
+         if (JSON.stringify(currentAudioTracks) !== JSON.stringify(knownAudioTracks)) {
+            knownAudioTracks = currentAudioTracks;
+            ipcRenderer.send('embed-audio-tracks-found', knownAudioTracks);
+         }
+     }
      
      setInterval(checkTracks, 2000);
+     setInterval(checkAudioTracks, 2000);
 
      ipcRenderer.on('get-embed-track-cues', (_event, trackIndex) => {
          // Handle JWPlayer
@@ -308,13 +493,61 @@ const ADBLOCK_SCRIPT = `
             videos.forEach(v => { v.controls = false; });
         }
         if (data.command === 'play') {
-            if (video) {
-                const p = video.play();
-                if (p && p.catch) p.catch(() => {});
+            let acted = false;
+            const videos = findAllVideos(document);
+            videos.forEach((v) => {
+                try {
+                    const p = v.play();
+                    if (p && p.catch) p.catch(() => {});
+                    acted = true;
+                } catch (e) {
+                    // ignore
+                }
+            });
+            // @ts-ignore
+            if (window.jwplayer) {
+                try {
+                    // @ts-ignore
+                    const player = window.jwplayer();
+                    if (player && player.play) {
+                        player.play(true);
+                        acted = true;
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }
+            if (!acted && !clickLikelyControl('play')) {
+                triggerKeyboardToggle();
             }
         }
         if (data.command === 'pause') {
-            if (video) video.pause();
+            let acted = false;
+            const videos = findAllVideos(document);
+            videos.forEach((v) => {
+                try {
+                    v.pause();
+                    acted = true;
+                } catch (e) {
+                    // ignore
+                }
+            });
+            // @ts-ignore
+            if (window.jwplayer) {
+                try {
+                    // @ts-ignore
+                    const player = window.jwplayer();
+                    if (player && player.pause) {
+                        player.pause(true);
+                        acted = true;
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }
+            if (!acted && !clickLikelyControl('pause')) {
+                triggerKeyboardToggle();
+            }
         }
         if (data.command === 'setVolume') {
             const vol = Math.max(0, Math.min(1, Number(data.volume ?? 1)));
@@ -333,6 +566,26 @@ const ADBLOCK_SCRIPT = `
         }
         if (data.command === 'seek') {
              if (video) video.currentTime = data.time;
+        }
+        if (data.command === 'setAudioTrack') {
+            // Native
+            if (video && video.audioTracks && Number.isFinite(Number(data.trackIndex))) {
+                const trackIndex = Number(data.trackIndex);
+                for (let i = 0; i < video.audioTracks.length; i++) {
+                    video.audioTracks[i].enabled = i === trackIndex;
+                }
+            }
+            // JWPlayer fallback
+            // @ts-ignore
+            if (window.jwplayer && Number.isFinite(Number(data.trackIndex))) {
+                try {
+                    // @ts-ignore
+                    const player = window.jwplayer();
+                    if (player && player.setCurrentAudioTrack) {
+                        player.setCurrentAudioTrack(Number(data.trackIndex));
+                    }
+                } catch (e) { /* ignore */ }
+            }
         }
     });
   } catch {}
@@ -567,6 +820,12 @@ ipcMain.on('embed-tracks-found', (_event, tracks) => {
 ipcMain.on('embed-track-cues', (_event, data) => {
   if (win && !win.isDestroyed()) {
     win.webContents.send('embed-track-cues', data);
+  }
+});
+
+ipcMain.on('embed-audio-tracks-found', (_event, tracks) => {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('embed-audio-tracks-found', tracks);
   }
 });
 

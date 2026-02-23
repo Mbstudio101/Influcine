@@ -6,12 +6,13 @@ import { errorAgent } from '../services/errorAgent';
 import { SkipForward, X } from 'lucide-react';
 
 // Hooks
-import { usePlayerAudio } from '../hooks/usePlayerAudio';
+import { ExtendedAudioTrack, usePlayerAudio } from '../hooks/usePlayerAudio';
 import { usePlayerSubtitles } from '../hooks/usePlayerSubtitles';
 import { useAuth } from '../context/useAuth';
 import { getPreference, togglePreference } from '../services/recommendationEngine';
 
 import { SubtitleCue, parseSubtitle } from '../utils/subtitleParser';
+import { isTVActionKey } from '../utils/tvKeymap';
 
 // Components
 import { PlayerHeader } from './player/PlayerHeader';
@@ -129,6 +130,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const [internalPip, setInternalPip] = useState(false);
   const [adblockPath, setAdblockPath] = useState<string>('');
   const [isNativeMode, setIsNativeMode] = useState(true); // Default to true
+  const [embedAudioTracks, setEmbedAudioTracks] = useState<ExtendedAudioTrack[]>([]);
 
   // Video Filters
   const [videoFilters, setVideoFilters] = useState<VideoFilters>({ brightness: 1, contrast: 1, saturation: 1 });
@@ -254,9 +256,31 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     isSearchingSubs
   } = usePlayerSubtitles(videoRef, isEmbed, mediaData, src);
 
+  const effectiveAudioTracks = React.useMemo(() => {
+    if (!isEmbed) return availableTracks;
+    if (embedAudioTracks.length > 0) return embedAudioTracks;
+    return availableTracks;
+  }, [isEmbed, availableTracks, embedAudioTracks]);
+
+  const subtitleOptionsCount =
+    availableSubtitles.length + externalSubtitles.length + embedTracks.length + autoSubtitles.length;
+  const hasSubtitleOptions = subtitleOptionsCount > 0;
+  const hasDubOptions = (() => {
+    const tracks = effectiveAudioTracks;
+    if (tracks.length > 1) return true;
+    return tracks.some((track) => {
+      const value = `${track.label || ''} ${track.language || ''}`.toLowerCase();
+      return value.includes('dub') || value.includes('english') || value.includes('multi');
+    });
+  })();
+
   const { subtitleSize, subtitleColor } = useSettings();
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
+  const isPlayingRef = useRef(false);
+  const pendingPlayPauseRetryRef = useRef<number | null>(null);
+  const pendingPlayPauseTargetRef = useRef<'play' | 'pause' | null>(null);
+  const lastDesyncLogAtRef = useRef(0);
 
   // --- Logic ---
 
@@ -270,6 +294,10 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     }
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }, []);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   // Initialize
   useEffect(() => {
@@ -332,18 +360,69 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     };
   }, [isPlaying]);
 
+  const sendEmbedPlayPauseCommand = useCallback((command: 'play' | 'pause') => {
+    try {
+      if (iframeRef.current?.send) {
+        iframeRef.current.send('player-command', { command });
+      } else {
+        iframeRef.current?.contentWindow?.postMessage({ command }, '*');
+      }
+    } catch (e) {
+      errorAgent.log({
+        message: 'Failed to send embed play/pause command',
+        type: 'WARN',
+        context: { command, error: String(e) },
+      });
+    }
+  }, []);
+
+  const clearPendingPlayPauseRetry = useCallback(() => {
+    if (pendingPlayPauseRetryRef.current) {
+      window.clearTimeout(pendingPlayPauseRetryRef.current);
+      pendingPlayPauseRetryRef.current = null;
+    }
+    pendingPlayPauseTargetRef.current = null;
+  }, []);
+
   const togglePlay = useCallback(() => {
     if (isEmbed) {
-      if (iframeRef.current?.send) {
-        iframeRef.current.send('player-command', { command: isPlaying ? 'pause' : 'play' });
-        setIsPlaying(!isPlaying);
-      } else {
-        const win = iframeRef.current?.contentWindow;
-        if (win) {
-          win.postMessage({ command: isPlaying ? 'pause' : 'play' }, '*');
-          setIsPlaying(!isPlaying);
-        }
+      const target: 'play' | 'pause' = isPlayingRef.current ? 'pause' : 'play';
+      pendingPlayPauseTargetRef.current = target;
+      setIsPlaying(target === 'play');
+      sendEmbedPlayPauseCommand(target);
+
+      if (pendingPlayPauseRetryRef.current) {
+        window.clearTimeout(pendingPlayPauseRetryRef.current);
       }
+
+      pendingPlayPauseRetryRef.current = window.setTimeout(() => {
+        const isSynced =
+          (target === 'pause' && !isPlayingRef.current) ||
+          (target === 'play' && isPlayingRef.current);
+
+        if (!isSynced) {
+          sendEmbedPlayPauseCommand(target);
+          pendingPlayPauseRetryRef.current = window.setTimeout(() => {
+            const syncedAfterRetry =
+              (target === 'pause' && !isPlayingRef.current) ||
+              (target === 'play' && isPlayingRef.current);
+            if (!syncedAfterRetry) {
+              const now = Date.now();
+              if (now - lastDesyncLogAtRef.current > 30000) {
+                lastDesyncLogAtRef.current = now;
+                errorAgent.log({
+                  message: 'Embed play/pause state desync detected',
+                  type: 'INFO',
+                  context: { target, isPlaying: isPlayingRef.current, title, provider },
+                });
+              }
+            }
+            clearPendingPlayPauseRetry();
+          }, 450);
+          return;
+        }
+        clearPendingPlayPauseRetry();
+      }, 380);
       return;
     }
     if (videoRef.current) {
@@ -360,7 +439,58 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
         setIsPlaying(false);
       }
     }
-  }, [isEmbed, isPlaying, resumeAudioContext]);
+  }, [isEmbed, resumeAudioContext, sendEmbedPlayPauseCommand, clearPendingPlayPauseRetry, title, provider]);
+
+  useEffect(() => {
+    const handleRemoteToggle = () => {
+      togglePlay();
+    };
+    window.addEventListener('influcine:toggle-playback', handleRemoteToggle as EventListener);
+    return () => window.removeEventListener('influcine:toggle-playback', handleRemoteToggle as EventListener);
+  }, [togglePlay]);
+
+  useEffect(() => {
+    if (isEmbed) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const logMediaError = (eventName: string) => {
+      const mediaError = video.error;
+      errorAgent.log({
+        message: `Media ${eventName}`,
+        type: eventName === 'error' ? 'ERROR' : 'WARN',
+        context: {
+          code: mediaError?.code,
+          message: mediaError?.message,
+          networkState: video.networkState,
+          readyState: video.readyState,
+          src,
+          title,
+          provider,
+        },
+      });
+    };
+
+    const onError = () => logMediaError('error');
+    const onStalled = () => logMediaError('stalled');
+    const onAbort = () => logMediaError('abort');
+
+    video.addEventListener('error', onError);
+    video.addEventListener('stalled', onStalled);
+    video.addEventListener('abort', onAbort);
+
+    return () => {
+      video.removeEventListener('error', onError);
+      video.removeEventListener('stalled', onStalled);
+      video.removeEventListener('abort', onAbort);
+    };
+  }, [isEmbed, src, title, provider]);
+
+  useEffect(() => {
+    return () => {
+      clearPendingPlayPauseRetry();
+    };
+  }, [clearPendingPlayPauseRetry]);
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -513,6 +643,25 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
         // Ignore if typing in an input
         if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
 
+        if (isTVActionKey(e, 'playPause')) {
+          e.preventDefault();
+          togglePlay();
+          return;
+        }
+
+        if (isTVActionKey(e, 'back')) {
+          if (showSettings) {
+            e.preventDefault();
+            setShowSettings(false);
+            return;
+          }
+          if (onBack) {
+            e.preventDefault();
+            onBack();
+            return;
+          }
+        }
+
         switch(e.key.toLowerCase()) {
             case 'escape':
                 e.preventDefault();
@@ -554,7 +703,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, toggleFullscreen, toggleMute, currentTime, volume, handleSeek, handleVolumeChange, showSettings]);
+  }, [togglePlay, toggleFullscreen, toggleMute, currentTime, volume, handleSeek, handleVolumeChange, showSettings, onBack]);
 
   const handleLoadedMetadata = () => {
     if (isEmbed) return;
@@ -670,6 +819,21 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
         setEmbedTracks(tracks);
     };
 
+    const handleAudioTracks = (
+      _: import('electron').IpcRendererEvent,
+      tracks: { index: number; label: string; language: string; kind?: string; enabled?: boolean }[]
+    ) => {
+      setEmbedAudioTracks(
+        (tracks || []).map((track) => ({
+          id: `embed-${track.index}`,
+          label: track.label || `Audio ${track.index + 1}`,
+          language: track.language || 'unknown',
+          kind: track.kind || 'main',
+          enabled: !!track.enabled,
+        }))
+      );
+    };
+
     const handleCues = (_: import('electron').IpcRendererEvent, data: {index: number, cues: SubtitleCue[]}) => {
         if (data.index === activeEmbedTrackIndex) {
             setCustomSubtitles(data.cues);
@@ -703,12 +867,14 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 
     if (window.ipcRenderer) {
         window.ipcRenderer.on('embed-tracks-found', handleTracks);
+        window.ipcRenderer.on('embed-audio-tracks-found', handleAudioTracks);
         window.ipcRenderer.on('embed-track-cues', handleCues);
         window.ipcRenderer.on('player-state-update', handleStateUpdate);
     }
     return () => {
         if (window.ipcRenderer) {
             window.ipcRenderer.removeAllListeners('embed-tracks-found');
+            window.ipcRenderer.removeAllListeners('embed-audio-tracks-found');
             window.ipcRenderer.removeAllListeners('embed-track-cues');
             window.ipcRenderer.removeAllListeners('player-state-update');
         }
@@ -962,8 +1128,20 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
                 audioMode={audioMode}
                 onAudioModeChange={setAudioMode}
                 audioFormat={audioFormat}
-                availableTracks={availableTracks}
-                onTrackChange={switchAudioTrack}
+                availableTracks={effectiveAudioTracks}
+                onTrackChange={(track) => {
+                  if (isEmbed) {
+                    const raw = track.id?.startsWith('embed-')
+                      ? track.id.replace('embed-', '')
+                      : String(effectiveAudioTracks.findIndex((t) => t === track));
+                    const trackIndex = Number(raw);
+                    if (Number.isFinite(trackIndex) && trackIndex >= 0) {
+                      iframeRef.current?.send?.('player-command', { command: 'setAudioTrack', trackIndex });
+                    }
+                    return;
+                  }
+                  switchAudioTrack(track);
+                }}
                 availableSubtitles={availableSubtitles}
                 externalSubtitles={externalSubtitles}
                 activeSubtitleIndex={activeSubtitleIndex}
@@ -996,6 +1174,8 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
                 onStartSleepTimer={startSleepTimer}
                 onCancelSleepTimer={cancelSleepTimer}
                 sleepTimerRemaining={sleepTimerRemaining}
+                hasSubtitleOptions={hasSubtitleOptions}
+                hasDubOptions={hasDubOptions}
             />
           </div>
       )}

@@ -157,6 +157,10 @@ export const getPersonDetails = async (personId: number): Promise<PersonDetails>
   return fetchApi<PersonDetails>(`/person/${personId}`);
 };
 
+export const getExternalIds = async (type: 'movie' | 'tv', id: number): Promise<{ imdb_id?: string | null }> => {
+  return fetchApi<{ imdb_id?: string | null }>(`/${type}/${id}/external_ids`);
+};
+
 interface WatchProviderItem {
   provider_id: number;
   provider_name: string;

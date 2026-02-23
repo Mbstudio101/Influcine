@@ -36,6 +36,7 @@ import {
 } from '../services/updateService';
 import pkg from '../../package.json';
 import { AppVersion } from '../types';
+import { TV_KEY_PROFILE_STORAGE_KEY, TVKeyProfile, resolveTVKeyProfile } from '../utils/tvKeymap';
 
 const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'appearance' | 'player' | 'account' | 'storage' | 'privacy' | 'system'>('appearance');
@@ -46,6 +47,11 @@ const Settings: React.FC = () => {
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'up-to-date' | 'downloading' | 'ready' | 'error'>('idle');
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
+  const [tvKeyProfile, setTvKeyProfile] = useState<TVKeyProfile>(() => {
+    if (typeof window === 'undefined') return 'auto';
+    const stored = window.localStorage.getItem(TV_KEY_PROFILE_STORAGE_KEY) as TVKeyProfile | null;
+    return stored || 'auto';
+  });
 
   const handleCheckUpdate = async () => {
     setUpdateStatus('checking');
@@ -153,6 +159,13 @@ Removed ${report.historyRemoved} items from History
 Removed ${report.episodeProgressRemoved} duplicate progress items
 Removed ${report.sourceMemoryRemoved} duplicate source items`);
       }
+    }
+  };
+
+  const handleTvProfileChange = (profile: TVKeyProfile) => {
+    setTvKeyProfile(profile);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(TV_KEY_PROFILE_STORAGE_KEY, profile);
     }
   };
 
@@ -412,6 +425,34 @@ Removed ${report.sourceMemoryRemoved} duplicate source items`);
                   >
                     <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-transform duration-300 ${autoplay ? 'left-7' : 'left-1'}`} />
                   </button>
+                </div>
+              </section>
+
+              <section>
+                <h2 className="text-2xl font-bold mb-4">TV Remote Controls</h2>
+                <div className="p-4 bg-white/5 rounded-xl border border-white/5 space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h3 className="font-bold">Remote Key Profile</h3>
+                      <p className="text-sm text-gray-400">Choose how directional/select/back/play keys are mapped for TV remotes.</p>
+                    </div>
+                    <select
+                      value={tvKeyProfile}
+                      onChange={(e) => handleTvProfileChange(e.target.value as TVKeyProfile)}
+                      className="bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary min-w-[180px]"
+                    >
+                      <option value="auto">Auto Detect</option>
+                      <option value="default">Default</option>
+                      <option value="firetv">Fire TV</option>
+                      <option value="androidtv">Android TV</option>
+                      <option value="roku">Roku-like</option>
+                      <option value="tizen">Samsung Tizen</option>
+                      <option value="webos">LG webOS</option>
+                    </select>
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    Active mapping: <span className="font-semibold text-white">{resolveTVKeyProfile(tvKeyProfile)}</span>
+                  </div>
                 </div>
               </section>
             </div>

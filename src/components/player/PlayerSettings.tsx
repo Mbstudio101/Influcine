@@ -66,6 +66,8 @@ interface PlayerSettingsProps {
   onStartSleepTimer?: (minutes: number) => void;
   onCancelSleepTimer?: () => void;
   sleepTimerRemaining?: string | null;
+  hasSubtitleOptions?: boolean;
+  hasDubOptions?: boolean;
 }
 
 export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
@@ -81,13 +83,15 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
   provider, onProviderChange,
   isNativeMode, onToggleNativeMode,
   videoFilters, onVideoFiltersChange,
-  sleepTimerMinutes, onStartSleepTimer, onCancelSleepTimer, sleepTimerRemaining
+  sleepTimerMinutes, onStartSleepTimer, onCancelSleepTimer, sleepTimerRemaining,
+  hasSubtitleOptions = false, hasDubOptions = false
 }) => {
-  const hasSubtitleOptions =
+  const detectedSubtitleOptions =
     autoSubtitles.length > 0 ||
     embedTracks.length > 0 ||
     availableSubtitles.length > 0 ||
     externalSubtitles.length > 0;
+  const subtitleAvailable = hasSubtitleOptions || detectedSubtitleOptions;
 
   return (
     <AnimatePresence>
@@ -211,6 +215,13 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
 
             {activeTab === 'audio' && (
               <div className="space-y-6">
+                <div className="bg-white/5 rounded-xl p-3 flex items-center justify-between text-xs">
+                  <div className="text-white/60">Dubbed audio</div>
+                  <div className={`font-semibold ${hasDubOptions ? 'text-[#5eead4]' : 'text-white/45'}`}>
+                    {hasDubOptions ? 'Available' : 'Not detected'}
+                  </div>
+                </div>
+
                 {/* Cinema Audio Toggle */}
                 <div className="bg-white/5 rounded-xl p-4 space-y-3">
                   <div className="flex items-center gap-2 text-[#ff7ab6] mb-2">
@@ -384,6 +395,13 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
 
             {activeTab === 'subtitles' && (
               <div className="space-y-6">
+                <div className="bg-white/5 rounded-xl p-3 flex items-center justify-between text-xs">
+                  <div className="text-white/60">Subtitles</div>
+                  <div className={`font-semibold ${subtitleAvailable ? 'text-[#5eead4]' : 'text-white/45'}`}>
+                    {subtitleAvailable ? 'Available' : 'Not detected'}
+                  </div>
+                </div>
+
                 <div className="flex gap-2 mb-4">
                   <button 
                     onClick={onUploadClick}
@@ -405,7 +423,7 @@ export const PlayerSettings: React.FC<PlayerSettingsProps> = ({
                     </div>
                 )}
 
-                {!isSearchingSubs && !hasSubtitleOptions && (
+                {!isSearchingSubs && !subtitleAvailable && (
                   <div className="text-center py-4 text-white/45 text-sm">
                     No subtitle tracks found yet. Try switching source, uploading a file, or searching online.
                   </div>

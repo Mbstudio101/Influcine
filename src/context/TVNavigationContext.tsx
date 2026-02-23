@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { isTVActionKey } from '../utils/tvKeymap';
 
 type Direction = 'up' | 'down' | 'left' | 'right';
 
@@ -133,13 +134,13 @@ export const TVNavigationProvider: React.FC<TVNavigationProviderProps> = ({ chil
         tagName === 'TEXTAREA' ||
         target?.isContentEditable === true;
 
-      const keyCode = (e as KeyboardEvent & { keyCode?: number }).keyCode ?? 0;
-      const isUp = e.key === 'ArrowUp' || keyCode === 38 || keyCode === 19;
-      const isDown = e.key === 'ArrowDown' || keyCode === 40 || keyCode === 20;
-      const isLeft = e.key === 'ArrowLeft' || keyCode === 37 || keyCode === 21;
-      const isRight = e.key === 'ArrowRight' || keyCode === 39 || keyCode === 22;
-      const isSelect = e.key === 'Enter' || keyCode === 13 || keyCode === 23;
-      const isBack = e.key === 'Escape' || e.key === 'Backspace' || keyCode === 4 || keyCode === 27 || keyCode === 8;
+      const isUp = isTVActionKey(e, 'up');
+      const isDown = isTVActionKey(e, 'down');
+      const isLeft = isTVActionKey(e, 'left');
+      const isRight = isTVActionKey(e, 'right');
+      const isSelect = isTVActionKey(e, 'select');
+      const isBack = isTVActionKey(e, 'back');
+      const isPlayPause = isTVActionKey(e, 'playPause');
 
       if (!focusedId && elementsRef.current.size > 0) {
         // Recover focus if lost
@@ -196,6 +197,12 @@ export const TVNavigationProvider: React.FC<TVNavigationProviderProps> = ({ chil
         }
         e.preventDefault();
         window.history.back();
+        return;
+      }
+
+      if (isPlayPause) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('influcine:toggle-playback'));
         return;
       }
     };

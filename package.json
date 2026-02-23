@@ -14,6 +14,11 @@
     "build": "tsc && vite build",
     "build:electron": "tsc && vite build && electron-builder",
     "build:web": "tsc && vite build",
+    "tv:sync": "npm run build:web && npx cap sync android",
+    "tv:android:debug": "npm run tv:sync && cd android && ./gradlew assembleDebug",
+    "tv:android:release": "npm run tv:sync && cd android && ./gradlew assembleRelease bundleRelease",
+    "tv:artifacts": "bash scripts/tv_collect_artifacts.sh",
+    "tv:release": "npm run tv:android:release && npm run tv:artifacts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "test": "vitest run"

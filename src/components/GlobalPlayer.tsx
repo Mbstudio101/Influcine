@@ -6,6 +6,7 @@ import { X, Maximize2, Monitor } from 'lucide-react';
 import { usePlayerProgress } from '../hooks/usePlayerProgress';
 import { usePlayerAnalytics } from '../hooks/usePlayerAnalytics';
 import { useLocation } from 'react-router-dom';
+import { getExternalIds } from '../services/tmdb';
 
 const GlobalPlayer: React.FC = () => {
   const { state, close, maximize, togglePip, play } = usePlayer();
@@ -26,6 +27,7 @@ const GlobalPlayer: React.FC = () => {
   const [startTime, setStartTime] = useState(requestedStartTime || 0);
   const isPlayingRef = useRef(false);
   const [provider, setProvider] = useState<StreamProvider>('vidlink');
+  const [resolvedImdbId, setResolvedImdbId] = useState<string | undefined>(media?.imdb_id);
 
   // PiP Size Management
   const [pipSize, setPipSize] = useState<'sm' | 'md' | 'lg'>('md');
@@ -58,6 +60,36 @@ const GlobalPlayer: React.FC = () => {
 
   const type = media?.media_type === 'tv' ? 'tv' : 'movie';
   const id = media?.id?.toString();
+
+  useEffect(() => {
+    let cancelled = false;
+    const mediaImdb = media?.imdb_id;
+
+    if (!media?.id) {
+      setResolvedImdbId(undefined);
+      return;
+    }
+
+    if (mediaImdb) {
+      setResolvedImdbId(mediaImdb);
+      return;
+    }
+
+    setResolvedImdbId(undefined);
+    getExternalIds(type, media.id)
+      .then((external) => {
+        if (cancelled) return;
+        setResolvedImdbId(external?.imdb_id || undefined);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setResolvedImdbId(undefined);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [media?.id, media?.imdb_id, type]);
 
   // Resolve stream
   const streamUrl = null;
@@ -277,7 +309,7 @@ const GlobalPlayer: React.FC = () => {
                 isPip={isMini}
                 mediaData={{
             tmdbId: id,
-            imdbId: media?.imdb_id,
+            imdbId: resolvedImdbId,
             type: type,
             season: season,
             episode: episode

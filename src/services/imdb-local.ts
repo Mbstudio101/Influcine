@@ -1,5 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
-
 export interface IMDBMovie {
   tconst: string;
   primaryTitle: string;
@@ -16,6 +14,7 @@ export const searchLocalIMDB = async (query: string): Promise<IMDBMovie[]> => {
     return [];
   }
   try {
+    const { invoke } = await import('@tauri-apps/api/core');
     const response = await invoke<{ results: IMDBMovie[]; error?: string }>('imdb_search', { query });
     if (response.error) {
       console.warn('IMDB Search Error:', response.error);

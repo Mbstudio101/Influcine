@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
 import { logger } from './logger';
 
 interface ErrorLog {
@@ -67,6 +66,7 @@ class ErrorAgent {
 
     try {
       if (isTauri) {
+        const { invoke } = await import('@tauri-apps/api/core');
         await invoke('log_error', { errorData: error });
       }
     } catch (e) {
@@ -76,6 +76,7 @@ class ErrorAgent {
 
   public async getLogsPath(): Promise<string> {
     if (isTauri) {
+      const { invoke } = await import('@tauri-apps/api/core');
       return await invoke<string>('get_logs_path');
     }
     return '';

@@ -4,9 +4,12 @@ import { ChevronLeft, Minimize2, Maximize2, X, Square, Crown } from 'lucide-reac
 import clsx from 'clsx';
 import { useAuth } from '../context/useAuth';
 import { Avatar } from './Avatars';
-import { invoke } from '@tauri-apps/api/core';
-
 const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+
+async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<T>(cmd, args);
+}
 
 interface TitleBarProps {
   className?: string;
@@ -20,13 +23,13 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const handleMinimize = useCallback(() => {
-    if (isTauri) invoke('window_minimize');
+    if (isTauri) tauriInvoke('window_minimize');
   }, []);
 
   const handleMaximize = useCallback(async () => {
     if (isTauri) {
       try {
-        const fullscreen = await invoke<boolean>('window_toggle_fullscreen');
+        const fullscreen = await tauriInvoke<boolean>('window_toggle_fullscreen');
         setIsFullscreen(fullscreen);
       } catch {
         setIsFullscreen(prev => !prev);
@@ -35,7 +38,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
   }, []);
 
   const handleClose = useCallback(() => {
-    if (isTauri) invoke('window_close');
+    if (isTauri) tauriInvoke('window_close');
   }, []);
 
   useEffect(() => {
@@ -43,7 +46,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
     const syncMaxState = async () => {
       if (!isTauri) return;
       try {
-        const fullscreen = await invoke<boolean>('window_is_fullscreen');
+        const fullscreen = await tauriInvoke<boolean>('window_is_fullscreen');
         if (active) setIsFullscreen(fullscreen);
       } catch {
         // Ignore in web mode

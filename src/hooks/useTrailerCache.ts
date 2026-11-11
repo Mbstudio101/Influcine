@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { errorAgent } from '../services/errorAgent';
 
 const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
@@ -22,6 +21,7 @@ export const useTrailerCache = (videoId: string | undefined) => {
           return;
         }
 
+        const { invoke } = await import('@tauri-apps/api/core');
         const localUrl = await invoke<string | null>('trailer_check', { videoId });
 
         if (mounted) {

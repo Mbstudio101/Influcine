@@ -1,5 +1,4 @@
 import { Subtitle, AutoSubtitle, ImdbResult, ImdbDetails, UpdateCheckResult } from '../types';
-import { invoke } from '@tauri-apps/api/core';
 
 export interface ElectronService {
   getAdblockPath(): Promise<string>;
@@ -24,6 +23,7 @@ class TauriServiceImpl implements ElectronService {
     if (!isTauri) {
       return Promise.reject(new Error('Tauri API not available'));
     }
+    const { invoke } = await import('@tauri-apps/api/core');
     return invoke<T>(command, args);
   }
 

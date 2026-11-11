@@ -1,8 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { AppVersion } from '../types';
 import { logger } from './logger';
-import { invoke } from '@tauri-apps/api/core';
-
 const GITHUB_REPO = 'Mbstudio101/influcine';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
@@ -57,6 +55,7 @@ export const checkForUpdates = async (currentVersion: string): Promise<AppVersio
     // 1. Tauri backend check
     if (isTauri) {
       try {
+        const { invoke } = await import('@tauri-apps/api/core');
         const result = await invoke<{ update: boolean; version?: string; releaseNotes?: string }>('update_check', { currentVersion });
         if (result.update && result.version) {
           return {

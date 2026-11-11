@@ -6,8 +6,6 @@ import { motion } from 'framer-motion';
 import Logo from '../components/Logo';
 import Focusable from '../components/Focusable';
 import { useToast } from '../context/toast';
-import { invoke } from '@tauri-apps/api/core';
-
 const isTVEnvironment = typeof navigator !== 'undefined' && /AFT|Amazon|Android TV|BRAVIA|SMART-TV/i.test(navigator.userAgent);
 
 const Login: React.FC = () => {
@@ -31,6 +29,7 @@ const Login: React.FC = () => {
       try {
         const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
         if (!isTauri) return;
+        const { invoke } = await import('@tauri-apps/api/core');
         const saved = await invoke<{ email: string; password: string } | null>('credentials_load');
         if (saved?.email) {
           setEmail(saved.email);
@@ -54,6 +53,7 @@ const Login: React.FC = () => {
       // Save or clear credentials based on "Remember me"
       const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
       if (isTauri) {
+        const { invoke } = await import('@tauri-apps/api/core');
         if (rememberMe) {
           await invoke('credentials_save', { email, password });
         } else {

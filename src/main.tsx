@@ -81,9 +81,3 @@ const initApp = async () => {
 initApp();
 
 
-// Use contextBridge
-window.ipcRenderer?.on('main-process-message', () => {
-  if (import.meta.env.DEV) {
-    // console.log(message)
-  }
-})

@@ -3,14 +3,13 @@ import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'reac
 import Layout from './components/Layout';
 import SplashScreen from './components/SplashScreen';
 import { useAuth } from './context/useAuth';
-import { 
-  checkForUpdates, 
-  getPlatformDownloadLink, 
-  skipUpdate, 
-  downloadUpdate, 
-  installUpdate, 
-  onUpdateProgress, 
-  onUpdateDownloaded 
+import {
+  checkForUpdates,
+  getPlatformDownloadLink,
+  skipUpdate,
+  installUpdate,
+  onUpdateProgress,
+  onUpdateDownloaded
 } from './services/updateService';
 import { AppVersion } from './types';
 import pkg from '../package.json';
@@ -82,33 +81,23 @@ function App() {
   const [updateProgress, setUpdateProgress] = useState(0);
   const [updateReady, setUpdateReady] = useState(false);
   const initialized = useRef(false);
-  const isElectronRuntime = typeof window !== 'undefined' && !!window.ipcRenderer;
+  const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
   useEffect(() => {
-    // Listen for update progress
     const cleanupProgress = onUpdateProgress((progress) => {
       setUpdateDownloading(true);
       setUpdateProgress(progress.percent);
     });
 
-    // Listen for update downloaded
     const cleanupDownloaded = onUpdateDownloaded(() => {
       setUpdateDownloading(false);
       setUpdateReady(true);
       setUpdateProgress(100);
     });
 
-    // Listen for update errors — reset downloading state so user can retry
-    const handleUpdateError = () => {
-      setUpdateDownloading(false);
-      setUpdateProgress(0);
-    };
-    window.ipcRenderer?.on('update-error', handleUpdateError);
-
     return () => {
       cleanupProgress();
       cleanupDownloaded();
-      window.ipcRenderer?.off('update-error', handleUpdateError);
     };
   }, []);
 
@@ -142,7 +131,7 @@ function App() {
     }
 
     const check = async () => {
-      if (isElectronRuntime) return;
+      if (!isTauri) return;
       try {
         const update = await checkForUpdates(pkg.version);
         if (update) {
@@ -153,7 +142,7 @@ function App() {
       }
     };
     check();
-  }, [isElectronRuntime]);
+  }, [isTauri]);
 
   const handleUpdate = async () => {
     if (!updateAvailable) return;
@@ -167,31 +156,11 @@ function App() {
       return;
     }
 
-    // Check if this update came from the native Electron autoUpdater (platforms = 'ipc')
-    const isNativeUpdate = updateAvailable.platforms.macos === 'ipc' ||
-                           updateAvailable.platforms.windows === 'ipc' ||
-                           updateAvailable.platforms.linux === 'ipc';
-
-    if (isNativeUpdate) {
-      // Use Electron's autoUpdater for in-app download + install
-      try {
-        setUpdateDownloading(true);
-        setUpdateProgress(0);
-        await downloadUpdate();
-        // Progress and completion are handled by IPC event listeners
-      } catch (error) {
-        logger.error('Native update download failed', { error: String(error) });
-        setUpdateDownloading(false);
-        setUpdateProgress(0);
-      }
+    const link = getPlatformDownloadLink(updateAvailable);
+    if (link) {
+      window.open(link, '_blank');
     } else {
-      // GitHub API fallback — open download link in browser
-      const link = getPlatformDownloadLink(updateAvailable);
-      if (link) {
-        window.open(link, '_blank');
-      } else {
-        logger.warn('No download link found for this platform');
-      }
+      logger.warn('No download link found for this platform');
     }
   };
 
@@ -202,7 +171,7 @@ function App() {
   return (
     <PlayerProvider>
       <>
-        {updateAvailable && !isElectronRuntime && (
+        {updateAvailable && isTauri && (
           <UpdateModal 
             update={updateAvailable} 
             onClose={() => {

@@ -11,6 +11,7 @@ node_modules
 dist
 dist-electron
 release
+src-tauri/target/
 dist-ssr
 *.local
 .env

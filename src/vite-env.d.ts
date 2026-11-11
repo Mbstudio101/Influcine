@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface Window {
-  ipcRenderer: import('electron').IpcRenderer
+  __TAURI__?: Record<string, unknown>;
 }
 
 declare namespace JSX {

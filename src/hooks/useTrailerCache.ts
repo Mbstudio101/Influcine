@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { errorAgent } from '../services/errorAgent';
+
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
 export const useTrailerCache = (videoId: string | undefined) => {
   const [cachedUrl, setCachedUrl] = useState<string | null>(null);
@@ -14,31 +17,16 @@ export const useTrailerCache = (videoId: string | undefined) => {
 
     const init = async () => {
       try {
-        // Strategy: Always return 'trailer://' protocol URL to allow immediate streaming.
-        // The backend protocol handler will decide whether to serve from disk or stream from YouTube.
-        // This ensures the UI always gets a valid video source for the <video> tag.
-
-        const ipc = window.ipcRenderer;
-        if (!ipc) {
-          if (mounted) setCachedUrl(`trailer://v/${videoId}`);
+        if (!isTauri) {
+          if (mounted) setCachedUrl(null);
           return;
         }
 
-        // Check if exists locally (or just get the stream URL)
-        const localUrl = await ipc.invoke('trailer-check', videoId);
-        
-        if (mounted) {
-           if (localUrl) {
-            setCachedUrl(localUrl);
-          } else {
-            // Fallback for safety, though trailer-check should now always return a URL
-            // We use trailer://v/ID format to preserve case-sensitivity of YouTube IDs
-            setCachedUrl(`trailer://v/${videoId}`);
-          }
-        }
+        const localUrl = await invoke<string | null>('trailer_check', { videoId });
 
-        // Background trailer download intentionally disabled.
-        // We only use immediate protocol streaming/local check to avoid noisy failures.
+        if (mounted) {
+          setCachedUrl(localUrl || `asset://localhost/trailers/${videoId}.mp4`);
+        }
       } catch (error) {
         errorAgent.log({ message: 'Trailer cache error', type: 'ERROR', context: { videoId, error: String(error) } });
       }

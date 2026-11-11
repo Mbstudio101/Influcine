@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import Logo from '../components/Logo';
 import Focusable from '../components/Focusable';
 import { useToast } from '../context/toast';
+import { invoke } from '@tauri-apps/api/core';
 
 const isTVEnvironment = typeof navigator !== 'undefined' && /AFT|Amazon|Android TV|BRAVIA|SMART-TV/i.test(navigator.userAgent);
 
@@ -28,7 +29,9 @@ const Login: React.FC = () => {
 
     const loadCredentials = async () => {
       try {
-        const saved = await window.ipcRenderer?.invoke('credentials-load');
+        const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+        if (!isTauri) return;
+        const saved = await invoke<{ email: string; password: string } | null>('credentials_load');
         if (saved?.email) {
           setEmail(saved.email);
           setPassword(saved.password || '');
@@ -49,10 +52,13 @@ const Login: React.FC = () => {
       localStorage.setItem('influcine_has_used_app', 'true');
 
       // Save or clear credentials based on "Remember me"
-      if (rememberMe) {
-        await window.ipcRenderer?.invoke('credentials-save', { email, password });
-      } else {
-        await window.ipcRenderer?.invoke('credentials-clear');
+      const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+      if (isTauri) {
+        if (rememberMe) {
+          await invoke('credentials_save', { email, password });
+        } else {
+          await invoke('credentials_clear');
+        }
       }
 
       showToast('Signed in successfully', 'success');

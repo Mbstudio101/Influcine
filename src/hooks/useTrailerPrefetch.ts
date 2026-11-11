@@ -6,7 +6,7 @@ import { Media } from '../types';
 
 export function useTrailerPrefetch(media: Media, mediaType: 'movie' | 'tv') {
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
-  const prefetchTimeout = useRef<NodeJS.Timeout>();
+  const prefetchTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     return () => {
@@ -21,9 +21,9 @@ export function useTrailerPrefetch(media: Media, mediaType: 'movie' | 'tv') {
                 const trailer = findBestTrailer(videos);
                 if (trailer) {
                     setTrailerKey(trailer.key);
-                    electronService.prefetchTrailer(trailer.key).catch(() => { /* prefetch is best-effort */ });
+                    electronService.prefetchTrailer(trailer.key).catch(() => {});
                 }
-            }).catch(() => { /* prefetch lookup is best-effort */ });
+            }).catch(() => {});
         }, 500);
     }
   }, [media.id, mediaType, trailerKey]);
@@ -43,8 +43,7 @@ export function useTrailerPrefetch(media: Media, mediaType: 'movie' | 'tv') {
               setTrailerKey(trailer.key);
               return trailer.key;
           }
-          
-          // Fallback: Search YouTube
+
           const title = media.title || media.name;
           if (title) {
              const searchKey = await electronService.searchTrailer(title);

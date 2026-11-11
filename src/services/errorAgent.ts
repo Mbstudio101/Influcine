@@ -1,13 +1,14 @@
-// import { ipcRenderer } from 'electron';
+import { invoke } from '@tauri-apps/api/core';
 import { logger } from './logger';
 
 interface ErrorLog {
   message: string;
   stack?: string;
   type?: 'ERROR' | 'WARN' | 'INFO' | 'CRITICAL';
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
 }
+
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
 class ErrorAgent {
   private static instance: ErrorAgent;
@@ -33,7 +34,6 @@ class ErrorAgent {
   public init() {
     if (this.isInitialized) return;
 
-    // Global Error Handler
     window.onerror = (message, source, lineno, colno, error) => {
       this.log({
         message: message.toString(),
@@ -43,7 +43,6 @@ class ErrorAgent {
       });
     };
 
-    // Unhandled Promise Rejections
     window.onunhandledrejection = (event) => {
       this.log({
         message: event.reason?.message || 'Unhandled Promise Rejection',
@@ -57,10 +56,8 @@ class ErrorAgent {
   }
 
   public async log(error: ErrorLog) {
-    // Notify listeners
     this.listeners.forEach(l => l(error));
 
-    // Console log for dev
     if (import.meta.env.DEV) {
       console.groupCollapsed(`[ErrorAgent] ${error.type || 'ERROR'}: ${error.message}`);
       if (error.stack) logger.error('Error stack', { stack: error.stack });
@@ -68,10 +65,9 @@ class ErrorAgent {
       console.groupEnd();
     }
 
-    // Send to Main Process
     try {
-      if (window.ipcRenderer) {
-        await window.ipcRenderer.invoke('log-error', error);
+      if (isTauri) {
+        await invoke('log_error', { errorData: error });
       }
     } catch (e) {
       logger.warn('Failed to send log to main process', { error: String(e) });
@@ -79,8 +75,8 @@ class ErrorAgent {
   }
 
   public async getLogsPath(): Promise<string> {
-    if (window.ipcRenderer) {
-      return await window.ipcRenderer.invoke('get-logs-path');
+    if (isTauri) {
+      return await invoke<string>('get_logs_path');
     }
     return '';
   }

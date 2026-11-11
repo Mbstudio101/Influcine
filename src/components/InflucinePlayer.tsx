@@ -815,12 +815,11 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 
   // Embed IPC Listeners
   useEffect(() => {
-    const handleTracks = (_: import('electron').IpcRendererEvent, tracks: {index: number, label: string, language: string}[]) => {
+    const handleTracks = (tracks: {index: number, label: string, language: string}[]) => {
         setEmbedTracks(tracks);
     };
 
     const handleAudioTracks = (
-      _: import('electron').IpcRendererEvent,
       tracks: { index: number; label: string; language: string; kind?: string; enabled?: boolean }[]
     ) => {
       setEmbedAudioTracks(
@@ -834,13 +833,13 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       );
     };
 
-    const handleCues = (_: import('electron').IpcRendererEvent, data: {index: number, cues: SubtitleCue[]}) => {
+    const handleCues = (data: {index: number, cues: SubtitleCue[]}) => {
         if (data.index === activeEmbedTrackIndex) {
             setCustomSubtitles(data.cues);
         }
     };
 
-    const handleStateUpdate = (_: unknown, state: { event?: string; currentTime?: number; duration?: number; paused?: boolean }) => {
+    const handleStateUpdate = (state: { event?: string; currentTime?: number; duration?: number; paused?: boolean }) => {
         const { event: playerEvent, currentTime: ct, duration: dur, paused } = state;
         
         if (typeof ct === 'number') {
@@ -865,19 +864,21 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
         }
     };
 
-    if (window.ipcRenderer) {
-        window.ipcRenderer.on('embed-tracks-found', handleTracks);
-        window.ipcRenderer.on('embed-audio-tracks-found', handleAudioTracks);
-        window.ipcRenderer.on('embed-track-cues', handleCues);
-        window.ipcRenderer.on('player-state-update', handleStateUpdate);
+    const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+    const unlisten: Array<() => void> = [];
+
+    if (isTauri) {
+        import('@tauri-apps/api/event').then(({ listen }) => {
+            Promise.all([
+                listen<{index: number, label: string, language: string}[]>('embed-tracks-found', (e) => handleTracks(e.payload)),
+                listen<{ index: number; label: string; language: string; kind?: string; enabled?: boolean }[]>('embed-audio-tracks-found', (e) => handleAudioTracks(e.payload)),
+                listen<{index: number, cues: SubtitleCue[]}>('embed-track-cues', (e) => handleCues(e.payload)),
+                listen<{ event?: string; currentTime?: number; duration?: number; paused?: boolean }>('player-state-update', (e) => handleStateUpdate(e.payload)),
+            ]).then(fns => unlisten.push(...fns));
+        });
     }
     return () => {
-        if (window.ipcRenderer) {
-            window.ipcRenderer.removeAllListeners('embed-tracks-found');
-            window.ipcRenderer.removeAllListeners('embed-audio-tracks-found');
-            window.ipcRenderer.removeAllListeners('embed-track-cues');
-            window.ipcRenderer.removeAllListeners('player-state-update');
-        }
+        unlisten.forEach(fn => fn());
     };
   }, [activeEmbedTrackIndex, setEmbedTracks, setCustomSubtitles, startTime, hasResumed, onTimeUpdate, onPlay, onPause]);
 

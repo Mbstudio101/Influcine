@@ -431,7 +431,12 @@ const Details: React.FC = () => {
                   // Track this key as failed to prevent infinite retry loops
                   if (activeTrailerKey) {
                     failedTrailerKeys.current.add(activeTrailerKey);
-                    window.ipcRenderer?.invoke('trailer-invalidate', activeTrailerKey).catch(() => {});
+                    const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+                    if (isTauri) {
+                      import('@tauri-apps/api/core').then(({ invoke }) => {
+                        invoke('trailer_invalidate', { videoId: activeTrailerKey }).catch(() => {});
+                      });
+                    }
                   }
 
                   // Find next trailer that hasn't already failed

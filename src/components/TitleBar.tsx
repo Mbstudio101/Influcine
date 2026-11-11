@@ -4,6 +4,9 @@ import { ChevronLeft, Minimize2, Maximize2, X, Square, Crown } from 'lucide-reac
 import clsx from 'clsx';
 import { useAuth } from '../context/useAuth';
 import { Avatar } from './Avatars';
+import { invoke } from '@tauri-apps/api/core';
+
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
 interface TitleBarProps {
   className?: string;
@@ -15,67 +18,51 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
   const location = useLocation();
   const { profile } = useAuth();
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const ipc = typeof window !== 'undefined' ? window.ipcRenderer : undefined;
 
-  // Handle window controls
   const handleMinimize = useCallback(() => {
-    if (ipc) {
-      ipc.send('window-minimize');
-    }
-  }, [ipc]);
+    if (isTauri) invoke('window_minimize');
+  }, []);
 
   const handleMaximize = useCallback(async () => {
-    if (ipc) {
-      // Window control button toggles true fullscreen.
+    if (isTauri) {
       try {
-        const fullscreen = await ipc.invoke('window-toggle-fullscreen');
-        setIsFullscreen(Boolean(fullscreen));
+        const fullscreen = await invoke<boolean>('window_toggle_fullscreen');
+        setIsFullscreen(fullscreen);
       } catch {
-        ipc.send('window-fullscreen');
         setIsFullscreen(prev => !prev);
       }
     }
-  }, [ipc]);
+  }, []);
 
   const handleClose = useCallback(() => {
-    if (ipc) {
-      ipc.send('window-close');
-    }
-  }, [ipc]);
+    if (isTauri) invoke('window_close');
+  }, []);
 
   useEffect(() => {
     let active = true;
     const syncMaxState = async () => {
-      if (!ipc) return;
+      if (!isTauri) return;
       try {
-        const fullscreen = await ipc.invoke('window-is-fullscreen');
-        if (active) setIsFullscreen(Boolean(fullscreen));
+        const fullscreen = await invoke<boolean>('window_is_fullscreen');
+        if (active) setIsFullscreen(fullscreen);
       } catch {
-        // Ignore in web mode or when channel is unavailable.
+        // Ignore in web mode
       }
     };
     syncMaxState();
-    return () => {
-      active = false;
-    };
-  }, [ipc]);
+    return () => { active = false; };
+  }, []);
 
-  // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Minimize: Ctrl/Cmd + M
       if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
         e.preventDefault();
         handleMinimize();
       }
-      
-      // Fullscreen: F11 or Ctrl/Cmd + F
       if (e.key === 'F11' || ((e.ctrlKey || e.metaKey) && e.key === 'f')) {
         e.preventDefault();
         handleMaximize();
       }
-
-      // Close: Alt + F4 or Cmd + Q
       if ((e.altKey && e.key === 'F4') || (e.metaKey && e.key === 'q')) {
         e.preventDefault();
         handleClose();
@@ -86,22 +73,20 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleClose, handleMaximize, handleMinimize]);
 
-  // Determine if we should show the back button
-  // Don't show on root landing page, login, or main browse page if it's the root of the app
   const showBackButton = !isOverlay && location.pathname !== '/' && location.pathname !== '/login' && location.pathname !== '/browse' && location.pathname !== '/profiles';
 
   return (
-    <div 
+    <div
       className={clsx(
-        "h-10 flex items-center justify-between px-4 fixed top-0 z-[100] select-none transition-opacity duration-300", 
+        "h-10 flex items-center justify-between px-4 fixed top-0 z-[100] select-none transition-opacity duration-300",
         isOverlay ? "bg-transparent w-full" : "bg-black/50 backdrop-blur-md border-b border-white/5",
         className || "w-full"
-      )} 
-      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      )}
+      data-tauri-drag-region
     >
-      <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+      <div className="flex items-center gap-2">
         {showBackButton && (
-          <button 
+          <button
             onClick={() => navigate(-1)}
             className="p-1 hover:bg-white/10 rounded-md transition-colors text-gray-400 hover:text-white"
           >
@@ -110,7 +95,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
         )}
       </div>
 
-      <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+      <div className="flex items-center gap-2">
         {!isOverlay && profile && (
           <div className="mr-1 flex items-center gap-2.5 px-2 py-1 rounded-full bg-white/8 border border-white/15">
             <div className="w-7 h-7 rounded-full overflow-hidden border border-white/30">
@@ -125,23 +110,23 @@ const TitleBar: React.FC<TitleBarProps> = ({ className, isOverlay = false }) => 
             </div>
           </div>
         )}
-        {!ipc ? null : (
+        {!isTauri ? null : (
           <>
-        <button 
+        <button
           onClick={handleMinimize}
           className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-gray-400 hover:text-white"
           title="Minimize"
         >
           <Minimize2 size={14} />
         </button>
-        <button 
+        <button
           onClick={handleMaximize}
           className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-gray-400 hover:text-white"
           title={isFullscreen ? "Exit Full Screen" : "Full Screen"}
         >
           {isFullscreen ? <Square size={12} /> : <Maximize2 size={14} />}
         </button>
-        <button 
+        <button
           onClick={handleClose}
           className="p-1.5 hover:bg-red-500 hover:text-white rounded-md transition-colors text-gray-400"
           title="Close"

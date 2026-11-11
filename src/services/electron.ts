@@ -1,113 +1,88 @@
 import { Subtitle, AutoSubtitle, ImdbResult, ImdbDetails, UpdateCheckResult } from '../types';
-
-// Centralized Electron Service
-// Handles all IPC communication between Renderer and Main process
+import { invoke } from '@tauri-apps/api/core';
 
 export interface ElectronService {
-  // Adblock
   getAdblockPath(): Promise<string>;
-  
-  // Subtitles
   getSubtitles(videoId: string): Promise<Subtitle[]>;
   autoFetchSubtitles(mediaData: unknown): Promise<AutoSubtitle[]>;
-  
-  // Trailers
   prefetchTrailer(url: string): Promise<void>;
   searchTrailer(query: string): Promise<string | null>;
-  
-  // IMDB
   searchImdb(query: string): Promise<ImdbResult[]>;
   getImdbById(id: string): Promise<ImdbDetails>;
-
-  // Scraper
   getActorImage(name: string): Promise<string | null>;
-  
-  // System
   logError(error: unknown): Promise<void>;
   getLogsPath(): Promise<string>;
-  
-  // Updates
   checkForUpdates(currentVersion: string): Promise<UpdateCheckResult>;
   downloadUpdate(): Promise<void>;
   installUpdate(): Promise<void>;
 }
 
-class ElectronServiceImpl implements ElectronService {
-  private get ipc() {
-    return typeof window !== 'undefined' ? window.ipcRenderer : undefined;
-  }
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
-  private async invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
-    if (!this.ipc) {
-      if (import.meta.env.DEV) {
-        console.warn(`[ElectronService] IPC not available. Call to '${channel}' ignored.`);
-      }
-      return Promise.reject(new Error('Electron IPC not available'));
+class TauriServiceImpl implements ElectronService {
+  private async cmd<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+    if (!isTauri) {
+      return Promise.reject(new Error('Tauri API not available'));
     }
-    return this.ipc.invoke(channel, ...args);
+    return invoke<T>(command, args);
   }
 
-  // Adblock
   async getAdblockPath(): Promise<string> {
-    return this.invoke<string>('get-adblock-path');
+    return this.cmd<string>('get_adblock_script');
   }
 
-  // Subtitles
   async getSubtitles(videoId: string): Promise<Subtitle[]> {
-    return this.invoke<Subtitle[]>('get-subtitles', videoId);
+    return this.cmd<Subtitle[]>('get_subtitles', { videoId });
   }
 
   async autoFetchSubtitles(mediaData: unknown): Promise<AutoSubtitle[]> {
-    return this.invoke<AutoSubtitle[]>('auto-fetch-subtitles', mediaData);
+    return this.cmd<AutoSubtitle[]>('auto_fetch_subtitles', { request: mediaData });
   }
 
-  // Trailers
-  async prefetchTrailer(url: string): Promise<void> {
-    return this.invoke<void>('trailer-prefetch', url);
+  async prefetchTrailer(videoId: string): Promise<void> {
+    await this.cmd<boolean>('trailer_prefetch', { videoId });
   }
 
   async searchTrailer(query: string): Promise<string | null> {
-    return this.invoke<string | null>('trailer-search', query);
+    return this.cmd<string | null>('trailer_search', { query });
   }
 
-  // IMDB
   async searchImdb(query: string): Promise<ImdbResult[]> {
-    return this.invoke<ImdbResult[]>('imdb-search', query);
+    const result = await this.cmd<{ results: ImdbResult[]; error?: string }>('imdb_search', { query });
+    return result.results;
   }
 
-  async getImdbById(id: string): Promise<ImdbDetails> {
-    return this.invoke<ImdbDetails>('imdb-get-by-id', id);
+  async getImdbById(_id: string): Promise<ImdbDetails> {
+    return Promise.reject(new Error('Not implemented'));
   }
 
-  // Scraper
   async getActorImage(name: string): Promise<string | null> {
-    return this.invoke<string | null>('get-actor-image', name);
+    return this.cmd<string | null>('get_actor_image', { name });
   }
 
-  // System
   async logError(error: unknown): Promise<void> {
-    // Fire and forget — if error logging itself fails, write to console as last resort
-    this.ipc?.invoke('log-error', error).catch((e) => {
-      console.warn('[ElectronService] Failed to send error log to main process:', e);
-    });
+    try {
+      await this.cmd('log_error', { errorData: error });
+    } catch (e) {
+      console.warn('[TauriService] Failed to send error log:', e);
+    }
   }
 
   async getLogsPath(): Promise<string> {
-    return this.invoke<string>('get-logs-path');
+    return this.cmd<string>('get_logs_path');
   }
 
-  // Updates
   async checkForUpdates(currentVersion: string): Promise<UpdateCheckResult> {
-    return this.invoke<UpdateCheckResult>('check-for-updates', currentVersion);
+    return this.cmd<UpdateCheckResult>('update_check', { currentVersion });
   }
 
   async downloadUpdate(): Promise<void> {
-    return this.invoke<void>('download-update');
+    throw new Error('Use GitHub release downloads in Tauri');
   }
 
   async installUpdate(): Promise<void> {
-    return this.invoke<void>('install-update');
+    throw new Error('Use GitHub release downloads in Tauri');
   }
 }
 
-export const electronService = new ElectronServiceImpl();
+export const electronService = new TauriServiceImpl();

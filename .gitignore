@@ -33,3 +33,4 @@ trailers/
 test-video.cjs
 local-data/
 bin/
+.vercel

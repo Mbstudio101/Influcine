@@ -9,7 +9,7 @@ export default defineConfig({
     strictPort: true,
   },
   clearScreen: false,
-  envPrefix: ['VITE_', 'TAURI_'],
+  envPrefix: ['VITE_', 'TAURI_', 'TMDB_'],
   build: {
     target: ['es2021', 'chrome100', 'safari13'],
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,

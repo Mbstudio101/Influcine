@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https: http: ipc: tauri:; media-src 'self' https: http: blob: data: tauri: asset:; img-src 'self' https: http: data: blob: asset: tauri:; connect-src 'self' https: http: ws: wss: ipc: tauri:",
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https: http: ipc: tauri:; media-src 'self' https: http: blob: data: tauri: asset:; img-src 'self' https: http: data: blob: asset: tauri:; connect-src 'self' https: http: ws: wss: ipc: tauri:; frame-src 'self' https: http:",
       "dangerousDisableAssetCspModification": true
     }
   },

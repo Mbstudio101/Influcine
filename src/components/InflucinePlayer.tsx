@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSettings } from '../context/SettingsContext';
 import { SubtitleOverlay } from './SubtitleOverlay';
-import { electronService } from '../services/electron';
 import { errorAgent } from '../services/errorAgent';
 import { SkipForward, X } from 'lucide-react';
 
@@ -83,7 +82,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   onUpNextDismiss
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const iframeRef = useRef<HTMLElement & { send?: (channel: string, ...args: unknown[]) => void; contentWindow?: Window; getWebContentsId?: () => number; isLoading?: () => boolean }>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isEmbed = !!embedSrc && !src;
@@ -128,7 +127,6 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [hasResumed, setHasResumed] = useState(false);
   const [internalPip, setInternalPip] = useState(false);
-  const [adblockPath, setAdblockPath] = useState<string>('');
   const [isNativeMode, setIsNativeMode] = useState(true); // Default to true
   const [embedAudioTracks, setEmbedAudioTracks] = useState<ExtendedAudioTrack[]>([]);
 
@@ -179,46 +177,14 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   }, [isEmbed]);
 
   useEffect(() => {
-    const webview = iframeRef.current;
-    if (isEmbed && webview) {
-        // Safe send function
-        const sendState = () => {
-            try {
-                // Check if webview is ready
-                 if (webview.getWebContentsId && webview.isLoading && !webview.isLoading() && webview.send) {
-                     webview.send('player-command', {
-                        command: isNativeMode ? 'showNativeControls' : 'hideNativeControls'
-                    });
-                }
-            } catch {
-                // Webview not ready yet — expected during initialization
-            }
-        };
-
-        // Attempt to send immediately (might fail if not attached)
-        // Wrap in try-catch to prevent crash
-        try {
-             sendState();
-        } catch {
-             // Ignore error
-        }
-
-        // Apply state on navigation/reload
-        const onDomReady = () => {
-             // Now it is safe to send
-             try {
-                webview.send?.('player-command', {
-                    command: isNativeMode ? 'showNativeControls' : 'hideNativeControls'
-                });
-             } catch {
-                 // Ignore error
-             }
-        };
-
-        webview.addEventListener('dom-ready', onDomReady);
-        return () => {
-            webview.removeEventListener('dom-ready', onDomReady);
-        };
+    if (isEmbed && iframeRef.current?.contentWindow) {
+      try {
+        iframeRef.current.contentWindow.postMessage({
+          command: isNativeMode ? 'showNativeControls' : 'hideNativeControls'
+        }, '*');
+      } catch {
+        // iframe not ready yet
+      }
     }
   }, [isEmbed, isNativeMode]);
 
@@ -228,10 +194,10 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       const newMode = !isNativeMode;
       setIsNativeMode(newMode);
       
-      if (iframeRef.current?.send) {
-          iframeRef.current.send('player-command', { 
-              command: newMode ? 'showNativeControls' : 'hideNativeControls' 
-          });
+      if (iframeRef.current?.contentWindow) {
+          iframeRef.current.contentWindow.postMessage({
+              command: newMode ? 'showNativeControls' : 'hideNativeControls'
+          }, '*');
       }
       setShowSettings(false);
   }, [isEmbed, isNativeMode]);
@@ -301,13 +267,6 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 
   // Initialize
   useEffect(() => {
-    electronService.getAdblockPath().then(path => {
-       // Convert to file:// URL for preload if needed, but Electron usually takes absolute path
-       // Actually, preload accepts file path or file:// url.
-       // Let's use string path as returned by main process.
-       setAdblockPath(path ? `file://${path}` : '');
-    });
-
     if (!isEmbed && videoRef.current) {
       videoRef.current.currentTime = startTime;
       setVolume(videoRef.current.volume);
@@ -362,11 +321,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 
   const sendEmbedPlayPauseCommand = useCallback((command: 'play' | 'pause') => {
     try {
-      if (iframeRef.current?.send) {
-        iframeRef.current.send('player-command', { command });
-      } else {
-        iframeRef.current?.contentWindow?.postMessage({ command }, '*');
-      }
+      iframeRef.current?.contentWindow?.postMessage({ command }, '*');
     } catch (e) {
       errorAgent.log({
         message: 'Failed to send embed play/pause command',
@@ -515,19 +470,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     setVolume(newVolume);
     setAudioGain(newVolume);
     if (isEmbed) {
-      if (iframeRef.current?.send) {
-        // Send generic 'setVolume' if the adblock script supports it?
-        // Our adblock script supports 'player-command'.
-        // But most web players don't have a standardized 'setVolume' message unless we coded it.
-        // Let's assume we can try to inject JS to set volume.
-        // The adblock script doesn't handle 'volume' command yet. 
-        // We should add it to electron/main.ts or rely on the adblock script to expose it.
-        // Actually, we can try to send a command and let the main process handle it.
-        // But for now, let's just handle mute.
-        // UPDATE: User says audio settings not connected.
-        // Let's add 'setVolume' command to main.ts loop.
-        iframeRef.current.send('player-command', { command: 'setVolume', volume: newVolume });
-      }
+      iframeRef.current?.contentWindow?.postMessage({ command: 'setVolume', volume: newVolume }, '*');
       setIsMuted(newVolume === 0);
       return;
     }
@@ -554,9 +497,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       setIsMuted(newMuted);
       setVolume(newMuted ? 0 : 1);
       setAudioGain(newMuted ? 0 : 1);
-      if (iframeRef.current?.send) {
-          iframeRef.current.send('player-command', { command: 'setMute', muted: newMuted });
-      }
+      iframeRef.current?.contentWindow?.postMessage({ command: 'setMute', muted: newMuted }, '*');
       return;
     }
     if (videoRef.current) {
@@ -584,10 +525,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const changeSpeed = useCallback((speed: number) => {
     if (isEmbed) {
       setPlaybackSpeed(speed);
-      if (iframeRef.current?.send) {
-        iframeRef.current.send('player-command', { command: 'setSpeed', speed });
-        iframeRef.current.send('player-command', { command: 'ratechange', playbackRate: speed });
-      } else if (iframeRef.current?.contentWindow) {
+      if (iframeRef.current?.contentWindow) {
         iframeRef.current.contentWindow.postMessage({ command: 'setSpeed', speed }, '*');
         iframeRef.current.contentWindow.postMessage({ command: 'ratechange', playbackRate: speed }, '*');
       }
@@ -604,11 +542,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
   const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement> | number) => {
     const time = typeof e === 'number' ? e : parseFloat(e.target.value);
     if (isEmbed) {
-      if (iframeRef.current?.send) {
-        iframeRef.current.send('player-command', { command: 'seek', time });
-      } else {
-        iframeRef.current?.contentWindow?.postMessage({ command: 'seek', time }, '*');
-      }
+      iframeRef.current?.contentWindow?.postMessage({ command: 'seek', time }, '*');
       setCurrentTime(time);
       return;
     }
@@ -763,6 +697,21 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
     }
   }, [isEmbed, externalSubtitles, setActiveSubtitleIndex, setCustomSubtitles, setActiveEmbedTrackIndex, setActiveAutoSubtitleIndex]);
 
+  // Block all popup ads while embed player is active
+  useEffect(() => {
+    if (!isEmbed) return;
+    const origOpen = window.open;
+    window.open = function() { return null; };
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isEmbed) { e.preventDefault(); e.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.open = origOpen;
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isEmbed]);
+
   // Embed messaging logic
   useEffect(() => {
     if (!isEmbed) return;
@@ -855,7 +804,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
              setIsPlaying(true);
              onPlay?.();
              if (startTime > 0 && !hasResumed) {
-                 iframeRef.current?.send?.('player-command', { command: 'seek', time: startTime });
+                 iframeRef.current?.contentWindow?.postMessage({ command: 'seek', time: startTime }, '*');
                  setHasResumed(true);
              }
         } else if (isPaused) {
@@ -893,7 +842,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
       setActiveEmbedTrackIndex(index);
       setCustomSubtitles([]);
       try {
-         iframeRef.current?.send?.('get-embed-track-cues', index);
+         iframeRef.current?.contentWindow?.postMessage({ command: 'get-embed-track-cues', index }, '*');
       } catch (e) {
          errorAgent.log({ message: 'Failed to send to webview', type: 'WARN', context: { error: String(e) } });
       }
@@ -955,13 +904,12 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
 
       {isEmbed ? (
         <div className="absolute inset-0 z-0">
-          <webview
+          <iframe
             ref={iframeRef}
             src={embedSrc}
             className="w-full h-full border-0"
-            preload={adblockPath || undefined}
-            webpreferences="contextIsolation=no, nodeIntegration=yes"
-            allowpopups="true"
+            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+            allowFullScreen
           />
         </div>
       ) : (
@@ -1137,7 +1085,7 @@ const InflucinePlayer: React.FC<InflucinePlayerProps> = ({
                       : String(effectiveAudioTracks.findIndex((t) => t === track));
                     const trackIndex = Number(raw);
                     if (Number.isFinite(trackIndex) && trackIndex >= 0) {
-                      iframeRef.current?.send?.('player-command', { command: 'setAudioTrack', trackIndex });
+                      iframeRef.current?.contentWindow?.postMessage({ command: 'setAudioTrack', trackIndex }, '*');
                     }
                     return;
                   }

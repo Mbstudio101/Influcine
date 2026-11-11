@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Media, MediaDetails, Video, CastMember, Episode, PersonDetails } from '../types';
 
-const ACCESS_TOKEN = import.meta.env.VITE_TMDB_ACCESS_TOKEN;
+const ACCESS_TOKEN = import.meta.env.TMDB_ACCESS_TOKEN;
 
 const BASE_URL = 'https://api.themoviedb.org/3';
 

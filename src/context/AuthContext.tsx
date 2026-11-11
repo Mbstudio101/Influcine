@@ -274,18 +274,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signup = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    if (error) {
-      throw new Error(error.message);
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      if (error) {
+        throw new Error(error.message);
+      }
+      return;
     }
+
+    const existing = await db.users.where('email').equals(email).first();
+    if (existing) {
+      throw new Error('An account with this email already exists');
+    }
+
+    const hashPassword = async (p: string) => {
+      const msgBuffer = new TextEncoder().encode(p);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    };
+
+    const passwordHash = await hashPassword(password);
+    const id = await db.users.add({
+      email,
+      passwordHash,
+      createdAt: new Date(),
+    } as any);
+
+    setUserId(id as number);
+    setProfileId(null);
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    if (isSupabaseConfigured) {
+      await supabase.auth.signOut();
+    }
     setUserId(null);
     setProfileId(null);
     localStorage.removeItem('influcine_user_id');
